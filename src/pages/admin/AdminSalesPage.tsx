@@ -100,8 +100,8 @@ export default function AdminSalesPage() {
         return <Badge className="bg-warning/10 text-warning border-warning/20">Pendente</Badge>;
       case 'refunded':
         return <Badge className="bg-primary/10 text-primary border-primary/20">Estornado</Badge>;
-      case 'cancelled':
-        return <Badge className="bg-destructive/10 text-destructive border-destructive/20">Cancelado</Badge>;
+      default:
+        return <Badge variant="outline">-</Badge>;
     }
   };
 
@@ -115,6 +115,8 @@ export default function AdminSalesPage() {
         return <Badge variant="secondary">Boleto</Badge>;
       case 'dinheiro':
         return <Badge variant="secondary">Dinheiro</Badge>;
+      case 'convenio':
+        return <Badge variant="secondary">Convênio</Badge>;
       default:
         return <Badge variant="secondary">-</Badge>;
     }
@@ -125,12 +127,14 @@ export default function AdminSalesPage() {
       id: `sale-${Date.now()}`,
       account_id: accountId,
       contact_id: formData.contact_id,
+      product_id: 'prod-1',
       valor: parseFloat(formData.valor),
       status: 'pending',
       metodo_pagamento: formData.metodo_pagamento,
+      responsavel_id: 'user-admin-1',
       created_at: new Date().toISOString(),
       paid_at: null,
-      cancelled_at: null,
+      refunded_at: null,
     };
     setSales([newSale, ...sales]);
     setIsCreateOpen(false);
@@ -152,7 +156,7 @@ export default function AdminSalesPage() {
     setSales(
       sales.map((s) =>
         s.id === refundSale.id
-          ? { ...s, status: 'refunded' as SaleStatus, cancelled_at: new Date().toISOString() }
+          ? { ...s, status: 'refunded' as SaleStatus, refunded_at: new Date().toISOString() }
           : s
       )
     );
@@ -330,7 +334,6 @@ export default function AdminSalesPage() {
                 <SelectItem value="paid">Pagos</SelectItem>
                 <SelectItem value="pending">Pendentes</SelectItem>
                 <SelectItem value="refunded">Estornados</SelectItem>
-                <SelectItem value="cancelled">Cancelados</SelectItem>
               </SelectContent>
             </Select>
           </div>

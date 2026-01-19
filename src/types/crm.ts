@@ -6,8 +6,8 @@ export type AccountStatus = 'active' | 'paused' | 'cancelled';
 export type UserStatus = 'active' | 'inactive' | 'suspended';
 export type ConversationStatus = 'open' | 'pending' | 'resolved';
 export type AssigneeType = 'user' | 'agent_bot';
-export type SaleStatus = 'pending' | 'paid' | 'cancelled' | 'refunded';
-export type PaymentMethod = 'pix' | 'boleto' | 'cartao' | 'dinheiro';
+export type SaleStatus = 'pending' | 'paid' | 'refunded';
+export type PaymentMethod = 'pix' | 'boleto' | 'cartao' | 'dinheiro' | 'convenio';
 export type ActorType = 'user' | 'agent_bot' | 'system' | 'external';
 export type TransactionType = 'charge' | 'refund';
 export type ContactOrigin = 'whatsapp' | 'instagram' | 'site' | 'manual';
@@ -118,18 +118,33 @@ export interface LeadFunnelHistory {
 
 // ============= FINANCIAL =============
 
+export interface Product {
+  id: string;
+  account_id: string;
+  nome: string;
+  valor_padrao: number;
+  metodos_pagamento: PaymentMethod[];
+  convenio_nome?: string | null;
+  ativo: boolean;
+  created_at: string;
+}
+
 export interface Sale {
   id: string;
   account_id: string;
   contact_id: string;
+  product_id: string;
   valor: number;
   status: SaleStatus;
   metodo_pagamento: PaymentMethod | null;
+  convenio_nome?: string | null;
+  responsavel_id: string;
   created_at: string;
   paid_at: string | null;
-  cancelled_at: string | null;
+  refunded_at: string | null;
   // UI enrichment
   contact?: Contact;
+  product?: Product;
 }
 
 export interface SaleTransaction {

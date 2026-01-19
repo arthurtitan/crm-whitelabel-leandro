@@ -65,8 +65,10 @@ interface FinanceKPIs {
 
 interface CreateSaleData {
   contactId: string;
+  productId: string;
   valor: number;
   metodoPagamento: PaymentMethod | null;
+  responsavelId: string;
 }
 
 const FinanceContext = createContext<FinanceContextType | null>(null);
@@ -85,24 +87,25 @@ interface FinanceProviderProps {
 }
 
 export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
-  // State management - filtered by account
   const [sales, setSales] = useState<Sale[]>(
     mockSales.filter((s) => s.account_id === accountId)
   );
   
-  const [events, setEvents] = useState<FinanceEvent[]>([]);
-  
-  // Static data
-  const contacts = useMemo(
-    () => mockContacts.filter((c) => c.account_id === accountId),
-    [accountId]
+  const [contacts, setContacts] = useState<Contact[]>(
+    mockContacts.filter((c) => c.account_id === accountId)
   );
   
-  const leadFunnelStates = useMemo(
-    () => mockLeadFunnelStates.filter((lfs) => 
-      contacts.some((c) => c.id === lfs.contact_id)
-    ),
-    [contacts]
+  const [leadFunnelStates, setLeadFunnelStates] = useState<LeadFunnelState[]>(
+    mockLeadFunnelStates.filter((lfs) => 
+      mockContacts.filter((c) => c.account_id === accountId).some((c) => c.id === lfs.contact_id)
+    )
+  );
+  
+  const [events, setEvents] = useState<FinanceEvent[]>([]);
+  
+  const products = useMemo(
+    () => mockProducts.filter((p) => p.account_id === accountId && p.ativo),
+    [accountId]
   );
 
   // Helper functions
@@ -151,6 +154,36 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
     [getContactById, leadFunnelStates]
   );
 
+  // Create contact
+  const createContact = useCallback(
+    (data: CreateContactData): { success: boolean; error?: string; contactId?: string } => {
+      const newContact: Contact = {
+        id: `contact-${Date.now()}`,
+        account_id: accountId,
+        nome: data.nome,
+        telefone: data.telefone,
+        email: data.email,
+        origem: data.origem as ContactOrigin,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      
+      setContacts((prev) => [newContact, ...prev]);
+      
+      // Auto-add to funnel at advanced stage for immediate sale eligibility
+      const qualifiedStage = mockFunnelStages.find((s) => s.nome === 'Qualificado');
+      if (qualifiedStage) {
+        setLeadFunnelStates((prev) => [
+          { contact_id: newContact.id, funnel_stage_id: qualifiedStage.id, updated_at: new Date().toISOString() },
+          ...prev,
+        ]);
+      }
+      
+      return { success: true, contactId: newContact.id };
+    },
+    [accountId]
+  );
+
   // Create event helper
   const createEvent = useCallback((type: FinanceEvent['type'], saleId: string, payload: Record<string, unknown>) => {
     const event: FinanceEvent = {
@@ -176,12 +209,18 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
         id: `sale-${Date.now()}`,
         account_id: accountId,
         contact_id: data.contactId,
+        product_id: data.productId,
         valor: data.valor,
         status: 'pending',
         metodo_pagamento: data.metodoPagamento,
+        convenio_nome: data.convenioNome,
+        responsavel_id: data.responsavelId,
         created_at: new Date().toISOString(),
         paid_at: null,
-        cancelled_at: null,
+        refunded_at: null,
+      };
+        paid_at: null,
+        refunded_at: null,
       };
 
       setSales((prev) => [newSale, ...prev]);
@@ -228,7 +267,7 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
       setSales((prev) =>
         prev.map((s) =>
           s.id === saleId
-            ? { ...s, status: 'refunded' as SaleStatus, cancelled_at: new Date().toISOString() }
+            ? { ...s, status: 'refunded' as SaleStatus, refunded_at: new Date().toISOString() }
             : s
         )
       );
@@ -241,7 +280,6 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
   const kpis = useMemo((): FinanceKPIs => {
     const paidSales = sales.filter((s) => s.status === 'paid');
     const pendingSales = sales.filter((s) => s.status === 'pending');
-    const cancelledSales = sales.filter((s) => s.status === 'cancelled');
     const refundedSales = sales.filter((s) => s.status === 'refunded');
 
     const faturamentoBruto = paidSales.reduce((sum, s) => sum + s.valor, 0);
@@ -300,8 +338,8 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
         valor: pendingSales.reduce((sum, s) => sum + s.valor, 0),
       },
       vendasCanceladas: {
-        count: cancelledSales.length,
-        valor: cancelledSales.reduce((sum, s) => sum + s.valor, 0),
+        count: 0,
+        valor: 0,
       },
       vendasEstornadas: {
         count: refundedSales.length,
