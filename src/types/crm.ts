@@ -116,6 +116,17 @@ export interface LeadFunnelHistory {
   created_at: string;
 }
 
+// ============= LEAD NOTES =============
+
+export interface LeadNote {
+  id: string;
+  contact_id: string;
+  author_id: string;
+  author_name: string;
+  content: string;
+  created_at: string;
+}
+
 // ============= FINANCIAL =============
 
 export interface Product {
@@ -139,6 +150,7 @@ export interface Sale {
   metodo_pagamento: PaymentMethod | null;
   convenio_nome?: string | null;
   responsavel_id: string;
+  is_recurring?: boolean;
   created_at: string;
   paid_at: string | null;
   refunded_at: string | null;
