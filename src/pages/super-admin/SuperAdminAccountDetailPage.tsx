@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import {
   Dialog,
   DialogContent,
@@ -34,10 +35,20 @@ import {
   DollarSign,
   Globe,
   UserCircle,
+  Languages,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
+
+interface EditFormData {
+  nome: string;
+  idioma: 'pt' | 'en';
+  status: AccountStatus;
+  chatwootEnabled: boolean;
+  chatwootAccountId: string;
+  chatwootApiKey: string;
+}
 
 export default function SuperAdminAccountDetailPage() {
   const { accountId } = useParams<{ accountId: string }>();
@@ -49,7 +60,14 @@ export default function SuperAdminAccountDetailPage() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
-  const [editingAccount, setEditingAccount] = useState<Account | null>(null);
+  const [editFormData, setEditFormData] = useState<EditFormData>({
+    nome: '',
+    idioma: 'pt',
+    status: 'active',
+    chatwootEnabled: false,
+    chatwootAccountId: '',
+    chatwootApiKey: '',
+  });
 
   if (!account) {
     return (
@@ -76,15 +94,32 @@ export default function SuperAdminAccountDetailPage() {
   const totalRevenue = accountSales.filter((s) => s.status === 'paid').reduce((sum, s) => sum + s.valor, 0);
 
   const handleEdit = () => {
-    setEditingAccount({ ...account });
+    setEditFormData({
+      nome: account.nome,
+      idioma: (account as any).idioma || 'pt',
+      status: account.status,
+      chatwootEnabled: !!(account.chatwoot_account_id || account.chatwoot_api_key),
+      chatwootAccountId: account.chatwoot_account_id || '',
+      chatwootApiKey: account.chatwoot_api_key || '',
+    });
     setIsEditOpen(true);
   };
 
   const handleUpdate = () => {
-    if (!editingAccount) return;
-    setAccount({ ...editingAccount, updated_at: new Date().toISOString() });
+    setAccount({
+      ...account,
+      nome: editFormData.nome,
+      status: editFormData.status,
+      chatwoot_account_id: editFormData.chatwootEnabled ? editFormData.chatwootAccountId : undefined,
+      chatwoot_api_key: editFormData.chatwootEnabled ? editFormData.chatwootApiKey : undefined,
+      updated_at: new Date().toISOString(),
+    });
     setIsEditOpen(false);
     toast.success('Conta atualizada com sucesso!');
+  };
+
+  const getIdiomaLabel = (idioma: string) => {
+    return idioma === 'pt' ? 'Português' : 'English';
   };
 
   const handleDelete = () => {
@@ -222,6 +257,13 @@ export default function SuperAdminAccountDetailPage() {
               {getStatusBadge(account.status)}
             </div>
             <div className="flex items-center justify-between py-2 border-b border-border/50">
+              <span className="text-muted-foreground flex items-center gap-2">
+                <Languages className="w-4 h-4" />
+                Idioma
+              </span>
+              <span>{getIdiomaLabel((account as any).idioma || 'pt')}</span>
+            </div>
+            <div className="flex items-center justify-between py-2 border-b border-border/50">
               <span className="text-muted-foreground">Timezone</span>
               <div className="flex items-center gap-2">
                 <Globe className="w-4 h-4 text-muted-foreground" />
@@ -342,39 +384,90 @@ export default function SuperAdminAccountDetailPage() {
 
       {/* Edit Dialog */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Editar Conta</DialogTitle>
             <DialogDescription>Atualize os dados da conta</DialogDescription>
           </DialogHeader>
-          {editingAccount && (
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-nome">Nome da Conta</Label>
-                <Input
-                  id="edit-nome"
-                  value={editingAccount.nome}
-                  onChange={(e) => setEditingAccount({ ...editingAccount, nome: e.target.value })}
+          <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
+            <div className="space-y-2">
+              <Label htmlFor="edit-nome">Nome da Conta</Label>
+              <Input
+                id="edit-nome"
+                value={editFormData.nome}
+                onChange={(e) => setEditFormData({ ...editFormData, nome: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-idioma">Idioma</Label>
+              <Select
+                value={editFormData.idioma}
+                onValueChange={(v) => setEditFormData({ ...editFormData, idioma: v as 'pt' | 'en' })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pt">Português</SelectItem>
+                  <SelectItem value="en">English</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-status">Status</Label>
+              <Select
+                value={editFormData.status}
+                onValueChange={(v) => setEditFormData({ ...editFormData, status: v as AccountStatus })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Ativa</SelectItem>
+                  <SelectItem value="paused">Pausada</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {/* Chatwoot Integration */}
+            <div className="space-y-4 pt-4 border-t border-border/50">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="edit-chatwoot">Integração Chatwoot</Label>
+                  <p className="text-xs text-muted-foreground">Habilitar consumo de dados do Chatwoot</p>
+                </div>
+                <Switch
+                  id="edit-chatwoot"
+                  checked={editFormData.chatwootEnabled}
+                  onCheckedChange={(checked) => setEditFormData({ ...editFormData, chatwootEnabled: checked })}
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-status">Status</Label>
-                <Select
-                  value={editingAccount.status}
-                  onValueChange={(v) => setEditingAccount({ ...editingAccount, status: v as AccountStatus })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="active">Ativa</SelectItem>
-                    <SelectItem value="paused">Pausada</SelectItem>
-                    <SelectItem value="cancelled">Cancelada</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              
+              {editFormData.chatwootEnabled && (
+                <div className="space-y-4 pl-2 border-l-2 border-primary/30">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-chatwoot-id">Account ID</Label>
+                    <Input
+                      id="edit-chatwoot-id"
+                      value={editFormData.chatwootAccountId}
+                      onChange={(e) => setEditFormData({ ...editFormData, chatwootAccountId: e.target.value })}
+                      placeholder="Ex: 12345"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-chatwoot-key">API Key</Label>
+                    <Input
+                      id="edit-chatwoot-key"
+                      type="password"
+                      value={editFormData.chatwootApiKey}
+                      onChange={(e) => setEditFormData({ ...editFormData, chatwootApiKey: e.target.value })}
+                      placeholder="Sua chave de API do Chatwoot"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEditOpen(false)}>
               Cancelar
