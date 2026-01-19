@@ -66,9 +66,7 @@ export default function SuperAdminAccountsPage() {
   // Form state
   const [formData, setFormData] = useState({
     nome: '',
-    plano: 'starter',
     status: 'active' as AccountStatus,
-    limite_usuarios: 5,
   });
 
   const filteredAccounts = accounts.filter((account) => {
@@ -86,9 +84,9 @@ export default function SuperAdminAccountsPage() {
       id: `acc-${Date.now()}`,
       nome: formData.nome,
       timezone: 'America/Sao_Paulo',
-      plano: formData.plano,
+      plano: '',
       status: formData.status,
-      limite_usuarios: formData.limite_usuarios,
+      limite_usuarios: 999,
       chatwoot_account_id: null,
       chatwoot_api_key: null,
       created_at: new Date().toISOString(),
@@ -96,7 +94,7 @@ export default function SuperAdminAccountsPage() {
     };
     setAccounts([newAccount, ...accounts]);
     setIsCreateOpen(false);
-    setFormData({ nome: '', plano: 'starter', status: 'active', limite_usuarios: 5 });
+    setFormData({ nome: '', status: 'active' });
     toast.success('Conta criada com sucesso!');
   };
 
@@ -164,35 +162,6 @@ export default function SuperAdminAccountsPage() {
                   placeholder="Ex: Clínica Exemplo"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="plano">Plano</Label>
-                  <Select
-                    value={formData.plano}
-                    onValueChange={(v) => setFormData({ ...formData, plano: v })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="starter">Starter</SelectItem>
-                      <SelectItem value="pro">Pro</SelectItem>
-                      <SelectItem value="enterprise">Enterprise</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="limite">Limite de Usuários</Label>
-                  <Input
-                    id="limite"
-                    type="number"
-                    value={formData.limite_usuarios}
-                    onChange={(e) =>
-                      setFormData({ ...formData, limite_usuarios: parseInt(e.target.value) })
-                    }
-                  />
-                </div>
-              </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
@@ -240,17 +209,21 @@ export default function SuperAdminAccountsPage() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>ID</TableHead>
                 <TableHead>Nome</TableHead>
-                <TableHead>Plano</TableHead>
-                <TableHead>Usuários</TableHead>
+                <TableHead>Total de Usuários</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Criado em</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredAccounts.map((account) => (
                 <TableRow key={account.id}>
+                  <TableCell>
+                    <code className="text-xs bg-muted px-2 py-1 rounded font-mono">
+                      {account.id}
+                    </code>
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -260,16 +233,9 @@ export default function SuperAdminAccountsPage() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="secondary" className="capitalize">
-                      {account.plano || 'Sem plano'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
                     <div className="flex items-center gap-1.5">
                       <Users className="w-4 h-4 text-muted-foreground" />
-                      <span>
-                        {getUserCount(account.id)} / {account.limite_usuarios}
-                      </span>
+                      <span>{getUserCount(account.id)}</span>
                     </div>
                   </TableCell>
                   <TableCell>
@@ -288,9 +254,6 @@ export default function SuperAdminAccountsPage() {
                         ? 'Pausada'
                         : 'Cancelada'}
                     </span>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {format(new Date(account.created_at), 'dd/MM/yyyy', { locale: ptBR })}
                   </TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
@@ -354,55 +317,23 @@ export default function SuperAdminAccountsPage() {
                   onChange={(e) => setEditingAccount({ ...editingAccount, nome: e.target.value })}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="edit-plano">Plano</Label>
-                  <Select
-                    value={editingAccount.plano || 'starter'}
-                    onValueChange={(v) => setEditingAccount({ ...editingAccount, plano: v })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="starter">Starter</SelectItem>
-                      <SelectItem value="pro">Pro</SelectItem>
-                      <SelectItem value="enterprise">Enterprise</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-status">Status</Label>
-                  <Select
-                    value={editingAccount.status}
-                    onValueChange={(v) =>
-                      setEditingAccount({ ...editingAccount, status: v as AccountStatus })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="active">Ativa</SelectItem>
-                      <SelectItem value="paused">Pausada</SelectItem>
-                      <SelectItem value="cancelled">Cancelada</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
               <div className="space-y-2">
-                <Label htmlFor="edit-limite">Limite de Usuários</Label>
-                <Input
-                  id="edit-limite"
-                  type="number"
-                  value={editingAccount.limite_usuarios}
-                  onChange={(e) =>
-                    setEditingAccount({
-                      ...editingAccount,
-                      limite_usuarios: parseInt(e.target.value),
-                    })
+                <Label htmlFor="edit-status">Status</Label>
+                <Select
+                  value={editingAccount.status}
+                  onValueChange={(v) =>
+                    setEditingAccount({ ...editingAccount, status: v as AccountStatus })
                   }
-                />
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Ativa</SelectItem>
+                    <SelectItem value="paused">Pausada</SelectItem>
+                    <SelectItem value="cancelled">Cancelada</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           )}
