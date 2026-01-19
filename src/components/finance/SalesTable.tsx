@@ -25,17 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { Textarea } from '@/components/ui/textarea';
+import { RefundConfirmationDialog } from './RefundConfirmationDialog';
 import { useFinance } from '@/contexts/FinanceContext';
 import { Sale, SaleStatus, PaymentMethod } from '@/types/crm';
 import { format } from 'date-fns';
@@ -62,7 +52,6 @@ export function SalesTable({ isLoading = false }: SalesTableProps) {
     open: false,
     sale: null,
   });
-  const [refundReason, setRefundReason] = useState('');
 
   const filteredSales = sales.filter((sale) => {
     const contact = getContactById(sale.contact_id);
@@ -116,12 +105,10 @@ export function SalesTable({ isLoading = false }: SalesTableProps) {
     toast.success('Venda cancelada!');
   };
 
-  const handleRefund = () => {
+  const handleRefundConfirm = (reason: string) => {
     if (!refundDialog.sale) return;
-    refundSale(refundDialog.sale.id, refundReason);
+    refundSale(refundDialog.sale.id, reason);
     setRefundDialog({ open: false, sale: null });
-    setRefundReason('');
-    toast.success('Estorno realizado com sucesso!');
   };
 
   if (isLoading) {
@@ -258,42 +245,17 @@ export function SalesTable({ isLoading = false }: SalesTableProps) {
         </CardContent>
       </Card>
 
-      {/* Refund Dialog */}
-      <AlertDialog
+      {/* Refund Dialog with Password Confirmation */}
+      <RefundConfirmationDialog
         open={refundDialog.open}
         onOpenChange={(open) => {
           if (!open) {
             setRefundDialog({ open: false, sale: null });
-            setRefundReason('');
           }
         }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar Estorno</AlertDialogTitle>
-            <AlertDialogDescription>
-              Você está prestes a estornar uma venda de{' '}
-              <strong>{refundDialog.sale && formatCurrency(refundDialog.sale.valor)}</strong>.
-              Esta ação não pode ser desfeita.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="py-4">
-            <label className="text-sm font-medium">Motivo do estorno</label>
-            <Textarea
-              value={refundReason}
-              onChange={(e) => setRefundReason(e.target.value)}
-              placeholder="Descreva o motivo do estorno..."
-              className="mt-2"
-            />
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleRefund} className="bg-destructive text-destructive-foreground">
-              Confirmar Estorno
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        saleValue={refundDialog.sale?.valor || 0}
+        onConfirm={handleRefundConfirm}
+      />
     </>
   );
 }

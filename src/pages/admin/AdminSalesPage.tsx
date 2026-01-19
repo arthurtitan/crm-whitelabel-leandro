@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { mockSales, mockContacts } from '@/data/mockData';
 import { Sale, SaleStatus } from '@/types/crm';
+import { RefundConfirmationDialog } from '@/components/finance/RefundConfirmationDialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -48,7 +49,6 @@ import {
   DollarSign,
   TrendingUp,
   Clock,
-  CreditCard,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -65,8 +65,10 @@ export default function AdminSalesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<SaleStatus | 'all'>('all');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [refundSale, setRefundSale] = useState<Sale | null>(null);
-  const [refundReason, setRefundReason] = useState('');
+  const [refundDialog, setRefundDialog] = useState<{ open: boolean; sale: Sale | null }>({
+    open: false,
+    sale: null,
+  });
 
   const [formData, setFormData] = useState({
     contact_id: '',
@@ -151,18 +153,16 @@ export default function AdminSalesPage() {
     toast.success('Pagamento confirmado!');
   };
 
-  const handleRefund = () => {
-    if (!refundSale) return;
+  const handleRefundConfirm = (reason: string) => {
+    if (!refundDialog.sale) return;
     setSales(
       sales.map((s) =>
-        s.id === refundSale.id
+        s.id === refundDialog.sale!.id
           ? { ...s, status: 'refunded' as SaleStatus, refunded_at: new Date().toISOString() }
           : s
       )
     );
-    setRefundSale(null);
-    setRefundReason('');
-    toast.success('Estorno realizado com sucesso!');
+    setRefundDialog({ open: false, sale: null });
   };
 
   return (
@@ -385,7 +385,7 @@ export default function AdminSalesPage() {
                         {sale.status === 'paid' && (
                           <DropdownMenuItem
                             className="text-destructive"
-                            onClick={() => setRefundSale(sale)}
+                            onClick={() => setRefundDialog({ open: true, sale })}
                           >
                             <RotateCcw className="w-4 h-4 mr-2" />
                             Estornar
@@ -401,44 +401,17 @@ export default function AdminSalesPage() {
         </CardContent>
       </Card>
 
-      {/* Refund Dialog */}
-      <Dialog open={!!refundSale} onOpenChange={() => setRefundSale(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="text-destructive">Estornar Venda</DialogTitle>
-            <DialogDescription>
-              Esta ação criará um evento de estorno no sistema
-            </DialogDescription>
-          </DialogHeader>
-          {refundSale && (
-            <div className="space-y-4 py-4">
-              <div className="p-4 rounded-lg bg-muted/50">
-                <p className="text-sm text-muted-foreground">Valor a estornar</p>
-                <p className="text-2xl font-bold">
-                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(refundSale.valor)}
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="reason">Motivo do estorno</Label>
-                <Input
-                  id="reason"
-                  value={refundReason}
-                  onChange={(e) => setRefundReason(e.target.value)}
-                  placeholder="Descreva o motivo..."
-                />
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRefundSale(null)}>
-              Cancelar
-            </Button>
-            <Button variant="destructive" onClick={handleRefund}>
-              Confirmar Estorno
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Refund Dialog with Password Confirmation */}
+      <RefundConfirmationDialog
+        open={refundDialog.open}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRefundDialog({ open: false, sale: null });
+          }
+        }}
+        saleValue={refundDialog.sale?.valor || 0}
+        onConfirm={handleRefundConfirm}
+      />
     </div>
   );
 }
