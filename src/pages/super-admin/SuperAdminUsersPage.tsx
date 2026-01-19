@@ -158,11 +158,10 @@ export default function SuperAdminUsersPage() {
       role: formData.role,
       account_id: formData.role === 'super_admin' ? null : formData.account_id || null,
       status: 'active',
+      permissions: formData.role === 'agent' ? formData.permissions : undefined,
       last_login_at: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      // In a real app, permissions would be stored separately
-      // permissions: formData.role === 'agent' ? formData.permissions : undefined,
     };
     setUsers([newUser, ...users]);
     setIsCreateOpen(false);
@@ -188,7 +187,7 @@ export default function SuperAdminUsersPage() {
       status: user.status === 'active' ? 'active' : 'inactive',
       password: '',
       confirmPassword: '',
-      permissions: [], // In a real app, this would come from the user's stored permissions
+      permissions: user.permissions || [],
     });
     setShowEditPassword(false);
     setEditingUser(user);
@@ -237,6 +236,7 @@ export default function SuperAdminUsersPage() {
       role: editFormData.role,
       account_id: editFormData.role === 'super_admin' ? null : editFormData.account_id || null,
       status: editFormData.status,
+      permissions: editFormData.role === 'agent' ? editFormData.permissions : undefined,
       updated_at: new Date().toISOString(),
     };
     

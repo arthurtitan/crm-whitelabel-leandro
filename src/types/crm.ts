@@ -35,6 +35,7 @@ export interface User {
   email: string;
   role: UserRole;
   status: UserStatus;
+  permissions?: string[]; // Agent-specific permissions: leads, conversations, sales, events, reports
   last_login_at: string | null;
   created_at: string;
   updated_at: string;
