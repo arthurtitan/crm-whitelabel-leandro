@@ -229,6 +229,8 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
     []
   );
 
+  // Vendas podem ser criadas em QUALQUER etapa do Kanban
+  // A validação de etapa avançada foi removida conforme regra de negócio
   const canCreateSale = useCallback(
     (contactId: string): { allowed: boolean; reason?: string } => {
       const contact = getContactById(contactId);
@@ -236,27 +238,10 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
         return { allowed: false, reason: 'Contato não encontrado' };
       }
 
-      const funnelState = leadFunnelStates.find((lfs) => lfs.contact_id === contactId);
-      if (!funnelState?.funnel_stage_id) {
-        return { allowed: false, reason: 'Lead não está no funil de vendas' };
-      }
-
-      const stage = mockFunnelStages.find((s) => s.id === funnelState.funnel_stage_id);
-      if (!stage) {
-        return { allowed: false, reason: 'Etapa do funil não encontrada' };
-      }
-
-      // Only allow sales from advanced stages (ordem >= 3: Interessado, Qualificado, Convertido)
-      if (stage.ordem < 3) {
-        return { 
-          allowed: false, 
-          reason: `Lead precisa estar em etapa avançada do funil (atual: ${stage.nome})` 
-        };
-      }
-
+      // Vendas permitidas em qualquer etapa do funil
       return { allowed: true };
     },
-    [getContactById, leadFunnelStates]
+    [getContactById]
   );
 
   // Create contact

@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import { Tag, LeadTag, TagHistory, ActorType } from '@/types/crm';
-import { mockTags, mockLeadTags, mockTagHistory, mockFunnelStages } from '@/data/mockData';
-import { useFinance } from './FinanceContext';
+import { mockTags, mockLeadTags, mockTagHistory, mockFunnels } from '@/data/mockData';
 
 // ============= TYPES =============
 
@@ -24,26 +23,33 @@ interface RemoveTagData {
 
 interface ApplyStageTagData {
   contactId: string;
-  stageId: string;
+  tagId: string; // ID da tag de stage
   source: 'kanban' | 'chatwoot' | 'system';
   actorType: ActorType;
   actorId: string | null;
 }
 
+interface CreateStageTagData {
+  name: string;
+  slug: string;
+  color: string;
+  source: 'kanban' | 'chatwoot' | 'system';
+}
+
 interface TagContextType {
   // State
   tags: Tag[];
+  stageTags: Tag[]; // Apenas tags de etapa (colunas do Kanban)
+  operationalTags: Tag[]; // Apenas tags operacionais
   leadTags: LeadTag[];
   tagHistory: TagHistory[];
 
   // Queries
   getTagById: (tagId: string) => Tag | undefined;
   getTagBySlug: (slug: string) => Tag | undefined;
-  getStageTag: (stageId: string) => Tag | undefined;
   getLeadTags: (contactId: string) => Tag[];
-  getLeadStageTags: (contactId: string) => Tag[];
+  getLeadStageTag: (contactId: string) => Tag | undefined; // Retorna A tag de etapa do lead
   getLeadOperationalTags: (contactId: string) => Tag[];
-  getAvailableOperationalTags: () => Tag[];
   getContactTagHistory: (contactId: string) => TagHistory[];
   hasTag: (contactId: string, tagId: string) => boolean;
 
@@ -51,7 +57,8 @@ interface TagContextType {
   addTag: (data: AddTagData) => { success: boolean; error?: string };
   removeTag: (data: RemoveTagData) => { success: boolean; error?: string };
   toggleOperationalTag: (data: AddTagData) => { success: boolean; added: boolean; error?: string };
-  applyStageTag: (data: ApplyStageTagData) => { success: boolean; error?: string; autoCreatedStage?: boolean };
+  applyStageTag: (data: ApplyStageTagData) => { success: boolean; error?: string };
+  createStageTag: (data: CreateStageTagData) => { success: boolean; tagId?: string; error?: string };
   
   // Chatwoot sync simulation
   simulateChatwootTagApplied: (contactId: string, tagSlug: string) => void;
@@ -77,14 +84,26 @@ interface TagProviderProps {
 }
 
 export const TagProvider: React.FC<TagProviderProps> = ({ children, accountId }) => {
-  const { updateLeadStage } = useFinance();
-  
   // State filtered by account
   const [tags, setTags] = useState<Tag[]>(
     mockTags.filter((t) => t.account_id === accountId && t.ativo)
   );
   const [leadTags, setLeadTags] = useState<LeadTag[]>(mockLeadTags);
   const [tagHistory, setTagHistory] = useState<TagHistory[]>(mockTagHistory);
+
+  // ============= DERIVED STATE =============
+  
+  // Tags de etapa = colunas do Kanban
+  const stageTags = useMemo(() => 
+    tags.filter((t) => t.type === 'stage').sort((a, b) => a.ordem - b.ordem),
+    [tags]
+  );
+
+  // Tags operacionais = complementares
+  const operationalTags = useMemo(() => 
+    tags.filter((t) => t.type === 'operational'),
+    [tags]
+  );
 
   // ============= QUERIES =============
 
@@ -96,10 +115,6 @@ export const TagProvider: React.FC<TagProviderProps> = ({ children, accountId })
     return tags.find((t) => t.slug === slug.toLowerCase());
   }, [tags]);
 
-  const getStageTag = useCallback((stageId: string): Tag | undefined => {
-    return tags.find((t) => t.type === 'stage' && t.linked_stage_id === stageId);
-  }, [tags]);
-
   const getLeadTags = useCallback((contactId: string): Tag[] => {
     const contactTagIds = leadTags
       .filter((lt) => lt.contact_id === contactId)
@@ -107,17 +122,16 @@ export const TagProvider: React.FC<TagProviderProps> = ({ children, accountId })
     return tags.filter((t) => contactTagIds.includes(t.id));
   }, [leadTags, tags]);
 
-  const getLeadStageTags = useCallback((contactId: string): Tag[] => {
-    return getLeadTags(contactId).filter((t) => t.type === 'stage');
-  }, [getLeadTags]);
+  const getLeadStageTag = useCallback((contactId: string): Tag | undefined => {
+    const contactTagIds = leadTags
+      .filter((lt) => lt.contact_id === contactId)
+      .map((lt) => lt.tag_id);
+    return tags.find((t) => contactTagIds.includes(t.id) && t.type === 'stage');
+  }, [leadTags, tags]);
 
   const getLeadOperationalTags = useCallback((contactId: string): Tag[] => {
     return getLeadTags(contactId).filter((t) => t.type === 'operational');
   }, [getLeadTags]);
-
-  const getAvailableOperationalTags = useCallback((): Tag[] => {
-    return tags.filter((t) => t.type === 'operational');
-  }, [tags]);
 
   const getContactTagHistory = useCallback((contactId: string): TagHistory[] => {
     return tagHistory
@@ -134,7 +148,7 @@ export const TagProvider: React.FC<TagProviderProps> = ({ children, accountId })
   const addHistoryEntry = useCallback((
     contactId: string,
     tagId: string,
-    action: 'added' | 'removed' | 'stage_created',
+    action: 'added' | 'removed' | 'tag_created',
     actorType: ActorType,
     actorId: string | null,
     source: 'kanban' | 'chatwoot' | 'system',
@@ -168,14 +182,14 @@ export const TagProvider: React.FC<TagProviderProps> = ({ children, accountId })
       return { success: false, error: 'Lead já possui esta tag' };
     }
 
-    // If stage tag, need to remove other stage tags first
+    // If stage tag, need to remove other stage tags first (exclusiva)
     if (tag.type === 'stage') {
-      const currentStageTags = getLeadStageTags(contactId);
-      currentStageTags.forEach((stageTag) => {
+      const currentStageTag = getLeadStageTag(contactId);
+      if (currentStageTag) {
         // Remove the current stage tag
-        setLeadTags((prev) => prev.filter((lt) => !(lt.contact_id === contactId && lt.tag_id === stageTag.id)));
-        addHistoryEntry(contactId, stageTag.id, 'removed', actorType, actorId, source, `Substituída por ${tag.name}`);
-      });
+        setLeadTags((prev) => prev.filter((lt) => !(lt.contact_id === contactId && lt.tag_id === currentStageTag.id)));
+        addHistoryEntry(contactId, currentStageTag.id, 'removed', actorType, actorId, source, `Substituída por ${tag.name}`);
+      }
     }
 
     // Add the new tag
@@ -193,7 +207,7 @@ export const TagProvider: React.FC<TagProviderProps> = ({ children, accountId })
     addHistoryEntry(contactId, tagId, 'added', actorType, actorId, source, null);
 
     return { success: true };
-  }, [getTagById, hasTag, getLeadStageTags, addHistoryEntry]);
+  }, [getTagById, hasTag, getLeadStageTag, addHistoryEntry]);
 
   const removeTag = useCallback((data: RemoveTagData): { success: boolean; error?: string } => {
     const { contactId, tagId, source, actorType, actorId, reason } = data;
@@ -226,51 +240,32 @@ export const TagProvider: React.FC<TagProviderProps> = ({ children, accountId })
     }
   }, [getTagById, hasTag, addTag, removeTag]);
 
-  const applyStageTag = useCallback((data: ApplyStageTagData): { success: boolean; error?: string; autoCreatedStage?: boolean } => {
-    const { contactId, stageId, source, actorType, actorId } = data;
+  const applyStageTag = useCallback((data: ApplyStageTagData): { success: boolean; error?: string } => {
+    const { contactId, tagId, source, actorType, actorId } = data;
 
-    // Find the tag linked to this stage
-    let stageTag = getStageTag(stageId);
-    let autoCreatedStage = false;
-
-    // If no tag exists for this stage, auto-create one
-    if (!stageTag) {
-      const stage = mockFunnelStages.find((s) => s.id === stageId);
-      if (!stage) {
-        return { success: false, error: 'Etapa não encontrada' };
-      }
-
-      // Auto-create the tag
-      const newTag: Tag = {
-        id: `tag-auto-${Date.now()}`,
-        account_id: accountId,
-        name: stage.nome,
-        slug: stage.nome.toLowerCase().replace(/\s+/g, '-'),
-        type: 'stage',
-        color: stage.cor || '#0EA5E9',
-        linked_stage_id: stageId,
-        ativo: true,
-        created_at: new Date().toISOString(),
-      };
-
-      setTags((prev) => [...prev, newTag]);
-      stageTag = newTag;
-      autoCreatedStage = true;
-      addHistoryEntry(contactId, newTag.id, 'stage_created', 'system', null, source, `Etapa "${stage.nome}" criada automaticamente via tag`);
+    // Find the stage tag
+    const stageTag = getTagById(tagId);
+    if (!stageTag || stageTag.type !== 'stage') {
+      return { success: false, error: 'Tag de etapa não encontrada' };
     }
 
-    // Remove current stage tags
-    const currentStageTags = getLeadStageTags(contactId);
-    currentStageTags.forEach((tag) => {
-      setLeadTags((prev) => prev.filter((lt) => !(lt.contact_id === contactId && lt.tag_id === tag.id)));
-      addHistoryEntry(contactId, tag.id, 'removed', actorType, actorId, source, `Lead movido para ${stageTag!.name}`);
-    });
+    // Remove current stage tag if exists
+    const currentStageTag = getLeadStageTag(contactId);
+    if (currentStageTag && currentStageTag.id !== tagId) {
+      setLeadTags((prev) => prev.filter((lt) => !(lt.contact_id === contactId && lt.tag_id === currentStageTag.id)));
+      addHistoryEntry(contactId, currentStageTag.id, 'removed', actorType, actorId, source, `Lead movido para ${stageTag.name}`);
+    }
+
+    // If already has this tag, no-op
+    if (hasTag(contactId, tagId)) {
+      return { success: true };
+    }
 
     // Add new stage tag
     const newLeadTag: LeadTag = {
       id: `lt-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       contact_id: contactId,
-      tag_id: stageTag.id,
+      tag_id: tagId,
       applied_by_type: actorType,
       applied_by_id: actorId,
       source,
@@ -278,34 +273,77 @@ export const TagProvider: React.FC<TagProviderProps> = ({ children, accountId })
     };
 
     setLeadTags((prev) => [...prev, newLeadTag]);
-    addHistoryEntry(contactId, stageTag.id, 'added', actorType, actorId, source, null);
+    addHistoryEntry(contactId, tagId, 'added', actorType, actorId, source, null);
 
-    // Also update the lead's stage in FinanceContext for Kanban sync
-    if (stageTag.linked_stage_id) {
-      updateLeadStage(contactId, stageTag.linked_stage_id);
+    return { success: true };
+  }, [getTagById, getLeadStageTag, hasTag, addHistoryEntry]);
+
+  // Criar nova tag de etapa (também cria coluna no Kanban)
+  const createStageTag = useCallback((data: CreateStageTagData): { success: boolean; tagId?: string; error?: string } => {
+    const { name, slug, color, source } = data;
+
+    // Check if slug already exists
+    if (getTagBySlug(slug)) {
+      return { success: false, error: `Tag "${slug}" já existe` };
     }
 
-    return { success: true, autoCreatedStage };
-  }, [accountId, getStageTag, getLeadStageTags, addHistoryEntry, updateLeadStage]);
+    // Get funnel for this account
+    const funnel = mockFunnels.find((f) => f.account_id === accountId && f.ativo);
+    if (!funnel) {
+      return { success: false, error: 'Funil não encontrado' };
+    }
+
+    // Calculate next ordem
+    const maxOrdem = Math.max(...stageTags.map((t) => t.ordem), 0);
+
+    const newTag: Tag = {
+      id: `tag-${Date.now()}`,
+      account_id: accountId,
+      funnel_id: funnel.id,
+      name,
+      slug: slug.toLowerCase().replace(/\s+/g, '-'),
+      type: 'stage',
+      color,
+      ordem: maxOrdem + 1,
+      ativo: true,
+      created_at: new Date().toISOString(),
+    };
+
+    setTags((prev) => [...prev, newTag]);
+    
+    // Add history entry for tag creation
+    const historyEntry: TagHistory = {
+      id: `th-${Date.now()}`,
+      contact_id: '', // No contact, this is a tag creation
+      tag_id: newTag.id,
+      action: 'tag_created',
+      actor_type: 'system',
+      actor_id: null,
+      source,
+      reason: `Etapa "${name}" criada`,
+      created_at: new Date().toISOString(),
+    };
+    setTagHistory((prev) => [historyEntry, ...prev]);
+
+    return { success: true, tagId: newTag.id };
+  }, [accountId, getTagBySlug, stageTags]);
 
   // ============= CHATWOOT SIMULATION =============
 
   const simulateChatwootTagApplied = useCallback((contactId: string, tagSlug: string) => {
     // Simulates a tag being applied from Chatwoot
-    const tag = getTagBySlug(tagSlug);
+    let tag = getTagBySlug(tagSlug);
     
     if (tag) {
       if (tag.type === 'stage') {
         // Stage tag: move lead in Kanban
-        if (tag.linked_stage_id) {
-          applyStageTag({
-            contactId,
-            stageId: tag.linked_stage_id,
-            source: 'chatwoot',
-            actorType: 'external',
-            actorId: null,
-          });
-        }
+        applyStageTag({
+          contactId,
+          tagId: tag.id,
+          source: 'chatwoot',
+          actorType: 'external',
+          actorId: null,
+        });
       } else {
         // Operational tag: just add/toggle
         toggleOperationalTag({
@@ -317,48 +355,66 @@ export const TagProvider: React.FC<TagProviderProps> = ({ children, accountId })
         });
       }
     } else {
-      // Tag doesn't exist - if it looks like a stage tag, auto-create stage
-      console.log(`Tag "${tagSlug}" não encontrada. Em produção, seria criada automaticamente.`);
+      // Tag doesn't exist - auto-create as stage tag (new Kanban column)
+      const result = createStageTag({
+        name: tagSlug.charAt(0).toUpperCase() + tagSlug.slice(1).replace(/-/g, ' '),
+        slug: tagSlug,
+        color: '#6366F1', // Default color for auto-created tags
+        source: 'chatwoot',
+      });
+
+      if (result.success && result.tagId) {
+        // Apply the newly created tag to the contact
+        applyStageTag({
+          contactId,
+          tagId: result.tagId,
+          source: 'chatwoot',
+          actorType: 'external',
+          actorId: null,
+        });
+      }
     }
-  }, [getTagBySlug, applyStageTag, toggleOperationalTag]);
+  }, [getTagBySlug, applyStageTag, toggleOperationalTag, createStageTag]);
 
   // ============= CONTEXT VALUE =============
 
   const value = useMemo<TagContextType>(() => ({
     tags,
+    stageTags,
+    operationalTags,
     leadTags,
     tagHistory,
     getTagById,
     getTagBySlug,
-    getStageTag,
     getLeadTags,
-    getLeadStageTags,
+    getLeadStageTag,
     getLeadOperationalTags,
-    getAvailableOperationalTags,
     getContactTagHistory,
     hasTag,
     addTag,
     removeTag,
     toggleOperationalTag,
     applyStageTag,
+    createStageTag,
     simulateChatwootTagApplied,
   }), [
     tags,
+    stageTags,
+    operationalTags,
     leadTags,
     tagHistory,
     getTagById,
     getTagBySlug,
-    getStageTag,
     getLeadTags,
-    getLeadStageTags,
+    getLeadStageTag,
     getLeadOperationalTags,
-    getAvailableOperationalTags,
     getContactTagHistory,
     hasTag,
     addTag,
     removeTag,
     toggleOperationalTag,
     applyStageTag,
+    createStageTag,
     simulateChatwootTagApplied,
   ]);
 

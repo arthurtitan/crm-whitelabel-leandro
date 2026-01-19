@@ -24,14 +24,14 @@ export function TagSelector({ contactId, trigger }: TagSelectorProps) {
   const { user } = useAuth();
   const { 
     getLeadOperationalTags, 
-    getAvailableOperationalTags, 
+    operationalTags,
     toggleOperationalTag,
     hasTag 
   } = useTagContext();
   const [open, setOpen] = useState(false);
 
   const currentTags = getLeadOperationalTags(contactId);
-  const availableTags = getAvailableOperationalTags();
+  const availableTags = operationalTags;
 
   const handleToggleTag = (tag: Tag) => {
     const result = toggleOperationalTag({

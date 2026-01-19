@@ -116,22 +116,35 @@ export interface LeadFunnelHistory {
   created_at: string;
 }
 
-// ============= TAGS / ETIQUETAS =============
+// ============= TAGS / ETIQUETAS (CHATWOOT ↔ KANBAN) =============
+// CONCEITO: Tags DO Chatwoot = Etapas DO Kanban (são a MESMA entidade)
+// - Criar tag "gol" no Chatwoot → aparece etapa "gol" no Kanban
+// - Criar etapa "bola" no Kanban → aparece tag "bola" no Chatwoot
+// - Tags operacionais (urgente, lead-frio) são complementares e não movem etapa
 
 export type TagType = 'stage' | 'operational';
 
+/**
+ * Tag = Etiqueta do Chatwoot que também representa uma Etapa do Kanban (se type === 'stage')
+ * A tag é a fonte única de verdade para a estrutura do funil.
+ */
 export interface Tag {
   id: string;
   account_id: string;
+  funnel_id: string; // Vinculada a um funil específico
   name: string;
-  slug: string; // ex: "qualificado", "urgente"
-  type: TagType;
+  slug: string; // slug único usado no Chatwoot (ex: "qualificado", "urgente")
+  type: TagType; // 'stage' = etapa do funil, 'operational' = tag complementar
   color: string;
-  linked_stage_id: string | null; // Se type === 'stage', qual stage está vinculada
+  ordem: number; // Ordem no funil (apenas para type === 'stage')
   ativo: boolean;
   created_at: string;
 }
 
+/**
+ * Relacionamento Lead ↔ Tag
+ * Um lead pode ter UMA tag de stage (sua posição no funil) e MÚLTIPLAS tags operacionais
+ */
 export interface LeadTag {
   id: string;
   contact_id: string;
@@ -142,11 +155,14 @@ export interface LeadTag {
   created_at: string;
 }
 
+/**
+ * Histórico imutável de todas as alterações de tags
+ */
 export interface TagHistory {
   id: string;
   contact_id: string;
   tag_id: string;
-  action: 'added' | 'removed' | 'stage_created';
+  action: 'added' | 'removed' | 'tag_created';
   actor_type: ActorType;
   actor_id: string | null;
   source: 'kanban' | 'chatwoot' | 'system';
