@@ -4,7 +4,7 @@ import { useFinance } from '@/contexts/FinanceContext';
 import { useTagContext } from '@/contexts/TagContext';
 import { CreateSaleDialog } from '@/components/finance/CreateSaleDialog';
 import { LeadCard, CreateStageDialog } from '@/components/kanban';
-import { Contact } from '@/types/crm';
+import { Contact, Tag } from '@/types/crm';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -17,27 +17,57 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from '@/components/ui/dialog';
-import { Search, Phone, Mail, MessageSquare, Clock, DollarSign, Plus } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
+  Search,
+  Phone,
+  Mail,
+  MessageSquare,
+  Clock,
+  DollarSign,
+  Plus,
+  MoreVertical,
+  ChevronLeft,
+  ChevronRight,
+  Trash2,
+} from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 
 interface KanbanLead extends Contact {
-  stage_id: string | null; // stage_id = tagId da tag de etapa (Chatwoot)
+  stage_id: string | null;
 }
 
 export default function AdminKanbanPage() {
   const { user } = useAuth();
   const { contacts } = useFinance();
-  const { stageTags, getLeadStageTag, applyStageTag } = useTagContext();
+  const { stageTags, getLeadStageTag, applyStageTag, moveStageTag, deleteStageTag } = useTagContext();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedLead, setSelectedLead] = useState<KanbanLead | null>(null);
   const [draggedLead, setDraggedLead] = useState<string | null>(null);
   const [saleContactId, setSaleContactId] = useState<string | null>(null);
+  const [deleteConfirmStage, setDeleteConfirmStage] = useState<Tag | null>(null);
 
-  // Fonte de verdade do Kanban = tag de etapa aplicada no contato (sincronizada com Chatwoot)
   const leads: KanbanLead[] = useMemo(() => {
     return contacts
       .map((contact) => {
@@ -78,6 +108,27 @@ export default function AdminKanbanPage() {
     }
 
     setDraggedLead(null);
+  };
+
+  const handleMoveStage = (tagId: string, direction: 'left' | 'right') => {
+    const result = moveStageTag(tagId, direction);
+    if (result.success) {
+      toast.success('Etapa reordenada!');
+    } else {
+      toast.error(result.error || 'Erro ao reordenar');
+    }
+  };
+
+  const handleDeleteStage = () => {
+    if (!deleteConfirmStage) return;
+
+    const result = deleteStageTag(deleteConfirmStage.id);
+    if (result.success) {
+      toast.success(`Etapa "${deleteConfirmStage.name}" excluída!`);
+    } else {
+      toast.error(result.error || 'Erro ao excluir etapa');
+    }
+    setDeleteConfirmStage(null);
   };
 
   const getInitials = (name: string | null) => {
@@ -129,8 +180,8 @@ export default function AdminKanbanPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               placeholder="Buscar leads..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-9"
             />
           </div>
@@ -139,8 +190,11 @@ export default function AdminKanbanPage() {
 
       {/* Kanban Board */}
       <div className="flex gap-4 overflow-x-auto pb-4 h-[calc(100%-6rem)]">
-        {stageTags.map((stage) => {
+        {stageTags.map((stage, index) => {
           const stageLeads = getLeadsByStage(stage.id);
+          const isFirst = index === 0;
+          const isLast = index === stageTags.length - 1;
+
           return (
             <div
               key={stage.id}
@@ -155,7 +209,40 @@ export default function AdminKanbanPage() {
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: stage.color }} />
                       <CardTitle className="text-sm font-semibold">{stage.name}</CardTitle>
                     </div>
-                    <Badge variant="secondary" className="text-xs">{stageLeads.length}</Badge>
+                    <div className="flex items-center gap-1">
+                      <Badge variant="secondary" className="text-xs">{stageLeads.length}</Badge>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-7 w-7">
+                            <MoreVertical className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => handleMoveStage(stage.id, 'left')}
+                            disabled={isFirst}
+                          >
+                            <ChevronLeft className="w-4 h-4 mr-2" />
+                            Mover para Esquerda
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleMoveStage(stage.id, 'right')}
+                            disabled={isLast}
+                          >
+                            <ChevronRight className="w-4 h-4 mr-2" />
+                            Mover para Direita
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => setDeleteConfirmStage(stage)}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Excluir Etapa
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="p-2 flex-1 overflow-hidden">
@@ -249,6 +336,30 @@ export default function AdminKanbanPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteConfirmStage} onOpenChange={(open) => !open && setDeleteConfirmStage(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir Etapa</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir a etapa "{deleteConfirmStage?.name}"?
+              Esta ação também removerá a etiqueta correspondente no Chatwoot.
+              <br /><br />
+              <strong>Atenção:</strong> Etapas com leads não podem ser excluídas.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteStage}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {saleContactId && (
         <CreateSaleDialog preSelectedContactId={saleContactId} onClose={() => setSaleContactId(null)} />

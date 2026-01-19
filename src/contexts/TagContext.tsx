@@ -60,6 +60,10 @@ interface TagContextType {
   applyStageTag: (data: ApplyStageTagData) => { success: boolean; error?: string };
   createStageTag: (data: CreateStageTagData) => { success: boolean; tagId?: string; error?: string };
   
+  // Stage Management (Kanban columns)
+  moveStageTag: (tagId: string, direction: 'left' | 'right') => { success: boolean; error?: string };
+  deleteStageTag: (tagId: string) => { success: boolean; error?: string };
+  
   // Chatwoot sync simulation
   simulateChatwootTagApplied: (contactId: string, tagSlug: string) => void;
 }
@@ -328,6 +332,86 @@ export const TagProvider: React.FC<TagProviderProps> = ({ children, accountId })
     return { success: true, tagId: newTag.id };
   }, [accountId, getTagBySlug, stageTags]);
 
+  // ============= STAGE MANAGEMENT =============
+
+  // Move stage tag left or right (reorder columns)
+  const moveStageTag = useCallback((tagId: string, direction: 'left' | 'right'): { success: boolean; error?: string } => {
+    const tag = getTagById(tagId);
+    if (!tag || tag.type !== 'stage') {
+      return { success: false, error: 'Etapa não encontrada' };
+    }
+
+    const currentIndex = stageTags.findIndex((t) => t.id === tagId);
+    if (currentIndex === -1) {
+      return { success: false, error: 'Etapa não encontrada no funil' };
+    }
+
+    const newIndex = direction === 'left' ? currentIndex - 1 : currentIndex + 1;
+    
+    if (newIndex < 0 || newIndex >= stageTags.length) {
+      return { success: false, error: 'Não é possível mover nessa direção' };
+    }
+
+    // Swap ordem values
+    const adjacentTag = stageTags[newIndex];
+    const tempOrdem = tag.ordem;
+
+    setTags((prev) => prev.map((t) => {
+      if (t.id === tag.id) return { ...t, ordem: adjacentTag.ordem };
+      if (t.id === adjacentTag.id) return { ...t, ordem: tempOrdem };
+      return t;
+    }));
+
+    // Add history entry
+    const historyEntry: TagHistory = {
+      id: `th-${Date.now()}`,
+      contact_id: '',
+      tag_id: tag.id,
+      action: 'tag_created', // Using existing action type for reorder
+      actor_type: 'user',
+      actor_id: null,
+      source: 'kanban',
+      reason: `Etapa "${tag.name}" reordenada para ${direction === 'left' ? 'esquerda' : 'direita'}`,
+      created_at: new Date().toISOString(),
+    };
+    setTagHistory((prev) => [historyEntry, ...prev]);
+
+    return { success: true };
+  }, [getTagById, stageTags]);
+
+  // Delete stage tag (remove Kanban column)
+  const deleteStageTag = useCallback((tagId: string): { success: boolean; error?: string } => {
+    const tag = getTagById(tagId);
+    if (!tag || tag.type !== 'stage') {
+      return { success: false, error: 'Etapa não encontrada' };
+    }
+
+    // Check if there are leads in this stage
+    const leadsInStage = leadTags.filter((lt) => lt.tag_id === tagId);
+    if (leadsInStage.length > 0) {
+      return { success: false, error: `Não é possível excluir: ${leadsInStage.length} lead(s) nesta etapa` };
+    }
+
+    // Remove the tag
+    setTags((prev) => prev.filter((t) => t.id !== tagId));
+
+    // Add history entry
+    const historyEntry: TagHistory = {
+      id: `th-${Date.now()}`,
+      contact_id: '',
+      tag_id: tagId,
+      action: 'removed',
+      actor_type: 'user',
+      actor_id: null,
+      source: 'kanban',
+      reason: `Etapa "${tag.name}" excluída`,
+      created_at: new Date().toISOString(),
+    };
+    setTagHistory((prev) => [historyEntry, ...prev]);
+
+    return { success: true };
+  }, [getTagById, leadTags]);
+
   // ============= CHATWOOT SIMULATION =============
 
   const simulateChatwootTagApplied = useCallback((contactId: string, tagSlug: string) => {
@@ -396,6 +480,8 @@ export const TagProvider: React.FC<TagProviderProps> = ({ children, accountId })
     toggleOperationalTag,
     applyStageTag,
     createStageTag,
+    moveStageTag,
+    deleteStageTag,
     simulateChatwootTagApplied,
   }), [
     tags,
@@ -415,6 +501,8 @@ export const TagProvider: React.FC<TagProviderProps> = ({ children, accountId })
     toggleOperationalTag,
     applyStageTag,
     createStageTag,
+    moveStageTag,
+    deleteStageTag,
     simulateChatwootTagApplied,
   ]);
 
