@@ -31,7 +31,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectContent,
@@ -58,6 +69,28 @@ import { toast } from 'sonner';
 // Counter for generating numeric IDs
 let accountIdCounter = 100;
 
+type Language = 'pt' | 'en';
+
+interface CreateFormData {
+  nome: string;
+  idioma: Language;
+  status: AccountStatus;
+  limiteAgentes: number;
+  chatwootEnabled: boolean;
+  chatwootAccountId: string;
+  chatwootApiKey: string;
+}
+
+const initialFormData: CreateFormData = {
+  nome: '',
+  idioma: 'pt',
+  status: 'active',
+  limiteAgentes: 10,
+  chatwootEnabled: false,
+  chatwootAccountId: '',
+  chatwootApiKey: '',
+};
+
 export default function SuperAdminAccountsPage() {
   const navigate = useNavigate();
   const [accounts, setAccounts] = useState<Account[]>(mockAccounts);
@@ -67,12 +100,10 @@ export default function SuperAdminAccountsPage() {
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [deleteAccount, setDeleteAccount] = useState<Account | null>(null);
   const [deletePassword, setDeletePassword] = useState('');
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
   // Form state
-  const [formData, setFormData] = useState({
-    nome: '',
-    status: 'active' as AccountStatus,
-  });
+  const [formData, setFormData] = useState<CreateFormData>(initialFormData);
 
   const filteredAccounts = accounts.filter((account) => {
     const matchesSearch = account.nome.toLowerCase().includes(searchTerm.toLowerCase());
@@ -89,19 +120,46 @@ export default function SuperAdminAccountsPage() {
     const newAccount: Account = {
       id: `acc-${accountIdCounter}`,
       nome: formData.nome,
-      timezone: 'America/Sao_Paulo',
-      plano: '',
+      timezone: formData.idioma === 'pt' ? 'America/Sao_Paulo' : 'America/New_York',
+      plano: null,
       status: formData.status,
-      limite_usuarios: 999,
-      chatwoot_account_id: null,
-      chatwoot_api_key: null,
+      limite_usuarios: formData.limiteAgentes,
+      chatwoot_account_id: formData.chatwootEnabled ? formData.chatwootAccountId : null,
+      chatwoot_api_key: formData.chatwootEnabled ? formData.chatwootApiKey : null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
     setAccounts([newAccount, ...accounts]);
     setIsCreateOpen(false);
-    setFormData({ nome: '', status: 'active' });
+    setFormData(initialFormData);
     toast.success('Conta criada com sucesso!');
+  };
+
+  const hasFormData = () => {
+    return (
+      formData.nome.trim() !== '' ||
+      formData.chatwootAccountId.trim() !== '' ||
+      formData.chatwootApiKey.trim() !== '' ||
+      formData.limiteAgentes !== 10 ||
+      formData.idioma !== 'pt' ||
+      formData.status !== 'active' ||
+      formData.chatwootEnabled
+    );
+  };
+
+  const handleCancelCreate = () => {
+    if (hasFormData()) {
+      setShowCancelConfirm(true);
+    } else {
+      setIsCreateOpen(false);
+      setFormData(initialFormData);
+    }
+  };
+
+  const confirmCancelCreate = () => {
+    setShowCancelConfirm(false);
+    setIsCreateOpen(false);
+    setFormData(initialFormData);
   };
 
   const getNumericId = (id: string) => id.replace(/\D/g, '');
@@ -155,14 +213,15 @@ export default function SuperAdminAccountsPage() {
               Nova Conta
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>Criar Nova Conta</DialogTitle>
               <DialogDescription>Adicione uma nova conta ao sistema</DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
+              {/* Nome */}
               <div className="space-y-2">
-                <Label htmlFor="nome">Nome da Conta</Label>
+                <Label htmlFor="nome">Nome</Label>
                 <Input
                   id="nome"
                   value={formData.nome}
@@ -170,13 +229,102 @@ export default function SuperAdminAccountsPage() {
                   placeholder="Ex: Clínica Exemplo"
                 />
               </div>
+
+              {/* Idioma */}
+              <div className="space-y-2">
+                <Label htmlFor="idioma">Idioma</Label>
+                <Select
+                  value={formData.idioma}
+                  onValueChange={(v) => setFormData({ ...formData, idioma: v as Language })}
+                >
+                  <SelectTrigger id="idioma">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pt">Português</SelectItem>
+                    <SelectItem value="en">English</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Status */}
+              <div className="space-y-2">
+                <Label htmlFor="status">Status</Label>
+                <Select
+                  value={formData.status}
+                  onValueChange={(v) => setFormData({ ...formData, status: v as AccountStatus })}
+                >
+                  <SelectTrigger id="status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Ativa</SelectItem>
+                    <SelectItem value="paused">Pausada</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Limite de Agentes */}
+              <div className="space-y-2">
+                <Label htmlFor="limiteAgentes">Limite de Agentes</Label>
+                <Input
+                  id="limiteAgentes"
+                  type="number"
+                  min={1}
+                  value={formData.limiteAgentes}
+                  onChange={(e) => setFormData({ ...formData, limiteAgentes: parseInt(e.target.value) || 1 })}
+                />
+              </div>
+
+              {/* Chatwoot Integration */}
+              <div className="space-y-4 rounded-lg border p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label htmlFor="chatwoot-toggle" className="text-sm font-medium">
+                      Integração Chatwoot
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Habilitar para consumir dados do Chatwoot
+                    </p>
+                  </div>
+                  <Switch
+                    id="chatwoot-toggle"
+                    checked={formData.chatwootEnabled}
+                    onCheckedChange={(checked) => setFormData({ ...formData, chatwootEnabled: checked })}
+                  />
+                </div>
+
+                {formData.chatwootEnabled && (
+                  <div className="space-y-3 pt-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="chatwootAccountId">Account ID</Label>
+                      <Input
+                        id="chatwootAccountId"
+                        value={formData.chatwootAccountId}
+                        onChange={(e) => setFormData({ ...formData, chatwootAccountId: e.target.value })}
+                        placeholder="ID da conta no Chatwoot"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="chatwootApiKey">API Key</Label>
+                      <Input
+                        id="chatwootApiKey"
+                        type="password"
+                        value={formData.chatwootApiKey}
+                        onChange={(e) => setFormData({ ...formData, chatwootApiKey: e.target.value })}
+                        placeholder="Chave de API do Chatwoot"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
+              <Button variant="outline" onClick={handleCancelCreate}>
                 Cancelar
               </Button>
-              <Button onClick={handleCreate} disabled={!formData.nome}>
-                Criar Conta
+              <Button onClick={handleCreate} disabled={!formData.nome.trim()}>
+                Criar
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -393,6 +541,24 @@ export default function SuperAdminAccountsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Cancel Confirmation Dialog */}
+      <AlertDialog open={showCancelConfirm} onOpenChange={setShowCancelConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Descartar alterações?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Existem dados preenchidos no formulário. Tem certeza que deseja cancelar? Todos os dados serão perdidos.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Continuar editando</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmCancelCreate} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Descartar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
