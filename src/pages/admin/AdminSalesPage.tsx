@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { mockSales, mockContacts } from '@/data/mockData';
-import { Sale, SaleStatus } from '@/types/crm';
+import { useFinance } from '@/contexts/FinanceContext';
+import { SaleStatus } from '@/types/crm';
 import { RefundConfirmationDialog } from '@/components/finance/RefundConfirmationDialog';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { CreateSaleDialog } from '@/components/finance/CreateSaleDialog';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -16,15 +17,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -32,7 +24,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -55,42 +46,37 @@ import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 
 export default function AdminSalesPage() {
-  const { account } = useAuth();
-  const accountId = account?.id || 'acc-1';
-  const accountContacts = mockContacts.filter((c) => c.account_id === accountId);
+  const { 
+    sales, 
+    getContactById, 
+    markAsPaid, 
+    refundSale,
+    kpis,
+  } = useFinance();
 
-  const [sales, setSales] = useState<Sale[]>(
-    mockSales.filter((s) => s.account_id === accountId)
-  );
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<SaleStatus | 'all'>('all');
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [refundDialog, setRefundDialog] = useState<{ open: boolean; sale: Sale | null }>({
+  const [refundDialog, setRefundDialog] = useState<{ open: boolean; saleId: string | null; valor: number }>({
     open: false,
-    sale: null,
-  });
-
-  const [formData, setFormData] = useState({
-    contact_id: '',
-    valor: '',
-    metodo_pagamento: 'pix' as Sale['metodo_pagamento'],
+    saleId: null,
+    valor: 0,
   });
 
   const filteredSales = sales.filter((sale) => {
-    const contact = accountContacts.find((c) => c.id === sale.contact_id);
+    const contact = getContactById(sale.contact_id);
     const matchesSearch = contact?.nome?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || sale.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
-  // KPIs
-  const totalRevenue = sales.filter((s) => s.status === 'paid').reduce((sum, s) => sum + s.valor, 0);
-  const pendingSales = sales.filter((s) => s.status === 'pending').length;
-  const paidSales = sales.filter((s) => s.status === 'paid').length;
-  const avgTicket = paidSales > 0 ? totalRevenue / paidSales : 0;
+  // KPIs from context
+  const totalRevenue = kpis.faturamentoBruto;
+  const pendingSalesCount = kpis.vendasPendentes.count;
+  const paidSalesCount = kpis.vendasPagas.count;
+  const avgTicket = kpis.ticketMedio;
 
   const getContactName = (contactId: string) => {
-    const contact = accountContacts.find((c) => c.id === contactId);
+    const contact = getContactById(contactId);
     return contact?.nome || 'Cliente';
   };
 
@@ -107,7 +93,7 @@ export default function AdminSalesPage() {
     }
   };
 
-  const getPaymentMethodBadge = (method: Sale['metodo_pagamento']) => {
+  const getPaymentMethodBadge = (method: string | null) => {
     switch (method) {
       case 'pix':
         return <Badge variant="secondary">PIX</Badge>;
@@ -124,45 +110,15 @@ export default function AdminSalesPage() {
     }
   };
 
-  const handleCreate = () => {
-    const newSale: Sale = {
-      id: `sale-${Date.now()}`,
-      account_id: accountId,
-      contact_id: formData.contact_id,
-      product_id: 'prod-1',
-      valor: parseFloat(formData.valor),
-      status: 'pending',
-      metodo_pagamento: formData.metodo_pagamento,
-      responsavel_id: 'user-admin-1',
-      created_at: new Date().toISOString(),
-      paid_at: null,
-      refunded_at: null,
-    };
-    setSales([newSale, ...sales]);
-    setIsCreateOpen(false);
-    setFormData({ contact_id: '', valor: '', metodo_pagamento: 'pix' });
-    toast.success('Venda registrada com sucesso!');
-  };
-
   const handleMarkAsPaid = (saleId: string) => {
-    setSales(
-      sales.map((s) =>
-        s.id === saleId ? { ...s, status: 'paid' as SaleStatus, paid_at: new Date().toISOString() } : s
-      )
-    );
+    markAsPaid(saleId);
     toast.success('Pagamento confirmado!');
   };
 
   const handleRefundConfirm = (reason: string) => {
-    if (!refundDialog.sale) return;
-    setSales(
-      sales.map((s) =>
-        s.id === refundDialog.sale!.id
-          ? { ...s, status: 'refunded' as SaleStatus, refunded_at: new Date().toISOString() }
-          : s
-      )
-    );
-    setRefundDialog({ open: false, sale: null });
+    if (!refundDialog.saleId) return;
+    refundSale(refundDialog.saleId, reason);
+    setRefundDialog({ open: false, saleId: null, valor: 0 });
   };
 
   return (
@@ -173,83 +129,14 @@ export default function AdminSalesPage() {
           <h1 className="text-3xl font-bold">Vendas</h1>
           <p className="text-muted-foreground">Gerencie vendas e pagamentos</p>
         </div>
-        <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-          <DialogTrigger asChild>
+        <CreateSaleDialog
+          trigger={
             <Button className="bg-gradient-primary hover:opacity-90 gap-2">
               <Plus className="w-4 h-4" />
               Nova Venda
             </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Registrar Venda</DialogTitle>
-              <DialogDescription>Adicione uma nova venda ao sistema</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="contact">Cliente</Label>
-                <Select
-                  value={formData.contact_id}
-                  onValueChange={(v) => setFormData({ ...formData, contact_id: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione o cliente" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {accountContacts.map((contact) => (
-                      <SelectItem key={contact.id} value={contact.id}>
-                        {contact.nome || 'Sem nome'}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="valor">Valor (R$)</Label>
-                  <Input
-                    id="valor"
-                    type="number"
-                    step="0.01"
-                    value={formData.valor}
-                    onChange={(e) => setFormData({ ...formData, valor: e.target.value })}
-                    placeholder="0,00"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="metodo">Método</Label>
-                  <Select
-                    value={formData.metodo_pagamento || 'pix'}
-                    onValueChange={(v) =>
-                      setFormData({ ...formData, metodo_pagamento: v as Sale['metodo_pagamento'] })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="pix">PIX</SelectItem>
-                      <SelectItem value="cartao">Cartão</SelectItem>
-                      <SelectItem value="boleto">Boleto</SelectItem>
-                      <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
-                Cancelar
-              </Button>
-              <Button
-                onClick={handleCreate}
-                disabled={!formData.contact_id || !formData.valor}
-              >
-                Registrar
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+          }
+        />
       </div>
 
       {/* KPI Cards */}
@@ -289,7 +176,7 @@ export default function AdminSalesPage() {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Vendas Pagas</p>
-                <p className="text-2xl font-bold">{paidSales}</p>
+                <p className="text-2xl font-bold">{paidSalesCount}</p>
               </div>
               <div className="p-2 rounded-lg bg-success/10">
                 <CheckCircle className="w-5 h-5 text-success" />
@@ -302,7 +189,7 @@ export default function AdminSalesPage() {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Pendentes</p>
-                <p className="text-2xl font-bold text-warning">{pendingSales}</p>
+                <p className="text-2xl font-bold text-warning">{pendingSalesCount}</p>
               </div>
               <div className="p-2 rounded-lg bg-warning/10">
                 <Clock className="w-5 h-5 text-warning" />
@@ -355,47 +242,60 @@ export default function AdminSalesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredSales.map((sale) => (
-                <TableRow key={sale.id}>
-                  <TableCell className="font-medium">{getContactName(sale.contact_id)}</TableCell>
-                  <TableCell className="font-bold">
-                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(sale.valor)}
-                  </TableCell>
-                  <TableCell>{getPaymentMethodBadge(sale.metodo_pagamento)}</TableCell>
-                  <TableCell>{getStatusBadge(sale.status)}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {format(new Date(sale.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        {sale.status === 'pending' && (
-                          <DropdownMenuItem onClick={() => handleMarkAsPaid(sale.id)}>
-                            <CheckCircle className="w-4 h-4 mr-2 text-success" />
-                            Confirmar Pagamento
-                          </DropdownMenuItem>
-                        )}
-                        {sale.status === 'paid' && (
-                          <DropdownMenuItem
-                            className="text-destructive"
-                            onClick={() => setRefundDialog({ open: true, sale })}
-                          >
-                            <RotateCcw className="w-4 h-4 mr-2" />
-                            Estornar
-                          </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+              {filteredSales.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                    Nenhuma venda encontrada
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : (
+                filteredSales.map((sale) => (
+                  <TableRow key={sale.id}>
+                    <TableCell className="font-medium">{getContactName(sale.contact_id)}</TableCell>
+                    <TableCell className="font-bold">
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(sale.valor)}
+                    </TableCell>
+                    <TableCell>{getPaymentMethodBadge(sale.metodo_pagamento)}</TableCell>
+                    <TableCell>{getStatusBadge(sale.status)}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {format(new Date(sale.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreHorizontal className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuLabel>Ações</DropdownMenuLabel>
+                          <DropdownMenuSeparator />
+                          {sale.status === 'pending' && (
+                            <DropdownMenuItem onClick={() => handleMarkAsPaid(sale.id)}>
+                              <CheckCircle className="w-4 h-4 mr-2 text-success" />
+                              Confirmar Pagamento
+                            </DropdownMenuItem>
+                          )}
+                          {sale.status === 'paid' && (
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onClick={() => setRefundDialog({ open: true, saleId: sale.id, valor: sale.valor })}
+                            >
+                              <RotateCcw className="w-4 h-4 mr-2" />
+                              Estornar
+                            </DropdownMenuItem>
+                          )}
+                          {sale.status === 'refunded' && (
+                            <DropdownMenuItem disabled>
+                              Nenhuma ação disponível
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>
@@ -406,10 +306,10 @@ export default function AdminSalesPage() {
         open={refundDialog.open}
         onOpenChange={(open) => {
           if (!open) {
-            setRefundDialog({ open: false, sale: null });
+            setRefundDialog({ open: false, saleId: null, valor: 0 });
           }
         }}
-        saleValue={refundDialog.sale?.valor || 0}
+        saleValue={refundDialog.valor}
         onConfirm={handleRefundConfirm}
       />
     </div>

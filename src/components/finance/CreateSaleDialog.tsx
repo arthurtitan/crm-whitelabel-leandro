@@ -23,7 +23,6 @@ import { useFinance } from '@/contexts/FinanceContext';
 import { PaymentMethod } from '@/types/crm';
 import { Plus, AlertCircle, CheckCircle, UserPlus, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
-import { mockProducts } from '@/data/mockData';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface NewContactForm {
@@ -40,8 +39,8 @@ interface CreateSaleDialogProps {
 }
 
 export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: CreateSaleDialogProps) {
-  const { contacts, createSale, canCreateSale, getContactFunnelStage, createContact } = useFinance();
-  const { user, account } = useAuth();
+  const { contacts, products, createSale, canCreateSale, getContactFunnelStage, createContact, getContactById } = useFinance();
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [isCreatingNewContact, setIsCreatingNewContact] = useState(false);
   
@@ -62,15 +61,9 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
   
   const [validation, setValidation] = useState<{ allowed: boolean; reason?: string } | null>(null);
 
-  const accountId = account?.id || 'acc-1';
-  const accountProducts = useMemo(
-    () => mockProducts.filter((p) => p.account_id === accountId && p.ativo),
-    [accountId]
-  );
-
   const selectedProduct = useMemo(
-    () => accountProducts.find((p) => p.id === formData.productId),
-    [accountProducts, formData.productId]
+    () => products.find((p) => p.id === formData.productId),
+    [products, formData.productId]
   );
 
   const availablePaymentMethods = useMemo(() => {
@@ -98,7 +91,8 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
     if (value === 'new') {
       setIsCreatingNewContact(true);
       setFormData((prev) => ({ ...prev, contactId: '' }));
-      setValidation(null);
+      // New contacts are auto-added to "Qualificado" stage, so they're eligible
+      setValidation({ allowed: true });
     } else {
       setIsCreatingNewContact(false);
       setFormData((prev) => ({ ...prev, contactId: value }));
@@ -108,7 +102,7 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
   };
 
   const handleProductChange = (productId: string) => {
-    const product = accountProducts.find((p) => p.id === productId);
+    const product = products.find((p) => p.id === productId);
     setFormData((prev) => ({
       ...prev,
       productId,
@@ -155,9 +149,9 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
     // Create new contact if needed
     if (isCreatingNewContact) {
       const newContactResult = createContact({
-        nome: newContact.nome,
-        telefone: newContact.telefone,
-        email: newContact.email || null,
+        nome: newContact.nome.trim(),
+        telefone: newContact.telefone.trim(),
+        email: newContact.email.trim() || null,
         origem: newContact.origem || 'manual',
       });
       
@@ -168,6 +162,7 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
       contactId = newContactResult.contactId;
     }
 
+    // Create sale - for new contacts, skip validation since they're auto-added to Qualificado
     const result = createSale({
       contactId,
       productId: formData.productId,
@@ -178,7 +173,8 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
     });
 
     if (result.success) {
-      toast.success('Venda registrada com sucesso!');
+      const contactName = isCreatingNewContact ? newContact.nome : getContactById(contactId)?.nome || 'Cliente';
+      toast.success(`Venda registrada para ${contactName}!`);
       handleClose();
     } else {
       toast.error(result.error || 'Erro ao criar venda');
@@ -215,6 +211,28 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
   const preSelectedContact = preSelectedContactId
     ? contacts.find((c) => c.id === preSelectedContactId)
     : null;
+
+  // Determine if form is valid
+  const isFormValid = useMemo(() => {
+    // Check contact
+    if (isCreatingNewContact) {
+      if (!newContact.nome.trim() || !newContact.telefone.trim()) return false;
+    } else if (!preSelectedContactId && !formData.contactId) {
+      return false;
+    } else if (!preSelectedContactId && !isCreatingNewContact && !validation?.allowed) {
+      return false;
+    } else if (preSelectedContactId && !validation?.allowed) {
+      return false;
+    }
+
+    // Check product and value
+    if (!formData.productId || !formData.valor || !formData.metodoPagamento) return false;
+
+    // Check convenio name if needed
+    if (formData.metodoPagamento === 'convenio' && !formData.convenioNome.trim()) return false;
+
+    return true;
+  }, [isCreatingNewContact, newContact, preSelectedContactId, formData, validation]);
 
   return (
     <Dialog
@@ -291,7 +309,7 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
             )}
 
             {/* Validation feedback for existing contact */}
-            {!isCreatingNewContact && validation && (
+            {!isCreatingNewContact && !preSelectedContactId && validation && formData.contactId && (
               <Alert
                 variant={validation.allowed ? 'default' : 'destructive'}
                 className="mt-2"
@@ -374,12 +392,12 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
                 <SelectValue placeholder="Selecione o produto" />
               </SelectTrigger>
               <SelectContent>
-                {accountProducts.length === 0 ? (
+                {products.length === 0 ? (
                   <SelectItem value="none" disabled>
                     Nenhum produto cadastrado
                   </SelectItem>
                 ) : (
-                  accountProducts.map((product) => (
+                  products.map((product) => (
                     <SelectItem key={product.id} value={product.id}>
                       <div className="flex items-center justify-between gap-4 w-full">
                         <span>{product.nome}</span>
@@ -485,16 +503,7 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
           <Button variant="outline" onClick={handleClose}>
             Cancelar
           </Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={
-              (!isCreatingNewContact && !preSelectedContactId && !validation?.allowed) ||
-              (preSelectedContactId && !validation?.allowed) ||
-              !formData.productId ||
-              !formData.valor ||
-              !formData.metodoPagamento
-            }
-          >
+          <Button onClick={handleSubmit} disabled={!isFormValid}>
             Registrar Venda
           </Button>
         </DialogFooter>
