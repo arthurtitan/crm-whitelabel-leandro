@@ -26,7 +26,7 @@ import {
 import {
   ArrowLeft,
   Building2,
-  Edit,
+  Settings,
   Trash2,
   Users,
   Calendar,
@@ -36,6 +36,8 @@ import {
   Globe,
   UserCircle,
   Languages,
+  Play,
+  Pause,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -57,7 +59,7 @@ export default function SuperAdminAccountDetailPage() {
   const [account, setAccount] = useState<Account | null>(
     mockAccounts.find((a) => a.id === accountId) || null
   );
-  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isControlOpen, setIsControlOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
   const [editFormData, setEditFormData] = useState<EditFormData>({
@@ -93,7 +95,7 @@ export default function SuperAdminAccountDetailPage() {
   const accountSales = mockSales.filter((s) => s.account_id === account.id);
   const totalRevenue = accountSales.filter((s) => s.status === 'paid').reduce((sum, s) => sum + s.valor, 0);
 
-  const handleEdit = () => {
+  const handleOpenControl = () => {
     setEditFormData({
       nome: account.nome,
       idioma: (account as any).idioma || 'pt',
@@ -102,7 +104,17 @@ export default function SuperAdminAccountDetailPage() {
       chatwootAccountId: account.chatwoot_account_id || '',
       chatwootApiKey: account.chatwoot_api_key || '',
     });
-    setIsEditOpen(true);
+    setIsControlOpen(true);
+  };
+
+  const handleToggleStatus = () => {
+    const newStatus = account.status === 'active' ? 'paused' : 'active';
+    setAccount({
+      ...account,
+      status: newStatus,
+      updated_at: new Date().toISOString(),
+    });
+    toast.success(`Status alterado para ${newStatus === 'active' ? 'Ativa' : 'Pausada'}!`);
   };
 
   const handleUpdate = () => {
@@ -114,7 +126,7 @@ export default function SuperAdminAccountDetailPage() {
       chatwoot_api_key: editFormData.chatwootEnabled ? editFormData.chatwootApiKey : undefined,
       updated_at: new Date().toISOString(),
     });
-    setIsEditOpen(false);
+    setIsControlOpen(false);
     toast.success('Conta atualizada com sucesso!');
   };
 
@@ -168,9 +180,25 @@ export default function SuperAdminAccountDetailPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleEdit}>
-            <Edit className="w-4 h-4 mr-2" />
-            Editar
+          <Button 
+            variant={account.status === 'active' ? 'outline' : 'default'}
+            onClick={handleToggleStatus}
+          >
+            {account.status === 'active' ? (
+              <>
+                <Pause className="w-4 h-4 mr-2" />
+                Pausar Conta
+              </>
+            ) : (
+              <>
+                <Play className="w-4 h-4 mr-2" />
+                Ativar Conta
+              </>
+            )}
+          </Button>
+          <Button variant="outline" onClick={handleOpenControl}>
+            <Settings className="w-4 h-4 mr-2" />
+            Controle de Conta
           </Button>
           <Button variant="destructive" onClick={() => setIsDeleteOpen(true)}>
             <Trash2 className="w-4 h-4 mr-2" />
@@ -382,11 +410,11 @@ export default function SuperAdminAccountDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Edit Dialog */}
-      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+      {/* Control Dialog */}
+      <Dialog open={isControlOpen} onOpenChange={setIsControlOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Editar Conta</DialogTitle>
+            <DialogTitle>Controle de Conta</DialogTitle>
             <DialogDescription>Atualize os dados da conta</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
@@ -469,7 +497,7 @@ export default function SuperAdminAccountDetailPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditOpen(false)}>
+            <Button variant="outline" onClick={() => setIsControlOpen(false)}>
               Cancelar
             </Button>
             <Button onClick={handleUpdate}>Salvar Alterações</Button>
