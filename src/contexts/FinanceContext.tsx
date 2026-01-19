@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useMemo, ReactNode, useCallback } from 'react';
-import { Sale, Contact, LeadFunnelState, SaleStatus, PaymentMethod, Product, ContactOrigin } from '@/types/crm';
+import { Sale, Contact, LeadFunnelState, SaleStatus, PaymentMethod, Product, ContactOrigin, LeadNote } from '@/types/crm';
 import { 
   mockSales, 
   mockContacts, 
@@ -24,6 +24,13 @@ interface CreateContactData {
   origem: string;
 }
 
+interface UpdateContactData {
+  nome?: string;
+  telefone?: string;
+  email?: string | null;
+  origem?: ContactOrigin;
+}
+
 interface CreateSaleData {
   contactId: string;
   productId: string;
@@ -39,6 +46,7 @@ interface FinanceContextType {
   contacts: Contact[];
   products: Product[];
   leadFunnelStates: LeadFunnelState[];
+  leadNotes: LeadNote[];
   events: FinanceEvent[];
   
   // Derived KPIs
@@ -47,16 +55,24 @@ interface FinanceContextType {
   // Actions
   createSale: (data: CreateSaleData) => { success: boolean; error?: string };
   createContact: (data: CreateContactData) => { success: boolean; error?: string; contactId?: string };
+  updateContact: (contactId: string, data: UpdateContactData) => { success: boolean; error?: string };
+  deleteContact: (contactId: string) => { success: boolean; error?: string };
   updateLeadStage: (contactId: string, stageId: string) => void;
+  addLeadNote: (contactId: string, content: string, authorId: string, authorName: string) => void;
   markAsPaid: (saleId: string) => void;
   cancelSale: (saleId: string) => void;
   refundSale: (saleId: string, reason: string) => void;
+  updateSale: (saleId: string, data: Partial<Sale>) => { success: boolean; error?: string };
   
   // Helpers
   getContactById: (id: string) => Contact | undefined;
+  getContactSales: (contactId: string) => Sale[];
+  getContactNotes: (contactId: string) => LeadNote[];
   getContactFunnelStage: (contactId: string) => string | null;
   getContactFunnelStageOrder: (contactId: string) => number;
+  getProductById: (id: string) => Product | undefined;
   canCreateSale: (contactId: string) => { allowed: boolean; reason?: string };
+  checkIsRecurringSale: (contactId: string, productId: string) => boolean;
 }
 
 interface FinanceKPIs {
@@ -103,6 +119,8 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
       mockContacts.filter((c) => c.account_id === accountId).some((c) => c.id === lfs.contact_id)
     )
   );
+
+  const [leadNotes, setLeadNotes] = useState<LeadNote[]>([]);
   
   const [events, setEvents] = useState<FinanceEvent[]>([]);
   
@@ -115,6 +133,23 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
   const getContactById = useCallback(
     (id: string) => contacts.find((c) => c.id === id),
     [contacts]
+  );
+
+  const getProductById = useCallback(
+    (id: string) => products.find((p) => p.id === id),
+    [products]
+  );
+
+  const getContactSales = useCallback(
+    (contactId: string) => sales.filter((s) => s.contact_id === contactId),
+    [sales]
+  );
+
+  const getContactNotes = useCallback(
+    (contactId: string) => leadNotes.filter((n) => n.contact_id === contactId).sort((a, b) => 
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    ),
+    [leadNotes]
   );
 
   const getContactFunnelStage = useCallback(
@@ -135,6 +170,17 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
       return stage?.ordem || 0;
     },
     [leadFunnelStates]
+  );
+
+  // Check if sale is recurring (same product purchased before)
+  const checkIsRecurringSale = useCallback(
+    (contactId: string, productId: string): boolean => {
+      const previousSales = sales.filter(
+        (s) => s.contact_id === contactId && s.product_id === productId
+      );
+      return previousSales.length > 0;
+    },
+    [sales]
   );
 
   // Update lead stage (for Kanban sync)
@@ -158,6 +204,22 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
           },
         ];
       });
+    },
+    []
+  );
+
+  // Add lead note
+  const addLeadNote = useCallback(
+    (contactId: string, content: string, authorId: string, authorName: string) => {
+      const newNote: LeadNote = {
+        id: `note-${Date.now()}`,
+        contact_id: contactId,
+        author_id: authorId,
+        author_name: authorName,
+        content,
+        created_at: new Date().toISOString(),
+      };
+      setLeadNotes((prev) => [newNote, ...prev]);
     },
     []
   );
@@ -222,6 +284,54 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
     [accountId]
   );
 
+  // Update contact
+  const updateContact = useCallback(
+    (contactId: string, data: UpdateContactData): { success: boolean; error?: string } => {
+      const contact = contacts.find((c) => c.id === contactId);
+      if (!contact) {
+        return { success: false, error: 'Contato não encontrado' };
+      }
+
+      setContacts((prev) =>
+        prev.map((c) =>
+          c.id === contactId
+            ? {
+                ...c,
+                ...data,
+                updated_at: new Date().toISOString(),
+              }
+            : c
+        )
+      );
+
+      return { success: true };
+    },
+    [contacts]
+  );
+
+  // Delete contact
+  const deleteContact = useCallback(
+    (contactId: string): { success: boolean; error?: string } => {
+      const contact = contacts.find((c) => c.id === contactId);
+      if (!contact) {
+        return { success: false, error: 'Contato não encontrado' };
+      }
+
+      // Check if contact has sales
+      const contactSales = sales.filter((s) => s.contact_id === contactId);
+      if (contactSales.length > 0) {
+        return { success: false, error: 'Não é possível remover lead com vendas registradas' };
+      }
+
+      setContacts((prev) => prev.filter((c) => c.id !== contactId));
+      setLeadFunnelStates((prev) => prev.filter((lfs) => lfs.contact_id !== contactId));
+      setLeadNotes((prev) => prev.filter((n) => n.contact_id !== contactId));
+
+      return { success: true };
+    },
+    [contacts, sales]
+  );
+
   // Create event helper
   const createEvent = useCallback((type: FinanceEvent['type'], saleId: string, payload: Record<string, unknown>) => {
     const event: FinanceEvent = {
@@ -243,6 +353,9 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
         return { success: false, error: validation.reason };
       }
 
+      // Check if this is a recurring sale
+      const isRecurring = checkIsRecurringSale(data.contactId, data.productId);
+
       const newSale: Sale = {
         id: `sale-${Date.now()}`,
         account_id: accountId,
@@ -253,6 +366,7 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
         metodo_pagamento: data.metodoPagamento,
         convenio_nome: data.convenioNome,
         responsavel_id: data.responsavelId,
+        is_recurring: isRecurring,
         created_at: new Date().toISOString(),
         paid_at: null,
         refunded_at: null,
@@ -261,12 +375,13 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
       setSales((prev) => [newSale, ...prev]);
       createEvent('sale.created', newSale.id, { 
         contactId: data.contactId, 
-        valor: data.valor 
+        valor: data.valor,
+        isRecurring,
       });
 
       return { success: true };
     },
-    [accountId, canCreateSale, createEvent]
+    [accountId, canCreateSale, checkIsRecurringSale, createEvent]
   );
 
   const markAsPaid = useCallback(
@@ -309,6 +424,26 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
       createEvent('sale.refunded', saleId, { reason, refunded_at: new Date().toISOString() });
     },
     [createEvent]
+  );
+
+  const updateSale = useCallback(
+    (saleId: string, data: Partial<Sale>): { success: boolean; error?: string } => {
+      const sale = sales.find((s) => s.id === saleId);
+      if (!sale) {
+        return { success: false, error: 'Venda não encontrada' };
+      }
+
+      setSales((prev) =>
+        prev.map((s) =>
+          s.id === saleId
+            ? { ...s, ...data }
+            : s
+        )
+      );
+
+      return { success: true };
+    },
+    [sales]
   );
 
   // Derived KPIs - computed from state
@@ -393,18 +528,27 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
     contacts,
     products,
     leadFunnelStates,
+    leadNotes,
     events,
     kpis,
     createSale,
     createContact,
+    updateContact,
+    deleteContact,
     updateLeadStage,
+    addLeadNote,
     markAsPaid,
     cancelSale,
     refundSale,
+    updateSale,
     getContactById,
+    getContactSales,
+    getContactNotes,
     getContactFunnelStage,
     getContactFunnelStageOrder,
+    getProductById,
     canCreateSale,
+    checkIsRecurringSale,
   };
 
   return (

@@ -2,8 +2,9 @@ import { useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFinance } from '@/contexts/FinanceContext';
 import { CreateSaleDialog } from '@/components/finance/CreateSaleDialog';
+import { LeadProfileSheet } from '@/components/leads/LeadProfileSheet';
 import { mockFunnelStages } from '@/data/mockData';
-import { Contact } from '@/types/crm';
+import { Contact, ContactOrigin } from '@/types/crm';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -52,14 +53,24 @@ import {
   Mail,
   MessageSquare,
   DollarSign,
+  Eye,
+  ExternalLink,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 
 export default function AdminLeadsPage() {
-  const { account } = useAuth();
-  const { contacts, leadFunnelStates, createContact, getContactFunnelStageOrder } = useFinance();
+  const { account, user } = useAuth();
+  const { 
+    contacts, 
+    leadFunnelStates, 
+    createContact, 
+    updateContact,
+    deleteContact,
+    getContactFunnelStageOrder,
+    getContactSales,
+  } = useFinance();
   const accountId = account?.id || 'acc-1';
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -67,12 +78,13 @@ export default function AdminLeadsPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [saleContactId, setSaleContactId] = useState<string | null>(null);
+  const [profileContact, setProfileContact] = useState<Contact | null>(null);
 
   const [formData, setFormData] = useState({
     nome: '',
     telefone: '',
     email: '',
-    origem: 'manual' as Contact['origem'],
+    origem: 'manual' as ContactOrigin,
   });
 
   const filteredContacts = useMemo(() => {
@@ -121,17 +133,30 @@ export default function AdminLeadsPage() {
     return stageOrder >= 3;
   };
 
+  const resetForm = () => {
+    setFormData({ nome: '', telefone: '', email: '', origem: 'manual' });
+  };
+
   const handleCreate = () => {
+    if (!formData.nome.trim()) {
+      toast.error('Nome é obrigatório');
+      return;
+    }
+    if (!formData.telefone.trim()) {
+      toast.error('Telefone é obrigatório');
+      return;
+    }
+
     const result = createContact({
-      nome: formData.nome,
-      telefone: formData.telefone,
-      email: formData.email || null,
+      nome: formData.nome.trim(),
+      telefone: formData.telefone.trim(),
+      email: formData.email.trim() || null,
       origem: formData.origem || 'manual',
     });
 
     if (result.success) {
       setIsCreateOpen(false);
-      setFormData({ nome: '', telefone: '', email: '', origem: 'manual' });
+      resetForm();
       toast.success('Lead cadastrado com sucesso!');
     } else {
       toast.error(result.error || 'Erro ao cadastrar lead');
@@ -140,14 +165,41 @@ export default function AdminLeadsPage() {
 
   const handleUpdate = () => {
     if (!editingContact) return;
-    // Note: For now, just close the dialog. Full update would require context function.
-    setEditingContact(null);
-    toast.success('Lead atualizado com sucesso!');
+
+    const result = updateContact(editingContact.id, {
+      nome: editingContact.nome || undefined,
+      telefone: editingContact.telefone || undefined,
+      email: editingContact.email,
+      origem: editingContact.origem || undefined,
+    });
+
+    if (result.success) {
+      setEditingContact(null);
+      toast.success('Lead atualizado com sucesso!');
+    } else {
+      toast.error(result.error || 'Erro ao atualizar lead');
+    }
   };
 
   const handleDelete = (contactId: string) => {
-    // Note: For now, just show toast. Full delete would require context function.
-    toast.success('Lead removido com sucesso!');
+    const contactSales = getContactSales(contactId);
+    if (contactSales.length > 0) {
+      toast.error('Não é possível remover lead com vendas registradas');
+      return;
+    }
+
+    const result = deleteContact(contactId);
+    if (result.success) {
+      toast.success('Lead removido com sucesso!');
+    } else {
+      toast.error(result.error || 'Erro ao remover lead');
+    }
+  };
+
+  const handleOpenChatwoot = (contact: Contact) => {
+    // This will open Chatwoot in a new tab when API is integrated
+    toast.info('Abrirá conversa no Chatwoot (integração pendente)');
+    // window.open(`https://chatwoot.example.com/contacts/${contact.id}`, '_blank');
   };
 
   return (
@@ -172,7 +224,7 @@ export default function AdminLeadsPage() {
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="nome">Nome</Label>
+                <Label htmlFor="nome">Nome *</Label>
                 <Input
                   id="nome"
                   value={formData.nome}
@@ -182,7 +234,7 @@ export default function AdminLeadsPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="telefone">Telefone</Label>
+                  <Label htmlFor="telefone">Telefone *</Label>
                   <Input
                     id="telefone"
                     value={formData.telefone}
@@ -205,7 +257,7 @@ export default function AdminLeadsPage() {
                 <Label htmlFor="origem">Origem</Label>
                 <Select
                   value={formData.origem || 'manual'}
-                  onValueChange={(v) => setFormData({ ...formData, origem: v as Contact['origem'] })}
+                  onValueChange={(v) => setFormData({ ...formData, origem: v as ContactOrigin })}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -220,10 +272,10 @@ export default function AdminLeadsPage() {
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
+              <Button variant="outline" onClick={() => { setIsCreateOpen(false); resetForm(); }}>
                 Cancelar
               </Button>
-              <Button onClick={handleCreate} disabled={!formData.nome}>
+              <Button onClick={handleCreate} disabled={!formData.nome || !formData.telefone}>
                 Cadastrar
               </Button>
             </DialogFooter>
@@ -335,9 +387,13 @@ export default function AdminLeadsPage() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Ações</DropdownMenuLabel>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem>
-                            <MessageSquare className="w-4 h-4 mr-2" />
-                            Abrir Conversa
+                          <DropdownMenuItem onClick={() => setProfileContact(contact)}>
+                            <Eye className="w-4 h-4 mr-2" />
+                            Ver Prontuário
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleOpenChatwoot(contact)}>
+                            <ExternalLink className="w-4 h-4 mr-2" />
+                            Abrir Chatwoot
                           </DropdownMenuItem>
                           {canSell && (
                             <DropdownMenuItem onClick={() => setSaleContactId(contact.id)}>
@@ -410,6 +466,25 @@ export default function AdminLeadsPage() {
                   />
                 </div>
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-origem">Origem</Label>
+                <Select
+                  value={editingContact.origem || 'manual'}
+                  onValueChange={(v) =>
+                    setEditingContact({ ...editingContact, origem: v as ContactOrigin })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="manual">Manual</SelectItem>
+                    <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                    <SelectItem value="instagram">Instagram</SelectItem>
+                    <SelectItem value="site">Site</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           )}
           <DialogFooter>
@@ -420,6 +495,13 @@ export default function AdminLeadsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Lead Profile Sheet */}
+      <LeadProfileSheet
+        contact={profileContact}
+        open={!!profileContact}
+        onOpenChange={(open) => !open && setProfileContact(null)}
+      />
 
       {/* Sale Dialog (controlled externally) */}
       {saleContactId && (
