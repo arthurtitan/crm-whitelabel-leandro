@@ -13,6 +13,9 @@ import {
   SuperAdminKPIs,
   AdminKPIs,
   AgentKPIs,
+  Tag,
+  LeadTag,
+  TagHistory,
 } from '@/types/crm';
 
 // ============= ACCOUNTS =============
@@ -257,7 +260,75 @@ export const mockEvents: CRMEvent[] = [
   { id: 'evt-10', account_id: 'acc-1', event_type: 'message.sent', actor_type: 'agent_bot', actor_id: 'bot-1', entity_type: 'conversation', entity_id: 'conv-6', channel: 'instagram', payload: { text: 'Olá! Sou a Marília, como posso ajudar?' }, created_at: '2025-01-18T15:01:00Z' },
 ];
 
-// ============= SERVER CONSUMPTION MOCK DATA =============
+// ============= TAGS =============
+
+// Tags de Etapa (vinculadas às stages do funil)
+export const mockTags: Tag[] = [
+  // Tags de Etapa - Account 1 (vinculadas ao Funnel 1)
+  { id: 'tag-stage-1', account_id: 'acc-1', name: 'Novo', slug: 'novo', type: 'stage', color: '#0EA5E9', linked_stage_id: 'stage-1', ativo: true, created_at: '2024-06-15T10:00:00Z' },
+  { id: 'tag-stage-2', account_id: 'acc-1', name: 'Contato', slug: 'contato', type: 'stage', color: '#8B5CF6', linked_stage_id: 'stage-2', ativo: true, created_at: '2024-06-15T10:00:00Z' },
+  { id: 'tag-stage-3', account_id: 'acc-1', name: 'Interessado', slug: 'interessado', type: 'stage', color: '#F59E0B', linked_stage_id: 'stage-3', ativo: true, created_at: '2024-06-15T10:00:00Z' },
+  { id: 'tag-stage-4', account_id: 'acc-1', name: 'Qualificado', slug: 'qualificado', type: 'stage', color: '#22C55E', linked_stage_id: 'stage-4', ativo: true, created_at: '2024-06-15T10:00:00Z' },
+  { id: 'tag-stage-5', account_id: 'acc-1', name: 'Convertido', slug: 'convertido', type: 'stage', color: '#A855F7', linked_stage_id: 'stage-5', ativo: true, created_at: '2024-06-15T10:00:00Z' },
+  
+  // Tags Operacionais - Account 1
+  { id: 'tag-op-1', account_id: 'acc-1', name: 'Urgente', slug: 'urgente', type: 'operational', color: '#EF4444', linked_stage_id: null, ativo: true, created_at: '2024-07-01T10:00:00Z' },
+  { id: 'tag-op-2', account_id: 'acc-1', name: 'Sem Resposta', slug: 'sem-resposta', type: 'operational', color: '#F97316', linked_stage_id: null, ativo: true, created_at: '2024-07-01T10:00:00Z' },
+  { id: 'tag-op-3', account_id: 'acc-1', name: 'Retorno Agendado', slug: 'retorno-agendado', type: 'operational', color: '#06B6D4', linked_stage_id: null, ativo: true, created_at: '2024-07-01T10:00:00Z' },
+  { id: 'tag-op-4', account_id: 'acc-1', name: 'Lead Frio', slug: 'lead-frio', type: 'operational', color: '#64748B', linked_stage_id: null, ativo: true, created_at: '2024-07-01T10:00:00Z' },
+  { id: 'tag-op-5', account_id: 'acc-1', name: 'Lead Quente', slug: 'lead-quente', type: 'operational', color: '#DC2626', linked_stage_id: null, ativo: true, created_at: '2024-07-01T10:00:00Z' },
+  { id: 'tag-op-6', account_id: 'acc-1', name: 'Já é Cliente', slug: 'ja-e-cliente', type: 'operational', color: '#16A34A', linked_stage_id: null, ativo: true, created_at: '2024-07-01T10:00:00Z' },
+  
+  // Tags de Etapa - Account 2
+  { id: 'tag-stage-6', account_id: 'acc-2', name: 'Lead', slug: 'lead', type: 'stage', color: '#0EA5E9', linked_stage_id: 'stage-6', ativo: true, created_at: '2024-08-20T14:00:00Z' },
+  { id: 'tag-stage-7', account_id: 'acc-2', name: 'Proposta', slug: 'proposta', type: 'stage', color: '#F59E0B', linked_stage_id: 'stage-7', ativo: true, created_at: '2024-08-20T14:00:00Z' },
+  { id: 'tag-stage-8', account_id: 'acc-2', name: 'Negociação', slug: 'negociacao', type: 'stage', color: '#8B5CF6', linked_stage_id: 'stage-8', ativo: true, created_at: '2024-08-20T14:00:00Z' },
+  { id: 'tag-stage-9', account_id: 'acc-2', name: 'Fechado', slug: 'fechado', type: 'stage', color: '#22C55E', linked_stage_id: 'stage-9', ativo: true, created_at: '2024-08-20T14:00:00Z' },
+];
+
+// Tags aplicadas aos leads
+export const mockLeadTags: LeadTag[] = [
+  // Contact 1 - Qualificado + Urgente
+  { id: 'lt-1', contact_id: 'contact-1', tag_id: 'tag-stage-4', applied_by_type: 'user', applied_by_id: 'user-agent-1', source: 'kanban', created_at: '2025-01-19T08:00:00Z' },
+  { id: 'lt-2', contact_id: 'contact-1', tag_id: 'tag-op-1', applied_by_type: 'user', applied_by_id: 'user-agent-1', source: 'chatwoot', created_at: '2025-01-19T08:30:00Z' },
+  
+  // Contact 2 - Interessado + Retorno Agendado
+  { id: 'lt-3', contact_id: 'contact-2', tag_id: 'tag-stage-3', applied_by_type: 'system', applied_by_id: null, source: 'kanban', created_at: '2025-01-18T16:00:00Z' },
+  { id: 'lt-4', contact_id: 'contact-2', tag_id: 'tag-op-3', applied_by_type: 'user', applied_by_id: 'user-agent-2', source: 'chatwoot', created_at: '2025-01-18T17:00:00Z' },
+  
+  // Contact 3 - Contato
+  { id: 'lt-5', contact_id: 'contact-3', tag_id: 'tag-stage-2', applied_by_type: 'system', applied_by_id: null, source: 'kanban', created_at: '2025-01-19T07:30:00Z' },
+  
+  // Contact 4 - Novo + Sem Resposta
+  { id: 'lt-6', contact_id: 'contact-4', tag_id: 'tag-stage-1', applied_by_type: 'system', applied_by_id: null, source: 'system', created_at: '2025-01-19T09:00:00Z' },
+  { id: 'lt-7', contact_id: 'contact-4', tag_id: 'tag-op-2', applied_by_type: 'agent_bot', applied_by_id: 'bot-1', source: 'chatwoot', created_at: '2025-01-19T10:00:00Z' },
+  
+  // Contact 5 - Novo
+  { id: 'lt-8', contact_id: 'contact-5', tag_id: 'tag-stage-1', applied_by_type: 'system', applied_by_id: null, source: 'kanban', created_at: '2025-01-17T08:00:00Z' },
+  
+  // Contact 6 - Convertido + Já é Cliente
+  { id: 'lt-9', contact_id: 'contact-6', tag_id: 'tag-stage-5', applied_by_type: 'user', applied_by_id: 'user-agent-1', source: 'kanban', created_at: '2025-01-19T10:00:00Z' },
+  { id: 'lt-10', contact_id: 'contact-6', tag_id: 'tag-op-6', applied_by_type: 'system', applied_by_id: null, source: 'system', created_at: '2025-01-19T10:05:00Z' },
+  
+  // Contact 7 - Contato + Lead Quente
+  { id: 'lt-11', contact_id: 'contact-7', tag_id: 'tag-stage-2', applied_by_type: 'system', applied_by_id: null, source: 'kanban', created_at: '2025-01-19T11:00:00Z' },
+  { id: 'lt-12', contact_id: 'contact-7', tag_id: 'tag-op-5', applied_by_type: 'user', applied_by_id: 'user-agent-2', source: 'chatwoot', created_at: '2025-01-19T11:30:00Z' },
+  
+  // Contact 8 - Novo
+  { id: 'lt-13', contact_id: 'contact-8', tag_id: 'tag-stage-1', applied_by_type: 'system', applied_by_id: null, source: 'system', created_at: '2025-01-19T07:00:00Z' },
+];
+
+// Histórico de tags
+export const mockTagHistory: TagHistory[] = [
+  { id: 'th-1', contact_id: 'contact-1', tag_id: 'tag-stage-1', action: 'added', actor_type: 'system', actor_id: null, source: 'system', reason: 'Lead criado', created_at: '2025-01-10T10:00:00Z' },
+  { id: 'th-2', contact_id: 'contact-1', tag_id: 'tag-stage-1', action: 'removed', actor_type: 'user', actor_id: 'user-agent-1', source: 'kanban', reason: 'Movido para Contato', created_at: '2025-01-15T10:00:00Z' },
+  { id: 'th-3', contact_id: 'contact-1', tag_id: 'tag-stage-2', action: 'added', actor_type: 'user', actor_id: 'user-agent-1', source: 'kanban', reason: 'Movido para Contato', created_at: '2025-01-15T10:00:00Z' },
+  { id: 'th-4', contact_id: 'contact-1', tag_id: 'tag-stage-2', action: 'removed', actor_type: 'user', actor_id: 'user-agent-1', source: 'kanban', reason: 'Movido para Interessado', created_at: '2025-01-17T14:00:00Z' },
+  { id: 'th-5', contact_id: 'contact-1', tag_id: 'tag-stage-3', action: 'added', actor_type: 'user', actor_id: 'user-agent-1', source: 'kanban', reason: 'Movido para Interessado', created_at: '2025-01-17T14:00:00Z' },
+  { id: 'th-6', contact_id: 'contact-1', tag_id: 'tag-stage-3', action: 'removed', actor_type: 'user', actor_id: 'user-agent-1', source: 'kanban', reason: 'Movido para Qualificado', created_at: '2025-01-19T08:00:00Z' },
+  { id: 'th-7', contact_id: 'contact-1', tag_id: 'tag-stage-4', action: 'added', actor_type: 'user', actor_id: 'user-agent-1', source: 'kanban', reason: 'Movido para Qualificado', created_at: '2025-01-19T08:00:00Z' },
+  { id: 'th-8', contact_id: 'contact-1', tag_id: 'tag-op-1', action: 'added', actor_type: 'user', actor_id: 'user-agent-1', source: 'chatwoot', reason: 'Tag aplicada no Chatwoot', created_at: '2025-01-19T08:30:00Z' },
+];
 export interface ServerConsumption {
   timestamp: string;
   cpu: number;
