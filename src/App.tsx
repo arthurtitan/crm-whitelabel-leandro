@@ -3,7 +3,8 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider } from "@/contexts/AuthContext";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { FinanceProvider } from "@/contexts/FinanceContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 
 // Pages
@@ -28,6 +29,16 @@ import AdminConversationsPage from "./pages/admin/AdminConversationsPage";
 import AdminFinancePage from "./pages/admin/AdminFinancePage";
 
 const queryClient = new QueryClient();
+
+// Wrapper component to provide FinanceContext with accountId from AuthContext
+function AdminFinanceWrapper({ children }: { children: React.ReactNode }) {
+  const { account } = useAuth();
+  return (
+    <FinanceProvider accountId={account?.id || 'acc-1'}>
+      {children}
+    </FinanceProvider>
+  );
+}
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -84,14 +95,16 @@ const App = () => (
                 }
               />
 
-              {/* Admin Routes */}
+              {/* Admin Routes - Wrapped with FinanceProvider */}
               <Route
                 path="/admin"
                 element={
                   <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
-                    <AdminLayout>
-                      <AdminDashboard />
-                    </AdminLayout>
+                    <AdminFinanceWrapper>
+                      <AdminLayout>
+                        <AdminDashboard />
+                      </AdminLayout>
+                    </AdminFinanceWrapper>
                   </ProtectedRoute>
                 }
               />
@@ -99,9 +112,11 @@ const App = () => (
                 path="/admin/kanban"
                 element={
                   <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
-                    <AdminLayout>
-                      <AdminKanbanPage />
-                    </AdminLayout>
+                    <AdminFinanceWrapper>
+                      <AdminLayout>
+                        <AdminKanbanPage />
+                      </AdminLayout>
+                    </AdminFinanceWrapper>
                   </ProtectedRoute>
                 }
               />
@@ -109,9 +124,11 @@ const App = () => (
                 path="/admin/leads"
                 element={
                   <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
-                    <AdminLayout>
-                      <AdminLeadsPage />
-                    </AdminLayout>
+                    <AdminFinanceWrapper>
+                      <AdminLayout>
+                        <AdminLeadsPage />
+                      </AdminLayout>
+                    </AdminFinanceWrapper>
                   </ProtectedRoute>
                 }
               />
@@ -119,9 +136,11 @@ const App = () => (
                 path="/admin/conversations"
                 element={
                   <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
-                    <AdminLayout>
-                      <AdminConversationsPage />
-                    </AdminLayout>
+                    <AdminFinanceWrapper>
+                      <AdminLayout>
+                        <AdminConversationsPage />
+                      </AdminLayout>
+                    </AdminFinanceWrapper>
                   </ProtectedRoute>
                 }
               />
@@ -129,9 +148,11 @@ const App = () => (
                 path="/admin/sales"
                 element={
                   <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
-                    <AdminLayout>
-                      <AdminSalesPage />
-                    </AdminLayout>
+                    <AdminFinanceWrapper>
+                      <AdminLayout>
+                        <AdminSalesPage />
+                      </AdminLayout>
+                    </AdminFinanceWrapper>
                   </ProtectedRoute>
                 }
               />
@@ -139,9 +160,11 @@ const App = () => (
                 path="/admin/events"
                 element={
                   <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
-                    <AdminLayout>
-                      <AdminEventsPage />
-                    </AdminLayout>
+                    <AdminFinanceWrapper>
+                      <AdminLayout>
+                        <AdminEventsPage />
+                      </AdminLayout>
+                    </AdminFinanceWrapper>
                   </ProtectedRoute>
                 }
               />
@@ -149,9 +172,11 @@ const App = () => (
                 path="/admin/finance"
                 element={
                   <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
-                    <AdminLayout>
-                      <AdminFinancePage />
-                    </AdminLayout>
+                    <AdminFinanceWrapper>
+                      <AdminLayout>
+                        <AdminFinancePage />
+                      </AdminLayout>
+                    </AdminFinanceWrapper>
                   </ProtectedRoute>
                 }
               />

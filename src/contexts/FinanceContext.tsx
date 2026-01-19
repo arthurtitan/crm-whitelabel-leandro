@@ -47,6 +47,7 @@ interface FinanceContextType {
   // Actions
   createSale: (data: CreateSaleData) => { success: boolean; error?: string };
   createContact: (data: CreateContactData) => { success: boolean; error?: string; contactId?: string };
+  updateLeadStage: (contactId: string, stageId: string) => void;
   markAsPaid: (saleId: string) => void;
   cancelSale: (saleId: string) => void;
   refundSale: (saleId: string, reason: string) => void;
@@ -54,6 +55,7 @@ interface FinanceContextType {
   // Helpers
   getContactById: (id: string) => Contact | undefined;
   getContactFunnelStage: (contactId: string) => string | null;
+  getContactFunnelStageOrder: (contactId: string) => number;
   canCreateSale: (contactId: string) => { allowed: boolean; reason?: string };
 }
 
@@ -123,6 +125,41 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
       return stage?.nome || null;
     },
     [leadFunnelStates]
+  );
+
+  const getContactFunnelStageOrder = useCallback(
+    (contactId: string): number => {
+      const state = leadFunnelStates.find((lfs) => lfs.contact_id === contactId);
+      if (!state?.funnel_stage_id) return 0;
+      const stage = mockFunnelStages.find((s) => s.id === state.funnel_stage_id);
+      return stage?.ordem || 0;
+    },
+    [leadFunnelStates]
+  );
+
+  // Update lead stage (for Kanban sync)
+  const updateLeadStage = useCallback(
+    (contactId: string, stageId: string) => {
+      setLeadFunnelStates((prev) => {
+        const existing = prev.find((lfs) => lfs.contact_id === contactId);
+        if (existing) {
+          return prev.map((lfs) =>
+            lfs.contact_id === contactId
+              ? { ...lfs, funnel_stage_id: stageId, updated_at: new Date().toISOString() }
+              : lfs
+          );
+        }
+        return [
+          ...prev,
+          {
+            contact_id: contactId,
+            funnel_stage_id: stageId,
+            updated_at: new Date().toISOString(),
+          },
+        ];
+      });
+    },
+    []
   );
 
   const canCreateSale = useCallback(
@@ -360,11 +397,13 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
     kpis,
     createSale,
     createContact,
+    updateLeadStage,
     markAsPaid,
     cancelSale,
     refundSale,
     getContactById,
     getContactFunnelStage,
+    getContactFunnelStageOrder,
     canCreateSale,
   };
 

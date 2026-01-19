@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useFinance } from '@/contexts/FinanceContext';
-import { PaymentMethod, Product, Contact } from '@/types/crm';
+import { PaymentMethod } from '@/types/crm';
 import { Plus, AlertCircle, CheckCircle, UserPlus, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { mockProducts } from '@/data/mockData';
@@ -33,8 +33,14 @@ interface NewContactForm {
   origem: string;
 }
 
-export function CreateSaleDialog() {
-  const { contacts, createSale, canCreateSale, getContactFunnelStage, createContact, products } = useFinance();
+interface CreateSaleDialogProps {
+  preSelectedContactId?: string;
+  trigger?: ReactNode;
+  onClose?: () => void;
+}
+
+export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: CreateSaleDialogProps) {
+  const { contacts, createSale, canCreateSale, getContactFunnelStage, createContact } = useFinance();
   const { user, account } = useAuth();
   const [open, setOpen] = useState(false);
   const [isCreatingNewContact, setIsCreatingNewContact] = useState(false);
@@ -77,6 +83,16 @@ export function CreateSaleDialog() {
     const valor = parseFloat(formData.valor);
     return valor !== selectedProduct.valor_padrao;
   }, [selectedProduct, formData.valor]);
+
+  // Handle preSelectedContactId
+  useEffect(() => {
+    if (preSelectedContactId) {
+      setFormData((prev) => ({ ...prev, contactId: preSelectedContactId }));
+      const result = canCreateSale(preSelectedContactId);
+      setValidation(result);
+      setOpen(true);
+    }
+  }, [preSelectedContactId, canCreateSale]);
 
   const handleContactChange = (value: string) => {
     if (value === 'new') {
@@ -163,11 +179,16 @@ export function CreateSaleDialog() {
 
     if (result.success) {
       toast.success('Venda registrada com sucesso!');
-      setOpen(false);
-      resetForm();
+      handleClose();
     } else {
       toast.error(result.error || 'Erro ao criar venda');
     }
+  };
+
+  const handleClose = () => {
+    setOpen(false);
+    resetForm();
+    onClose?.();
   };
 
   const resetForm = () => {
@@ -190,20 +211,32 @@ export function CreateSaleDialog() {
     }).format(value);
   };
 
+  // Get pre-selected contact name for display
+  const preSelectedContact = preSelectedContactId
+    ? contacts.find((c) => c.id === preSelectedContactId)
+    : null;
+
   return (
     <Dialog
       open={open}
       onOpenChange={(isOpen) => {
-        setOpen(isOpen);
-        if (!isOpen) resetForm();
+        if (!isOpen) {
+          handleClose();
+        } else {
+          setOpen(true);
+        }
       }}
     >
-      <DialogTrigger asChild>
-        <Button className="gap-2">
-          <Plus className="w-4 h-4" />
-          Nova Venda
-        </Button>
-      </DialogTrigger>
+      {trigger ? (
+        <DialogTrigger asChild>{trigger}</DialogTrigger>
+      ) : (
+        <DialogTrigger asChild>
+          <Button className="gap-2">
+            <Plus className="w-4 h-4" />
+            Nova Venda
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Registrar Nova Venda</DialogTitle>
@@ -216,39 +249,46 @@ export function CreateSaleDialog() {
           {/* Contact Selection */}
           <div className="space-y-2">
             <Label htmlFor="contact">Cliente *</Label>
-            <Select 
-              value={isCreatingNewContact ? 'new' : formData.contactId} 
-              onValueChange={handleContactChange}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione o cliente" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="new">
-                  <div className="flex items-center gap-2">
-                    <UserPlus className="w-4 h-4 text-primary" />
-                    <span className="font-medium">Cliente novo</span>
-                  </div>
-                </SelectItem>
-                {eligibleContacts.length === 0 ? (
-                  <SelectItem value="none" disabled>
-                    Nenhum lead elegível no funil
+            {preSelectedContactId && preSelectedContact ? (
+              <div className="p-3 rounded-lg bg-muted/50 border border-border">
+                <p className="font-medium">{preSelectedContact.nome}</p>
+                <p className="text-sm text-muted-foreground">{preSelectedContact.telefone}</p>
+              </div>
+            ) : (
+              <Select 
+                value={isCreatingNewContact ? 'new' : formData.contactId} 
+                onValueChange={handleContactChange}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o cliente" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="new">
+                    <div className="flex items-center gap-2">
+                      <UserPlus className="w-4 h-4 text-primary" />
+                      <span className="font-medium">Cliente novo</span>
+                    </div>
                   </SelectItem>
-                ) : (
-                  eligibleContacts.map((contact) => {
-                    const stage = getContactFunnelStage(contact.id);
-                    return (
-                      <SelectItem key={contact.id} value={contact.id}>
-                        <div className="flex items-center gap-2">
-                          <span>{contact.nome}</span>
-                          <span className="text-xs text-muted-foreground">— {stage}</span>
-                        </div>
-                      </SelectItem>
-                    );
-                  })
-                )}
-              </SelectContent>
-            </Select>
+                  {eligibleContacts.length === 0 ? (
+                    <SelectItem value="none" disabled>
+                      Nenhum lead elegível no funil
+                    </SelectItem>
+                  ) : (
+                    eligibleContacts.map((contact) => {
+                      const stage = getContactFunnelStage(contact.id);
+                      return (
+                        <SelectItem key={contact.id} value={contact.id}>
+                          <div className="flex items-center gap-2">
+                            <span>{contact.nome}</span>
+                            <span className="text-xs text-muted-foreground">— {stage}</span>
+                          </div>
+                        </SelectItem>
+                      );
+                    })
+                  )}
+                </SelectContent>
+              </Select>
+            )}
 
             {/* Validation feedback for existing contact */}
             {!isCreatingNewContact && validation && (
@@ -271,7 +311,7 @@ export function CreateSaleDialog() {
           </div>
 
           {/* New Contact Form */}
-          {isCreatingNewContact && (
+          {isCreatingNewContact && !preSelectedContactId && (
             <div className="space-y-3 p-4 bg-muted/50 rounded-lg border border-border">
               <p className="text-sm font-medium text-muted-foreground">Dados do novo cliente</p>
               <div className="grid grid-cols-2 gap-3">
@@ -442,13 +482,14 @@ export function CreateSaleDialog() {
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>
+          <Button variant="outline" onClick={handleClose}>
             Cancelar
           </Button>
           <Button
             onClick={handleSubmit}
             disabled={
-              (!isCreatingNewContact && !validation?.allowed) ||
+              (!isCreatingNewContact && !preSelectedContactId && !validation?.allowed) ||
+              (preSelectedContactId && !validation?.allowed) ||
               !formData.productId ||
               !formData.valor ||
               !formData.metodoPagamento

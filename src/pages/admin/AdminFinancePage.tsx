@@ -1,6 +1,4 @@
 import { useState } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { FinanceProvider } from '@/contexts/FinanceContext';
 import { DashboardFilters } from '@/components/dashboard/DashboardFilters';
 import { EmptyState } from '@/components/dashboard/EmptyState';
 import {
@@ -14,7 +12,7 @@ import {
 
 type ViewState = 'loading' | 'empty' | 'data';
 
-function FinanceDashboardContent() {
+export default function AdminFinancePage() {
   const [viewState, setViewState] = useState<ViewState>('data');
   const [period, setPeriod] = useState('7d');
   const [channel, setChannel] = useState('all');
@@ -104,16 +102,5 @@ function FinanceDashboardContent() {
         </>
       )}
     </div>
-  );
-}
-
-export default function AdminFinancePage() {
-  const { account } = useAuth();
-  const accountId = account?.id || 'acc-1';
-
-  return (
-    <FinanceProvider accountId={accountId}>
-      <FinanceDashboardContent />
-    </FinanceProvider>
   );
 }
