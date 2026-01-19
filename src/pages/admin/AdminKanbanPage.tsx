@@ -74,7 +74,7 @@ export default function AdminKanbanPage() {
     // Update via TagContext (which also updates FinanceContext)
     applyStageTag({
       contactId: draggedLead,
-      stageId,
+      tagId: stageId, // tagId = stageId pois tags = etapas
       source: 'kanban',
       actorType: 'user',
       actorId: user?.id || null,

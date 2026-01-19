@@ -101,7 +101,7 @@ export function TagHistoryList({ contactId, maxItems = 10 }: TagHistoryListProps
                   <span className="font-medium">
                     {item.action === 'added' && 'Tag adicionada'}
                     {item.action === 'removed' && 'Tag removida'}
-                    {item.action === 'stage_created' && 'Etapa criada'}
+                    {item.action === 'tag_created' && 'Etapa criada'}
                   </span>
                   {tag && (
                     <Badge
