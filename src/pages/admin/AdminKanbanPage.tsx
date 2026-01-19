@@ -3,7 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useFinance } from '@/contexts/FinanceContext';
 import { useTagContext } from '@/contexts/TagContext';
 import { CreateSaleDialog } from '@/components/finance/CreateSaleDialog';
-import { LeadCard } from '@/components/kanban';
+import { LeadCard, CreateStageDialog } from '@/components/kanban';
 import { Contact } from '@/types/crm';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -18,7 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Search, Phone, Mail, MessageSquare, Clock, DollarSign } from 'lucide-react';
+import { Search, Phone, Mail, MessageSquare, Clock, DollarSign, Plus } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
@@ -116,14 +116,24 @@ export default function AdminKanbanPage() {
           <h1 className="text-3xl font-bold">Kanban</h1>
           <p className="text-muted-foreground">Gerencie seus leads no funil • Sincronizado com Chatwoot</p>
         </div>
-        <div className="relative w-full sm:w-64">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar leads..."
+        <div className="flex items-center gap-3">
+          <CreateStageDialog
+            trigger={
+              <Button variant="outline" size="sm" className="gap-2">
+                <Plus className="w-4 h-4" />
+                Nova Etapa
+              </Button>
+            }
+          />
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar leads..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-9"
-          />
+              className="pl-9"
+            />
+          </div>
         </div>
       </div>
 
