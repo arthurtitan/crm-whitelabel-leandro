@@ -41,6 +41,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Plus,
   Search,
@@ -50,6 +51,8 @@ import {
   ArrowLeftRight,
   UserCog,
   Shield,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -64,11 +67,25 @@ export default function SuperAdminUsersPage() {
   const { impersonate } = useAuth();
   const navigate = useNavigate();
 
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Agent permission areas
+  const agentPermissionAreas = [
+    { id: 'leads', label: 'Leads / Funil' },
+    { id: 'conversations', label: 'Conversas' },
+    { id: 'sales', label: 'Vendas' },
+    { id: 'events', label: 'Eventos' },
+    { id: 'reports', label: 'Relatórios' },
+  ];
+
   const [formData, setFormData] = useState({
     nome: '',
     email: '',
     role: 'agent' as UserRole,
     account_id: '',
+    password: '',
+    confirmPassword: '',
+    permissions: [] as string[],
   });
 
   const filteredUsers = users.filter((user) => {
@@ -94,7 +111,35 @@ export default function SuperAdminUsersPage() {
       .toUpperCase();
   };
 
+  const togglePermission = (permissionId: string) => {
+    setFormData(prev => ({
+      ...prev,
+      permissions: prev.permissions.includes(permissionId)
+        ? prev.permissions.filter(p => p !== permissionId)
+        : [...prev.permissions, permissionId]
+    }));
+  };
+
+  const isCreateFormValid = () => {
+    const baseValid = formData.nome && formData.email && formData.password && formData.confirmPassword;
+    const passwordsMatch = formData.password === formData.confirmPassword;
+    const passwordMinLength = formData.password.length >= 6;
+    const accountValid = formData.role === 'super_admin' || formData.account_id;
+    const permissionsValid = formData.role !== 'agent' || formData.permissions.length > 0;
+    
+    return baseValid && passwordsMatch && passwordMinLength && accountValid && permissionsValid;
+  };
+
   const handleCreate = () => {
+    if (formData.password !== formData.confirmPassword) {
+      toast.error('As senhas não coincidem!');
+      return;
+    }
+    if (formData.password.length < 6) {
+      toast.error('A senha deve ter pelo menos 6 caracteres!');
+      return;
+    }
+    
     const newUser: User = {
       id: `user-${Date.now()}`,
       nome: formData.nome,
@@ -105,10 +150,21 @@ export default function SuperAdminUsersPage() {
       last_login_at: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      // In a real app, permissions would be stored separately
+      // permissions: formData.role === 'agent' ? formData.permissions : undefined,
     };
     setUsers([newUser, ...users]);
     setIsCreateOpen(false);
-    setFormData({ nome: '', email: '', role: 'agent', account_id: '' });
+    setFormData({ 
+      nome: '', 
+      email: '', 
+      role: 'agent', 
+      account_id: '', 
+      password: '', 
+      confirmPassword: '',
+      permissions: [] 
+    });
+    setShowPassword(false);
     toast.success('Usuário criado com sucesso!');
   };
 
@@ -170,9 +226,9 @@ export default function SuperAdminUsersPage() {
               <DialogTitle>Criar Novo Usuário</DialogTitle>
               <DialogDescription>Adicione um novo usuário ao sistema</DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4">
+            <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
               <div className="space-y-2">
-                <Label htmlFor="nome">Nome</Label>
+                <Label htmlFor="nome">Nome <span className="text-destructive">*</span></Label>
                 <Input
                   id="nome"
                   value={formData.nome}
@@ -181,7 +237,7 @@ export default function SuperAdminUsersPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">E-mail <span className="text-destructive">*</span></Label>
                 <Input
                   id="email"
                   type="email"
@@ -192,10 +248,10 @@ export default function SuperAdminUsersPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="role">Papel</Label>
+                  <Label htmlFor="role">Papel <span className="text-destructive">*</span></Label>
                   <Select
                     value={formData.role}
-                    onValueChange={(v) => setFormData({ ...formData, role: v as UserRole })}
+                    onValueChange={(v) => setFormData({ ...formData, role: v as UserRole, permissions: [] })}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -209,7 +265,7 @@ export default function SuperAdminUsersPage() {
                 </div>
                 {formData.role !== 'super_admin' && (
                   <div className="space-y-2">
-                    <Label htmlFor="account">Conta</Label>
+                    <Label htmlFor="account">Conta <span className="text-destructive">*</span></Label>
                     <Select
                       value={formData.account_id}
                       onValueChange={(v) => setFormData({ ...formData, account_id: v })}
@@ -228,12 +284,98 @@ export default function SuperAdminUsersPage() {
                   </div>
                 )}
               </div>
+
+              {/* Agent Permissions */}
+              {formData.role === 'agent' && (
+                <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
+                  <Label className="font-medium">
+                    Permissões de Acesso <span className="text-destructive">*</span>
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Selecione as áreas que este agente poderá acessar
+                  </p>
+                  <div className="grid grid-cols-2 gap-3 pt-2">
+                    {agentPermissionAreas.map((area) => (
+                      <div key={area.id} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`perm-${area.id}`}
+                          checked={formData.permissions.includes(area.id)}
+                          onCheckedChange={() => togglePermission(area.id)}
+                        />
+                        <label
+                          htmlFor={`perm-${area.id}`}
+                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                        >
+                          {area.label}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                  {formData.permissions.length === 0 && (
+                    <p className="text-sm text-amber-600">
+                      Selecione pelo menos uma área de acesso
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Password Section */}
+              <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
+                <Label className="font-medium">Definir Senha <span className="text-destructive">*</span></Label>
+                <p className="text-sm text-muted-foreground">
+                  O Super Admin deve definir a senha inicial do usuário
+                </p>
+                <div className="space-y-3 pt-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="password">Senha</Label>
+                    <div className="relative">
+                      <Input
+                        id="password"
+                        type={showPassword ? 'text' : 'password'}
+                        value={formData.password}
+                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                        placeholder="Mínimo 6 caracteres"
+                        className="pr-10"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                        onClick={() => setShowPassword(!showPassword)}
+                      >
+                        {showPassword ? (
+                          <EyeOff className="w-4 h-4 text-muted-foreground" />
+                        ) : (
+                          <Eye className="w-4 h-4 text-muted-foreground" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="confirmPassword">Confirmar Senha</Label>
+                    <Input
+                      id="confirmPassword"
+                      type={showPassword ? 'text' : 'password'}
+                      value={formData.confirmPassword}
+                      onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                      placeholder="Digite a senha novamente"
+                    />
+                  </div>
+                  {formData.password && formData.confirmPassword && formData.password !== formData.confirmPassword && (
+                    <p className="text-sm text-destructive">As senhas não coincidem</p>
+                  )}
+                  {formData.password && formData.password.length < 6 && (
+                    <p className="text-sm text-amber-600">A senha deve ter pelo menos 6 caracteres</p>
+                  )}
+                </div>
+              </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
                 Cancelar
               </Button>
-              <Button onClick={handleCreate} disabled={!formData.nome || !formData.email}>
+              <Button onClick={handleCreate} disabled={!isCreateFormValid()}>
                 Criar Usuário
               </Button>
             </DialogFooter>
