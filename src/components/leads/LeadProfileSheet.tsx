@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFinance } from '@/contexts/FinanceContext';
 import { Contact, Sale } from '@/types/crm';
-import { mockFunnelStages, mockProducts } from '@/data/mockData';
+import { mockFunnelStages } from '@/data/mockData';
 import { CreateSaleDialog } from '@/components/finance/CreateSaleDialog';
+import { RefundConfirmationDialog } from '@/components/finance/RefundConfirmationDialog';
 import {
   Sheet,
   SheetContent,
@@ -24,7 +25,6 @@ import {
   Calendar,
   MessageSquare,
   DollarSign,
-  Plus,
   User,
   Clock,
   RefreshCw,
@@ -59,6 +59,10 @@ export function LeadProfileSheet({ contact, open, onOpenChange }: LeadProfileShe
 
   const [newNote, setNewNote] = useState('');
   const [showSaleDialog, setShowSaleDialog] = useState(false);
+  const [refundDialog, setRefundDialog] = useState<{ open: boolean; sale: Sale | null }>({
+    open: false,
+    sale: null,
+  });
 
   if (!contact) return null;
 
@@ -126,9 +130,10 @@ export function LeadProfileSheet({ contact, open, onOpenChange }: LeadProfileShe
     toast.success('Venda marcada como paga!');
   };
 
-  const handleRefund = (saleId: string) => {
-    refundSale(saleId, 'Estorno solicitado pelo admin');
-    toast.success('Venda estornada!');
+  const handleRefundConfirm = (reason: string) => {
+    if (!refundDialog.sale) return;
+    refundSale(refundDialog.sale.id, reason);
+    setRefundDialog({ open: false, sale: null });
   };
 
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
@@ -283,7 +288,7 @@ export function LeadProfileSheet({ contact, open, onOpenChange }: LeadProfileShe
                                   size="sm" 
                                   variant="outline"
                                   className="flex-1 text-red-600 hover:text-red-700"
-                                  onClick={() => handleRefund(sale.id)}
+                                  onClick={() => setRefundDialog({ open: true, sale })}
                                 >
                                   <XCircle className="w-3 h-3 mr-1" />
                                   Estornar
@@ -296,7 +301,7 @@ export function LeadProfileSheet({ contact, open, onOpenChange }: LeadProfileShe
                                   size="sm" 
                                   variant="outline"
                                   className="flex-1 text-red-600 hover:text-red-700"
-                                  onClick={() => handleRefund(sale.id)}
+                                  onClick={() => setRefundDialog({ open: true, sale })}
                                 >
                                   <XCircle className="w-3 h-3 mr-1" />
                                   Estornar
@@ -377,6 +382,18 @@ export function LeadProfileSheet({ contact, open, onOpenChange }: LeadProfileShe
           onClose={() => setShowSaleDialog(false)}
         />
       )}
+
+      {/* Refund Dialog with Password Confirmation */}
+      <RefundConfirmationDialog
+        open={refundDialog.open}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRefundDialog({ open: false, sale: null });
+          }
+        }}
+        saleValue={refundDialog.sale?.valor || 0}
+        onConfirm={handleRefundConfirm}
+      />
     </>
   );
 }
