@@ -14,6 +14,7 @@ import UnauthorizedPage from "./pages/UnauthorizedPage";
 import SuperAdminLayout from "./layouts/SuperAdminLayout";
 import SuperAdminDashboard from "./pages/super-admin/SuperAdminDashboard";
 import SuperAdminAccountsPage from "./pages/super-admin/SuperAdminAccountsPage";
+import SuperAdminAccountDetailPage from "./pages/super-admin/SuperAdminAccountDetailPage";
 import SuperAdminUsersPage from "./pages/super-admin/SuperAdminUsersPage";
 
 // Admin
@@ -57,6 +58,16 @@ const App = () => (
                   <ProtectedRoute requireSuperAdmin>
                     <SuperAdminLayout>
                       <SuperAdminAccountsPage />
+                    </SuperAdminLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/super-admin/accounts/:accountId"
+                element={
+                  <ProtectedRoute requireSuperAdmin>
+                    <SuperAdminLayout>
+                      <SuperAdminAccountDetailPage />
                     </SuperAdminLayout>
                   </ProtectedRoute>
                 }

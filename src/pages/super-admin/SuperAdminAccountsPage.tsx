@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { mockAccounts, mockUsers } from '@/data/mockData';
 import { Account, AccountStatus } from '@/types/crm';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -54,7 +55,11 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 
+// Counter for generating numeric IDs
+let accountIdCounter = 100;
+
 export default function SuperAdminAccountsPage() {
+  const navigate = useNavigate();
   const [accounts, setAccounts] = useState<Account[]>(mockAccounts);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<AccountStatus | 'all'>('all');
@@ -80,8 +85,9 @@ export default function SuperAdminAccountsPage() {
   };
 
   const handleCreate = () => {
+    accountIdCounter++;
     const newAccount: Account = {
-      id: `acc-${Date.now()}`,
+      id: `acc-${accountIdCounter}`,
       nome: formData.nome,
       timezone: 'America/Sao_Paulo',
       plano: '',
@@ -97,6 +103,8 @@ export default function SuperAdminAccountsPage() {
     setFormData({ nome: '', status: 'active' });
     toast.success('Conta criada com sucesso!');
   };
+
+  const getNumericId = (id: string) => id.replace(/\D/g, '');
 
   const handleUpdate = () => {
     if (!editingAccount) return;
@@ -221,7 +229,7 @@ export default function SuperAdminAccountsPage() {
                 <TableRow key={account.id}>
                   <TableCell>
                     <code className="text-xs bg-muted px-2 py-1 rounded font-mono">
-                      {account.id}
+                      {getNumericId(account.id)}
                     </code>
                   </TableCell>
                   <TableCell>
@@ -265,6 +273,10 @@ export default function SuperAdminAccountsPage() {
                       <DropdownMenuContent align="end">
                         <DropdownMenuLabel>Ações</DropdownMenuLabel>
                         <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => navigate(`/super-admin/accounts/${account.id}`)}>
+                          <Eye className="w-4 h-4 mr-2" />
+                          Inspecionar
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setEditingAccount(account)}>
                           <Edit className="w-4 h-4 mr-2" />
                           Editar
