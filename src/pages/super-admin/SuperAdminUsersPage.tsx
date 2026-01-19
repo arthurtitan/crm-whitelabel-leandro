@@ -64,6 +64,17 @@ export default function SuperAdminUsersPage() {
   const [roleFilter, setRoleFilter] = useState<UserRole | 'all'>('all');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editFormData, setEditFormData] = useState({
+    nome: '',
+    email: '',
+    role: 'agent' as UserRole,
+    account_id: '',
+    status: 'active' as 'active' | 'inactive',
+    password: '',
+    confirmPassword: '',
+    permissions: [] as string[],
+  });
+  const [showEditPassword, setShowEditPassword] = useState(false);
   const { impersonate } = useAuth();
   const navigate = useNavigate();
 
@@ -168,14 +179,79 @@ export default function SuperAdminUsersPage() {
     toast.success('Usuário criado com sucesso!');
   };
 
+  const handleEditOpen = (user: User) => {
+    setEditFormData({
+      nome: user.nome,
+      email: user.email,
+      role: user.role,
+      account_id: user.account_id || '',
+      status: user.status === 'active' ? 'active' : 'inactive',
+      password: '',
+      confirmPassword: '',
+      permissions: [], // In a real app, this would come from the user's stored permissions
+    });
+    setShowEditPassword(false);
+    setEditingUser(user);
+  };
+
+  const toggleEditPermission = (permissionId: string) => {
+    setEditFormData(prev => ({
+      ...prev,
+      permissions: prev.permissions.includes(permissionId)
+        ? prev.permissions.filter(p => p !== permissionId)
+        : [...prev.permissions, permissionId]
+    }));
+  };
+
+  const isEditFormValid = () => {
+    const baseValid = editFormData.nome && editFormData.email;
+    const accountValid = editFormData.role === 'super_admin' || editFormData.account_id;
+    const permissionsValid = editFormData.role !== 'agent' || editFormData.permissions.length > 0;
+    
+    // Password validation only if password is being changed
+    if (editFormData.password || editFormData.confirmPassword) {
+      const passwordsMatch = editFormData.password === editFormData.confirmPassword;
+      const passwordMinLength = editFormData.password.length >= 6;
+      return baseValid && accountValid && permissionsValid && passwordsMatch && passwordMinLength;
+    }
+    
+    return baseValid && accountValid && permissionsValid;
+  };
+
   const handleUpdate = () => {
     if (!editingUser) return;
-    setUsers(
-      users.map((u) =>
-        u.id === editingUser.id ? { ...editingUser, updated_at: new Date().toISOString() } : u
-      )
-    );
+    
+    if (editFormData.password && editFormData.password !== editFormData.confirmPassword) {
+      toast.error('As senhas não coincidem!');
+      return;
+    }
+    if (editFormData.password && editFormData.password.length < 6) {
+      toast.error('A senha deve ter pelo menos 6 caracteres!');
+      return;
+    }
+    
+    const updatedUser: User = {
+      ...editingUser,
+      nome: editFormData.nome,
+      email: editFormData.email,
+      role: editFormData.role,
+      account_id: editFormData.role === 'super_admin' ? null : editFormData.account_id || null,
+      status: editFormData.status,
+      updated_at: new Date().toISOString(),
+    };
+    
+    setUsers(users.map((u) => u.id === editingUser.id ? updatedUser : u));
     setEditingUser(null);
+    setEditFormData({
+      nome: '',
+      email: '',
+      role: 'agent',
+      account_id: '',
+      status: 'active',
+      password: '',
+      confirmPassword: '',
+      permissions: [],
+    });
     toast.success('Usuário atualizado com sucesso!');
   };
 
@@ -487,7 +563,7 @@ export default function SuperAdminUsersPage() {
                       <DropdownMenuContent align="end">
                         <DropdownMenuLabel>Ações</DropdownMenuLabel>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => setEditingUser(user)}>
+                        <DropdownMenuItem onClick={() => handleEditOpen(user)}>
                           <Edit className="w-4 h-4 mr-2" />
                           Editar
                         </DropdownMenuItem>
@@ -517,36 +593,42 @@ export default function SuperAdminUsersPage() {
 
       {/* Edit Dialog */}
       <Dialog open={!!editingUser} onOpenChange={() => setEditingUser(null)}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Editar Usuário</DialogTitle>
             <DialogDescription>Atualize os dados do usuário</DialogDescription>
           </DialogHeader>
           {editingUser && (
-            <div className="space-y-4 py-4">
+            <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
               <div className="space-y-2">
-                <Label htmlFor="edit-nome">Nome</Label>
+                <Label htmlFor="edit-nome">Nome <span className="text-destructive">*</span></Label>
                 <Input
                   id="edit-nome"
-                  value={editingUser.nome}
-                  onChange={(e) => setEditingUser({ ...editingUser, nome: e.target.value })}
+                  value={editFormData.nome}
+                  onChange={(e) => setEditFormData({ ...editFormData, nome: e.target.value })}
+                  placeholder="Nome completo"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="edit-email">Email</Label>
+                <Label htmlFor="edit-email">E-mail <span className="text-destructive">*</span></Label>
                 <Input
                   id="edit-email"
                   type="email"
-                  value={editingUser.email}
-                  onChange={(e) => setEditingUser({ ...editingUser, email: e.target.value })}
+                  value={editFormData.email}
+                  onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                  placeholder="email@exemplo.com"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="edit-role">Papel</Label>
+                  <Label htmlFor="edit-role">Papel <span className="text-destructive">*</span></Label>
                   <Select
-                    value={editingUser.role}
-                    onValueChange={(v) => setEditingUser({ ...editingUser, role: v as UserRole })}
+                    value={editFormData.role}
+                    onValueChange={(v) => setEditFormData({ 
+                      ...editFormData, 
+                      role: v as UserRole,
+                      permissions: v === 'agent' ? editFormData.permissions : []
+                    })}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -559,12 +641,10 @@ export default function SuperAdminUsersPage() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="edit-status">Status</Label>
+                  <Label htmlFor="edit-status">Status <span className="text-destructive">*</span></Label>
                   <Select
-                    value={editingUser.status}
-                    onValueChange={(v) =>
-                      setEditingUser({ ...editingUser, status: v as UserStatus })
-                    }
+                    value={editFormData.status}
+                    onValueChange={(v) => setEditFormData({ ...editFormData, status: v as 'active' | 'inactive' })}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -572,9 +652,116 @@ export default function SuperAdminUsersPage() {
                     <SelectContent>
                       <SelectItem value="active">Ativo</SelectItem>
                       <SelectItem value="inactive">Inativo</SelectItem>
-                      <SelectItem value="suspended">Suspenso</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+              </div>
+
+              {/* Account Selection (not for Super Admin) */}
+              {editFormData.role !== 'super_admin' && (
+                <div className="space-y-2">
+                  <Label htmlFor="edit-account">Conta <span className="text-destructive">*</span></Label>
+                  <Select
+                    value={editFormData.account_id}
+                    onValueChange={(v) => setEditFormData({ ...editFormData, account_id: v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione uma conta" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {mockAccounts.map((acc) => (
+                        <SelectItem key={acc.id} value={acc.id}>
+                          {acc.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {/* Agent Permissions */}
+              {editFormData.role === 'agent' && (
+                <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
+                  <Label className="font-medium">
+                    Permissões de Acesso <span className="text-destructive">*</span>
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Selecione as áreas que este agente poderá acessar
+                  </p>
+                  <div className="grid grid-cols-2 gap-3 pt-2">
+                    {agentPermissionAreas.map((area) => (
+                      <div key={area.id} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`edit-perm-${area.id}`}
+                          checked={editFormData.permissions.includes(area.id)}
+                          onCheckedChange={() => toggleEditPermission(area.id)}
+                        />
+                        <label
+                          htmlFor={`edit-perm-${area.id}`}
+                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                        >
+                          {area.label}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                  {editFormData.permissions.length === 0 && (
+                    <p className="text-sm text-amber-600">
+                      Selecione pelo menos uma área de acesso
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Password Section */}
+              <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
+                <Label className="font-medium">Alterar Senha</Label>
+                <p className="text-sm text-muted-foreground">
+                  Deixe em branco para manter a senha atual
+                </p>
+                <div className="space-y-3 pt-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-password">Nova Senha</Label>
+                    <div className="relative">
+                      <Input
+                        id="edit-password"
+                        type={showEditPassword ? 'text' : 'password'}
+                        value={editFormData.password}
+                        onChange={(e) => setEditFormData({ ...editFormData, password: e.target.value })}
+                        placeholder="Mínimo 6 caracteres"
+                        className="pr-10"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                        onClick={() => setShowEditPassword(!showEditPassword)}
+                      >
+                        {showEditPassword ? (
+                          <EyeOff className="w-4 h-4 text-muted-foreground" />
+                        ) : (
+                          <Eye className="w-4 h-4 text-muted-foreground" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-confirmPassword">Confirmar Nova Senha</Label>
+                    <Input
+                      id="edit-confirmPassword"
+                      type={showEditPassword ? 'text' : 'password'}
+                      value={editFormData.confirmPassword}
+                      onChange={(e) => setEditFormData({ ...editFormData, confirmPassword: e.target.value })}
+                      placeholder="Digite a senha novamente"
+                    />
+                  </div>
+                  {editFormData.password && editFormData.confirmPassword && editFormData.password !== editFormData.confirmPassword && (
+                    <p className="text-sm text-destructive">As senhas não coincidem</p>
+                  )}
+                  {editFormData.password && editFormData.password.length < 6 && (
+                    <p className="text-sm text-amber-600">A senha deve ter pelo menos 6 caracteres</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -583,7 +770,9 @@ export default function SuperAdminUsersPage() {
             <Button variant="outline" onClick={() => setEditingUser(null)}>
               Cancelar
             </Button>
-            <Button onClick={handleUpdate}>Salvar Alterações</Button>
+            <Button onClick={handleUpdate} disabled={!isEditFormValid()}>
+              Salvar Alterações
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
