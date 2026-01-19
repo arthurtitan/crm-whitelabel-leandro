@@ -7,10 +7,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Calendar, MessageCircle, Bot, User, Filter } from 'lucide-react';
+import { Calendar as CalendarIcon, MessageCircle, Bot, User, Filter } from 'lucide-react';
+import { Calendar } from '@/components/ui/calendar';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { format, subDays } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
+import { DateRange } from 'react-day-picker';
 
 interface DashboardFiltersProps {
-  onPeriodChange?: (period: string) => void;
+  onPeriodChange?: (period: string, dateRange?: DateRange) => void;
   onChannelChange?: (channel: string) => void;
   onTypeChange?: (type: string) => void;
 }
@@ -23,17 +33,36 @@ export function DashboardFilters({
   const [activePeriod, setActivePeriod] = useState('7d');
   const [channel, setChannel] = useState('all');
   const [type, setType] = useState('all');
+  const [dateRange, setDateRange] = useState<DateRange | undefined>({
+    from: subDays(new Date(), 7),
+    to: new Date(),
+  });
 
   const periods = [
-    { value: 'today', label: 'Hoje' },
     { value: '7d', label: '7 dias' },
     { value: '30d', label: '30 dias' },
-    { value: 'custom', label: 'Personalizado' },
   ];
 
   const handlePeriodChange = (period: string) => {
     setActivePeriod(period);
-    onPeriodChange?.(period);
+    
+    let newRange: DateRange;
+    if (period === '7d') {
+      newRange = { from: subDays(new Date(), 7), to: new Date() };
+    } else if (period === '30d') {
+      newRange = { from: subDays(new Date(), 30), to: new Date() };
+    } else {
+      newRange = dateRange || { from: new Date(), to: new Date() };
+    }
+    
+    setDateRange(newRange);
+    onPeriodChange?.(period, newRange);
+  };
+
+  const handleDateRangeChange = (range: DateRange | undefined) => {
+    setDateRange(range);
+    setActivePeriod('custom');
+    onPeriodChange?.('custom', range);
   };
 
   const handleChannelChange = (value: string) => {
@@ -49,8 +78,8 @@ export function DashboardFilters({
   return (
     <div className="flex flex-wrap items-center gap-4 p-4 bg-card rounded-lg border border-border">
       <div className="flex items-center gap-2">
-        <Calendar className="w-4 h-4 text-muted-foreground" />
-        <div className="flex bg-muted rounded-lg p-1">
+        <CalendarIcon className="w-4 h-4 text-muted-foreground" />
+        <div className="flex bg-muted rounded-lg p-1 gap-1">
           {periods.map((period) => (
             <Button
               key={period.value}
@@ -62,6 +91,44 @@ export function DashboardFilters({
               {period.label}
             </Button>
           ))}
+          
+          {/* Calendar Picker */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant={activePeriod === 'custom' ? 'default' : 'ghost'}
+                size="sm"
+                className={cn(
+                  "h-8 px-3 text-xs gap-1.5",
+                  activePeriod === 'custom' && "bg-primary text-primary-foreground"
+                )}
+              >
+                <CalendarIcon className="h-3.5 w-3.5" />
+                {activePeriod === 'custom' && dateRange?.from ? (
+                  dateRange.to ? (
+                    <>
+                      {format(dateRange.from, "dd/MM", { locale: ptBR })} - {format(dateRange.to, "dd/MM", { locale: ptBR })}
+                    </>
+                  ) : (
+                    format(dateRange.from, "dd/MM/yyyy", { locale: ptBR })
+                  )
+                ) : (
+                  "Período"
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0 bg-popover" align="start">
+              <Calendar
+                initialFocus
+                mode="range"
+                defaultMonth={dateRange?.from}
+                selected={dateRange}
+                onSelect={handleDateRangeChange}
+                numberOfMonths={2}
+                locale={ptBR}
+              />
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
 

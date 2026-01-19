@@ -1,12 +1,10 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { RefreshCw, MessageSquareOff, TrendingUp, ShoppingCart } from 'lucide-react';
+import { MessageSquareOff, ShoppingCart } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface QualityData {
-  conversasReabertas: number;
   conversasSemResposta: number;
-  leadsConvertidos: number;
   taxaAtendimentoVenda: string;
 }
 
@@ -18,8 +16,8 @@ interface QualityCardsProps {
 export function QualityCards({ data, isLoading = false }: QualityCardsProps) {
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[...Array(4)].map((_, i) => (
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {[...Array(2)].map((_, i) => (
           <Card key={i}>
             <CardContent className="p-4">
               <Skeleton className="h-16 w-full" />
@@ -32,28 +30,12 @@ export function QualityCards({ data, isLoading = false }: QualityCardsProps) {
 
   const cards = [
     {
-      title: 'Conversas Reabertas',
-      subtitle: 'Atendimentos resolvidos que voltaram a abrir',
-      value: data.conversasReabertas,
-      icon: RefreshCw,
-      color: 'text-warning',
-      bgColor: 'bg-warning/10',
-    },
-    {
       title: 'Conversas Sem Resposta',
       subtitle: 'Atendimentos abertos sem resposta enviada',
       value: data.conversasSemResposta,
       icon: MessageSquareOff,
       color: 'text-destructive',
       bgColor: 'bg-destructive/10',
-    },
-    {
-      title: 'Leads Convertidos',
-      subtitle: 'Leads que avançaram no funil após conversa',
-      value: data.leadsConvertidos,
-      icon: TrendingUp,
-      color: 'text-success',
-      bgColor: 'bg-success/10',
     },
     {
       title: 'Taxa Atendimento → Venda',
@@ -72,7 +54,7 @@ export function QualityCards({ data, isLoading = false }: QualityCardsProps) {
           Qualidade & Conversão
         </h3>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {cards.map((card) => (
           <Card key={card.title} className="card-hover">
             <CardContent className="p-4">
