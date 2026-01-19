@@ -389,7 +389,7 @@ export default function AdminLeadsPage() {
                           <DropdownMenuSeparator />
                           <DropdownMenuItem onClick={() => setProfileContact(contact)}>
                             <Eye className="w-4 h-4 mr-2" />
-                            Ver Prontuário
+                            Ver Ficha do Cliente
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleOpenChatwoot(contact)}>
                             <ExternalLink className="w-4 h-4 mr-2" />
