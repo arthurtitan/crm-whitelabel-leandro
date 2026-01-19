@@ -190,9 +190,11 @@ const App = () => (
                 path="/agent"
                 element={
                   <ProtectedRoute allowedRoles={['agent', 'admin', 'super_admin']}>
-                    <AdminLayout>
-                      <AdminKanbanPage />
-                    </AdminLayout>
+                    <AdminFinanceWrapper>
+                      <AdminLayout>
+                        <AdminKanbanPage />
+                      </AdminLayout>
+                    </AdminFinanceWrapper>
                   </ProtectedRoute>
                 }
               />
