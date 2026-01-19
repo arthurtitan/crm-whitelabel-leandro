@@ -158,13 +158,14 @@ export function RefundConfirmationDialog({
           <AlertDialogCancel onClick={handleClose} disabled={isValidating}>
             Cancelar
           </AlertDialogCancel>
-          <AlertDialogAction
+          <button
+            type="button"
             onClick={handleConfirm}
             disabled={isValidating || !password || !reason}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-destructive text-destructive-foreground hover:bg-destructive/90 h-10 px-4 py-2"
           >
             {isValidating ? 'Validando...' : 'Confirmar Estorno'}
-          </AlertDialogAction>
+          </button>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
