@@ -1,0 +1,242 @@
+// CRM Multi-Tenant Types - Matching ARCHITECTURE.md schema exactly
+
+// ============= ENUMS =============
+export type UserRole = 'super_admin' | 'admin' | 'agent';
+export type AccountStatus = 'active' | 'paused' | 'cancelled';
+export type UserStatus = 'active' | 'inactive' | 'suspended';
+export type ConversationStatus = 'open' | 'pending' | 'resolved';
+export type AssigneeType = 'user' | 'agent_bot';
+export type SaleStatus = 'pending' | 'paid' | 'cancelled' | 'refunded';
+export type PaymentMethod = 'pix' | 'boleto' | 'cartao' | 'dinheiro';
+export type ActorType = 'user' | 'agent_bot' | 'system' | 'external';
+export type TransactionType = 'charge' | 'refund';
+export type ContactOrigin = 'whatsapp' | 'instagram' | 'site' | 'manual';
+export type Channel = 'whatsapp' | 'instagram' | 'webchat';
+
+// ============= CORE ENTITIES =============
+
+export interface Account {
+  id: string;
+  nome: string;
+  timezone: string;
+  plano: string | null;
+  status: AccountStatus;
+  limite_usuarios: number;
+  chatwoot_account_id: string | null;
+  chatwoot_api_key: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface User {
+  id: string;
+  account_id: string | null;
+  nome: string;
+  email: string;
+  role: UserRole;
+  status: UserStatus;
+  last_login_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentBot {
+  id: string;
+  account_id: string;
+  nome: string;
+  provider: 'openai' | 'anthropic' | 'custom' | null;
+  ativo: boolean;
+  config: Record<string, unknown> | null;
+  created_at: string;
+}
+
+// ============= CONTACTS & CONVERSATIONS =============
+
+export interface Contact {
+  id: string;
+  account_id: string;
+  nome: string | null;
+  telefone: string | null;
+  email: string | null;
+  origem: ContactOrigin | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Conversation {
+  id: string;
+  account_id: string;
+  contact_id: string;
+  channel: Channel | null;
+  status: ConversationStatus;
+  assignee_type: AssigneeType | null;
+  assignee_id: string | null;
+  opened_at: string;
+  resolved_at: string | null;
+  // UI enrichment
+  contact?: Contact;
+  assignee?: User | AgentBot;
+}
+
+// ============= FUNNEL / KANBAN =============
+
+export interface Funnel {
+  id: string;
+  account_id: string;
+  nome: string;
+  ativo: boolean;
+  created_at: string;
+}
+
+export interface FunnelStage {
+  id: string;
+  funnel_id: string;
+  nome: string;
+  ordem: number;
+  cor: string | null;
+  ativo: boolean;
+  created_at: string;
+}
+
+export interface LeadFunnelState {
+  contact_id: string;
+  funnel_stage_id: string | null;
+  updated_at: string;
+}
+
+export interface LeadFunnelHistory {
+  id: string;
+  contact_id: string;
+  from_stage_id: string | null;
+  to_stage_id: string | null;
+  actor_type: ActorType;
+  actor_id: string | null;
+  reason: string | null;
+  created_at: string;
+}
+
+// ============= FINANCIAL =============
+
+export interface Sale {
+  id: string;
+  account_id: string;
+  contact_id: string;
+  valor: number;
+  status: SaleStatus;
+  metodo_pagamento: PaymentMethod | null;
+  created_at: string;
+  paid_at: string | null;
+  cancelled_at: string | null;
+  // UI enrichment
+  contact?: Contact;
+}
+
+export interface SaleTransaction {
+  id: string;
+  sale_id: string;
+  tipo: TransactionType;
+  valor: number;
+  actor_type: ActorType | null;
+  actor_id: string | null;
+  motivo: string | null;
+  created_at: string;
+}
+
+// ============= EVENTS / AUDIT =============
+
+export type EventType =
+  // Auth
+  | 'auth.login.success'
+  | 'auth.login.failed'
+  | 'auth.logout'
+  | 'auth.session.revoked'
+  | 'auth.password.reset'
+  // Accounts
+  | 'account.created'
+  | 'account.updated'
+  | 'account.paused'
+  | 'account.deleted'
+  // Users
+  | 'user.created'
+  | 'user.updated'
+  | 'user.deleted'
+  | 'user.impersonated'
+  // Conversations
+  | 'conversation.opened'
+  | 'message.received'
+  | 'message.sent'
+  | 'conversation.assigned.bot'
+  | 'conversation.assigned.human'
+  | 'conversation.resolved'
+  // Funnel
+  | 'lead.stage.changed'
+  | 'funnel.stage.created'
+  | 'funnel.stage.reordered'
+  // Sales
+  | 'sale.created'
+  | 'sale.paid'
+  | 'sale.refunded';
+
+export interface CRMEvent {
+  id: string;
+  account_id: string | null;
+  event_type: EventType;
+  actor_type: ActorType;
+  actor_id: string | null;
+  entity_type: string | null;
+  entity_id: string | null;
+  channel: string | null;
+  payload: Record<string, unknown>;
+  created_at: string;
+}
+
+// ============= UI TYPES =============
+
+export interface AuthState {
+  user: User | null;
+  account: Account | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+}
+
+export interface KanbanLead extends Contact {
+  stage_id: string | null;
+  conversation?: Conversation;
+  last_message?: string;
+}
+
+// Dashboard KPIs
+export interface SuperAdminKPIs {
+  total_accounts: number;
+  total_users: number;
+  events_count: number;
+  active_accounts: number;
+  paused_accounts: number;
+}
+
+export interface AdminKPIs {
+  total_leads: number;
+  ia_percentage: number;
+  human_percentage: number;
+  avg_response_time_minutes: number;
+  conversion_rate: number;
+  total_revenue: number;
+  avg_ticket: number;
+  open_conversations: number;
+  resolved_today: number;
+}
+
+export interface AgentKPIs {
+  atendimentos_realizados: number;
+  conversoes: number;
+  tempo_medio_atendimento_minutes: number;
+  leads_atribuidos: number;
+}
+
+// Navigation
+export interface NavItem {
+  title: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  badge?: number;
+}
