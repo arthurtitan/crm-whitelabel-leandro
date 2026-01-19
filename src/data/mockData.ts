@@ -246,6 +246,71 @@ export const mockEvents: CRMEvent[] = [
   { id: 'evt-10', account_id: 'acc-1', event_type: 'message.sent', actor_type: 'agent_bot', actor_id: 'bot-1', entity_type: 'conversation', entity_id: 'conv-6', channel: 'instagram', payload: { text: 'Olá! Sou a Marília, como posso ajudar?' }, created_at: '2025-01-18T15:01:00Z' },
 ];
 
+// ============= SERVER CONSUMPTION MOCK DATA =============
+export interface ServerConsumption {
+  timestamp: string;
+  cpu: number;
+  ram: number;
+  disk: number;
+  network_in: number;
+  network_out: number;
+}
+
+export interface ServerResources {
+  cpu_used: number;
+  cpu_total: number;
+  ram_used: number;
+  ram_total: number;
+  disk_used: number;
+  disk_total: number;
+  network_bandwidth: number;
+  network_limit: number;
+}
+
+// Últimas 24 horas de consumo (dados por hora)
+export const mockServerConsumptionHistory: ServerConsumption[] = Array.from({ length: 24 }, (_, i) => {
+  const date = new Date();
+  date.setHours(date.getHours() - (23 - i));
+  const hour = date.getHours();
+  
+  // Simular picos de uso em horários comerciais
+  const isBusinessHour = hour >= 8 && hour <= 18;
+  const baseUsage = isBusinessHour ? 0.6 : 0.25;
+  const variance = Math.random() * 0.2;
+  
+  return {
+    timestamp: date.toISOString(),
+    cpu: Math.min(95, Math.round((baseUsage + variance) * 100)),
+    ram: Math.min(92, Math.round((baseUsage + 0.1 + variance * 0.5) * 100)),
+    disk: 45 + Math.round(i * 0.3),
+    network_in: Math.round((baseUsage + variance) * 150),
+    network_out: Math.round((baseUsage + variance) * 80),
+  };
+});
+
+// Recursos atuais do servidor
+export const getServerResources = (): ServerResources => ({
+  cpu_used: 72,
+  cpu_total: 100,
+  ram_used: 12.4,
+  ram_total: 16,
+  disk_used: 180,
+  disk_total: 500,
+  network_bandwidth: 245,
+  network_limit: 1000,
+});
+
+// Últimos 7 dias de consumo agregado
+export const mockWeeklyConsumption = [
+  { day: 'Seg', cpu_avg: 65, ram_avg: 72, requests: 12400 },
+  { day: 'Ter', cpu_avg: 71, ram_avg: 74, requests: 14200 },
+  { day: 'Qua', cpu_avg: 68, ram_avg: 71, requests: 13100 },
+  { day: 'Qui', cpu_avg: 74, ram_avg: 78, requests: 15600 },
+  { day: 'Sex', cpu_avg: 69, ram_avg: 73, requests: 13800 },
+  { day: 'Sáb', cpu_avg: 35, ram_avg: 52, requests: 4200 },
+  { day: 'Dom', cpu_avg: 28, ram_avg: 48, requests: 3100 },
+];
+
 // ============= KPI CALCULATIONS =============
 export const getSuperAdminKPIs = (): SuperAdminKPIs => ({
   total_accounts: mockAccounts.length,
