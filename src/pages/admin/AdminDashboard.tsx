@@ -3,7 +3,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import {
   Users,
   MessageSquare,
-  CheckCircle,
   Clock,
   ArrowRightLeft,
 } from 'lucide-react';
@@ -19,15 +18,12 @@ import { BacklogCard } from '@/components/dashboard/BacklogCard';
 import { AgentPerformanceTable } from '@/components/dashboard/AgentPerformanceTable';
 import { QualityCards } from '@/components/dashboard/QualityCards';
 import { EmptyState } from '@/components/dashboard/EmptyState';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Card, CardContent } from '@/components/ui/card';
 
 // Mock data for the dashboard
 const mockDashboardData = {
   kpis: {
     totalLeads: 1248,
     conversasAtivas: 47,
-    conversasResolvidas: 892,
     percentualIA: 68,
     percentualHumano: 32,
     tempoMedioPrimeiraResposta: '2m 14s',
@@ -106,9 +102,7 @@ const mockDashboardData = {
     },
   ],
   qualidade: {
-    conversasReabertas: 23,
     conversasSemResposta: 8,
-    leadsConvertidos: 156,
     taxaAtendimentoVenda: '17.5%',
   },
 };
@@ -192,7 +186,7 @@ export default function AdminDashboard() {
       ) : (
         <>
           {/* KPI Cards - Row 1 */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <KPICard
               title="Total de Leads"
               subtitle="Contatos únicos que tiveram conversa"
@@ -212,15 +206,6 @@ export default function AdminDashboard() {
               isLoading={isLoading}
             />
             <KPICard
-              title="Conversas Resolvidas"
-              subtitle="Atendimentos finalizados"
-              value={data.kpis.conversasResolvidas}
-              icon={CheckCircle}
-              iconColor="text-success"
-              iconBgColor="bg-success/10"
-              isLoading={isLoading}
-            />
-            <KPICard
               title="Taxa de Transbordo"
               subtitle="IA → Humano"
               value={data.kpis.taxaTransbordo}
@@ -232,32 +217,32 @@ export default function AdminDashboard() {
           </div>
 
           {/* KPI Cards - Row 2 (Time metrics + IA vs Human) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <KPICard
-              title="Tempo Médio Primeira Resposta"
-              subtitle="Primeira resposta após mensagem do lead"
-              value={data.kpis.tempoMedioPrimeiraResposta}
-              icon={Clock}
-              iconColor="text-primary"
-              iconBgColor="bg-primary/10"
-              isLoading={isLoading}
-            />
-            <KPICard
-              title="Tempo Médio de Resolução"
-              subtitle="Tempo médio até finalizar atendimento"
-              value={data.kpis.tempoMedioResolucao}
-              icon={Clock}
-              iconColor="text-success"
-              iconBgColor="bg-success/10"
-              isLoading={isLoading}
-            />
-            <div className="sm:col-span-2">
-              <IAvsHumanCard
-                percentualIA={data.kpis.percentualIA}
-                percentualHumano={data.kpis.percentualHumano}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <KPICard
+                title="Tempo Médio Primeira Resposta"
+                subtitle="Primeira resposta após mensagem do lead"
+                value={data.kpis.tempoMedioPrimeiraResposta}
+                icon={Clock}
+                iconColor="text-primary"
+                iconBgColor="bg-primary/10"
+                isLoading={isLoading}
+              />
+              <KPICard
+                title="Tempo Médio de Resolução"
+                subtitle="Tempo médio até finalizar atendimento"
+                value={data.kpis.tempoMedioResolucao}
+                icon={Clock}
+                iconColor="text-success"
+                iconBgColor="bg-success/10"
                 isLoading={isLoading}
               />
             </div>
+            <IAvsHumanCard
+              percentualIA={data.kpis.percentualIA}
+              percentualHumano={data.kpis.percentualHumano}
+              isLoading={isLoading}
+            />
           </div>
 
           {/* Charts Section */}
