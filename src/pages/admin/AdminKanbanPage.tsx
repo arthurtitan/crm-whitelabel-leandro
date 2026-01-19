@@ -1,11 +1,10 @@
 import { useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useFinance } from '@/contexts/FinanceContext';
+import { CreateSaleDialog } from '@/components/finance/CreateSaleDialog';
 import {
-  mockContacts,
   mockFunnels,
   mockFunnelStages,
-  mockLeadFunnelStates,
-  mockConversations,
 } from '@/data/mockData';
 import { Contact, FunnelStage } from '@/types/crm';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,7 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Search, Phone, Mail, MessageSquare, GripVertical, Clock } from 'lucide-react';
+import { Search, Phone, Mail, MessageSquare, GripVertical, Clock, DollarSign } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
@@ -33,6 +32,7 @@ interface KanbanLead extends Contact {
 
 export default function AdminKanbanPage() {
   const { account } = useAuth();
+  const { contacts, leadFunnelStates, updateLeadStage, getContactFunnelStageOrder } = useFinance();
   const accountId = account?.id || 'acc-1';
 
   // Get funnel for this account
@@ -41,22 +41,15 @@ export default function AdminKanbanPage() {
     .filter((s) => s.funnel_id === funnel?.id)
     .sort((a, b) => a.ordem - b.ordem);
 
-  // Build leads with their stage
-  const [leadStates, setLeadStates] = useState(
-    mockLeadFunnelStates.filter((lfs) =>
-      mockContacts.some((c) => c.id === lfs.contact_id && c.account_id === accountId)
-    )
-  );
-
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedLead, setSelectedLead] = useState<KanbanLead | null>(null);
   const [draggedLead, setDraggedLead] = useState<string | null>(null);
+  const [saleContactId, setSaleContactId] = useState<string | null>(null);
 
   const leads: KanbanLead[] = useMemo(() => {
-    return mockContacts
-      .filter((c) => c.account_id === accountId)
+    return contacts
       .map((contact) => {
-        const state = leadStates.find((lfs) => lfs.contact_id === contact.id);
+        const state = leadFunnelStates.find((lfs) => lfs.contact_id === contact.id);
         return {
           ...contact,
           stage_id: state?.funnel_stage_id || null,
@@ -68,7 +61,7 @@ export default function AdminKanbanPage() {
           lead.nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
           lead.telefone?.includes(searchTerm)
       );
-  }, [accountId, leadStates, searchTerm]);
+  }, [contacts, leadFunnelStates, searchTerm]);
 
   const getLeadsByStage = (stageId: string) => {
     return leads.filter((lead) => lead.stage_id === stageId);
@@ -85,31 +78,13 @@ export default function AdminKanbanPage() {
   const handleDrop = (stageId: string) => {
     if (!draggedLead) return;
 
-    // Update lead state
-    setLeadStates((prev) => {
-      const existing = prev.find((lfs) => lfs.contact_id === draggedLead);
-      if (existing) {
-        return prev.map((lfs) =>
-          lfs.contact_id === draggedLead
-            ? { ...lfs, funnel_stage_id: stageId, updated_at: new Date().toISOString() }
-            : lfs
-        );
-      }
-      return [
-        ...prev,
-        {
-          contact_id: draggedLead,
-          funnel_stage_id: stageId,
-          updated_at: new Date().toISOString(),
-        },
-      ];
-    });
+    // Update lead stage via context
+    updateLeadStage(draggedLead, stageId);
 
     const lead = leads.find((l) => l.id === draggedLead);
     const stage = stages.find((s) => s.id === stageId);
     toast.success(`${lead?.nome} movido para ${stage?.nome}`);
     
-    // Event: lead.stage.changed would be created here
     setDraggedLead(null);
   };
 
@@ -134,6 +109,17 @@ export default function AdminKanbanPage() {
       default:
         return <Badge variant="secondary" className="text-xs">Manual</Badge>;
     }
+  };
+
+  // Check if lead is eligible for sale (ordem >= 3)
+  const canCreateSaleForLead = (leadId: string) => {
+    const stageOrder = getContactFunnelStageOrder(leadId);
+    return stageOrder >= 3;
+  };
+
+  const handleOpenSaleDialog = (leadId: string) => {
+    setSaleContactId(leadId);
+    setSelectedLead(null);
   };
 
   return (
@@ -296,16 +282,38 @@ export default function AdminKanbanPage() {
                 </div>
               </div>
 
-              <div className="pt-4 border-t">
-                <Button className="w-full gap-2">
+              <div className="pt-4 border-t space-y-2">
+                <Button className="w-full gap-2" variant="outline">
                   <MessageSquare className="w-4 h-4" />
                   Abrir Conversa no Chatwoot
                 </Button>
+                {canCreateSaleForLead(selectedLead.id) && (
+                  <Button 
+                    className="w-full gap-2" 
+                    onClick={() => handleOpenSaleDialog(selectedLead.id)}
+                  >
+                    <DollarSign className="w-4 h-4" />
+                    Registrar Venda
+                  </Button>
+                )}
+                {!canCreateSaleForLead(selectedLead.id) && (
+                  <p className="text-xs text-muted-foreground text-center">
+                    Lead precisa estar em etapa avançada do funil para registrar vendas
+                  </p>
+                )}
               </div>
             </div>
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Sale Dialog (controlled externally) */}
+      {saleContactId && (
+        <CreateSaleDialog 
+          preSelectedContactId={saleContactId}
+          onClose={() => setSaleContactId(null)}
+        />
+      )}
     </div>
   );
 }
