@@ -1,11 +1,11 @@
 import { createContext, useContext, useState, useMemo, ReactNode, useCallback } from 'react';
-import { Sale, Contact, LeadFunnelState, CRMEvent, SaleStatus, PaymentMethod } from '@/types/crm';
+import { Sale, Contact, LeadFunnelState, SaleStatus, PaymentMethod, Product, ContactOrigin } from '@/types/crm';
 import { 
   mockSales, 
   mockContacts, 
   mockLeadFunnelStates, 
-  mockEvents,
-  mockFunnelStages 
+  mockFunnelStages,
+  mockProducts 
 } from '@/data/mockData';
 
 // Event types for finance
@@ -17,10 +17,27 @@ interface FinanceEvent {
   createdAt: string;
 }
 
+interface CreateContactData {
+  nome: string;
+  telefone: string;
+  email: string | null;
+  origem: string;
+}
+
+interface CreateSaleData {
+  contactId: string;
+  productId: string;
+  valor: number;
+  metodoPagamento: PaymentMethod;
+  responsavelId: string;
+  convenioNome?: string;
+}
+
 interface FinanceContextType {
   // State
   sales: Sale[];
   contacts: Contact[];
+  products: Product[];
   leadFunnelStates: LeadFunnelState[];
   events: FinanceEvent[];
   
@@ -29,6 +46,7 @@ interface FinanceContextType {
   
   // Actions
   createSale: (data: CreateSaleData) => { success: boolean; error?: string };
+  createContact: (data: CreateContactData) => { success: boolean; error?: string; contactId?: string };
   markAsPaid: (saleId: string) => void;
   cancelSale: (saleId: string) => void;
   refundSale: (saleId: string, reason: string) => void;
@@ -40,35 +58,18 @@ interface FinanceContextType {
 }
 
 interface FinanceKPIs {
-  // Main KPIs
   faturamentoBruto: number;
   ticketMedio: number;
   totalVendas: number;
-  
-  // By status
   vendasPagas: { count: number; valor: number };
   vendasPendentes: { count: number; valor: number };
   vendasCanceladas: { count: number; valor: number };
   vendasEstornadas: { count: number; valor: number };
-  
-  // By payment method
   porMetodoPagamento: { method: PaymentMethod | 'none'; count: number; valor: number }[];
-  
-  // Funnel conversion
   leadsConvertidos: number;
   vendasCriadas: number;
   vendasPagasCount: number;
-  
-  // Time series (last 7 days)
   faturamentoPorDia: { date: string; valor: number }[];
-}
-
-interface CreateSaleData {
-  contactId: string;
-  productId: string;
-  valor: number;
-  metodoPagamento: PaymentMethod | null;
-  responsavelId: string;
 }
 
 const FinanceContext = createContext<FinanceContextType | null>(null);
@@ -219,9 +220,6 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
         paid_at: null,
         refunded_at: null,
       };
-        paid_at: null,
-        refunded_at: null,
-      };
 
       setSales((prev) => [newSale, ...prev]);
       createEvent('sale.created', newSale.id, { 
@@ -356,10 +354,12 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
   const value: FinanceContextType = {
     sales,
     contacts,
+    products,
     leadFunnelStates,
     events,
     kpis,
     createSale,
+    createContact,
     markAsPaid,
     cancelSale,
     refundSale,
