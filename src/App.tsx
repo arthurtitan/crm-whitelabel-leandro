@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { FinanceProvider } from "@/contexts/FinanceContext";
+import { TagProvider } from "@/contexts/TagContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 
 // Pages
@@ -30,12 +31,15 @@ import AdminFinancePage from "./pages/admin/AdminFinancePage";
 
 const queryClient = new QueryClient();
 
-// Wrapper component to provide FinanceContext with accountId from AuthContext
+// Wrapper component to provide FinanceContext and TagContext with accountId from AuthContext
 function AdminFinanceWrapper({ children }: { children: React.ReactNode }) {
   const { account } = useAuth();
+  const accountId = account?.id || 'acc-1';
   return (
-    <FinanceProvider accountId={account?.id || 'acc-1'}>
-      {children}
+    <FinanceProvider accountId={accountId}>
+      <TagProvider accountId={accountId}>
+        {children}
+      </TagProvider>
     </FinanceProvider>
   );
 }

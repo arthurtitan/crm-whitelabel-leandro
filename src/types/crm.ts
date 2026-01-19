@@ -116,6 +116,44 @@ export interface LeadFunnelHistory {
   created_at: string;
 }
 
+// ============= TAGS / ETIQUETAS =============
+
+export type TagType = 'stage' | 'operational';
+
+export interface Tag {
+  id: string;
+  account_id: string;
+  name: string;
+  slug: string; // ex: "qualificado", "urgente"
+  type: TagType;
+  color: string;
+  linked_stage_id: string | null; // Se type === 'stage', qual stage está vinculada
+  ativo: boolean;
+  created_at: string;
+}
+
+export interface LeadTag {
+  id: string;
+  contact_id: string;
+  tag_id: string;
+  applied_by_type: ActorType;
+  applied_by_id: string | null;
+  source: 'kanban' | 'chatwoot' | 'system';
+  created_at: string;
+}
+
+export interface TagHistory {
+  id: string;
+  contact_id: string;
+  tag_id: string;
+  action: 'added' | 'removed' | 'stage_created';
+  actor_type: ActorType;
+  actor_id: string | null;
+  source: 'kanban' | 'chatwoot' | 'system';
+  reason: string | null;
+  created_at: string;
+}
+
 // ============= LEAD NOTES =============
 
 export interface LeadNote {
@@ -200,6 +238,10 @@ export type EventType =
   | 'lead.stage.changed'
   | 'funnel.stage.created'
   | 'funnel.stage.reordered'
+  // Tags
+  | 'tag.added'
+  | 'tag.removed'
+  | 'tag.stage.auto_created'
   // Sales
   | 'sale.created'
   | 'sale.paid'
