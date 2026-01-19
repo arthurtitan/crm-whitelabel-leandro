@@ -26,6 +26,7 @@ import {
   MessageSquare,
   DollarSign,
   Activity,
+  Wallet,
   Building2,
   Settings,
 } from 'lucide-react';
@@ -40,6 +41,7 @@ const adminNavItems = [
   { title: 'Leads', href: '/admin/leads', icon: Users },
   { title: 'Conversas', href: '/admin/conversations', icon: MessageSquare },
   { title: 'Vendas', href: '/admin/sales', icon: DollarSign },
+  { title: 'Financeiro', href: '/admin/finance', icon: Wallet },
   { title: 'Eventos', href: '/admin/events', icon: Activity },
 ];
 

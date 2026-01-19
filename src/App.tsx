@@ -25,6 +25,7 @@ import AdminLeadsPage from "./pages/admin/AdminLeadsPage";
 import AdminSalesPage from "./pages/admin/AdminSalesPage";
 import AdminEventsPage from "./pages/admin/AdminEventsPage";
 import AdminConversationsPage from "./pages/admin/AdminConversationsPage";
+import AdminFinancePage from "./pages/admin/AdminFinancePage";
 
 const queryClient = new QueryClient();
 
@@ -140,6 +141,16 @@ const App = () => (
                   <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
                     <AdminLayout>
                       <AdminEventsPage />
+                    </AdminLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/finance"
+                element={
+                  <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+                    <AdminLayout>
+                      <AdminFinancePage />
                     </AdminLayout>
                   </ProtectedRoute>
                 }
