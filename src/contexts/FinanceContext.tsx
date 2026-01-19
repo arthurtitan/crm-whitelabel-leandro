@@ -38,6 +38,11 @@ interface CreateSaleData {
   metodoPagamento: PaymentMethod;
   responsavelId: string;
   convenioNome?: string;
+  /**
+   * Usado apenas quando a venda é criada no mesmo fluxo do cadastro do contato.
+   * Evita falha de validação por causa do setState assíncrono (contato/etapa ainda não refletem no contexto).
+   */
+  skipValidation?: boolean;
 }
 
 interface FinanceContextType {
@@ -348,9 +353,11 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
   // Actions
   const createSale = useCallback(
     (data: CreateSaleData): { success: boolean; error?: string } => {
-      const validation = canCreateSale(data.contactId);
-      if (!validation.allowed) {
-        return { success: false, error: validation.reason };
+      if (!data.skipValidation) {
+        const validation = canCreateSale(data.contactId);
+        if (!validation.allowed) {
+          return { success: false, error: validation.reason };
+        }
       }
 
       // Check if this is a recurring sale
