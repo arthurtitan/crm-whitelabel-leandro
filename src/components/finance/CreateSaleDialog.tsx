@@ -162,7 +162,7 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
       contactId = newContactResult.contactId;
     }
 
-    // Create sale - for new contacts, skip validation since they're auto-added to Qualificado
+    // Create sale
     const result = createSale({
       contactId,
       productId: formData.productId,
@@ -170,6 +170,7 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
       metodoPagamento: formData.metodoPagamento as PaymentMethod,
       responsavelId: user?.id || 'user-admin-1',
       convenioNome: formData.metodoPagamento === 'convenio' ? formData.convenioNome : undefined,
+      skipValidation: isCreatingNewContact,
     });
 
     if (result.success) {
