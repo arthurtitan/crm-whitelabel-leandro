@@ -465,7 +465,8 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
                 {availablePaymentMethods.map((method) => (
                   <SelectItem key={method} value={method}>
                     {method === 'pix' && 'PIX'}
-                    {method === 'cartao' && 'Cartão'}
+                    {method === 'debito' && 'Débito'}
+                    {method === 'credito' && 'Crédito'}
                     {method === 'boleto' && 'Boleto'}
                     {method === 'dinheiro' && 'Dinheiro'}
                     {method === 'convenio' && 'Convênio'}

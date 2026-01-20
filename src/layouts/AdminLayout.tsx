@@ -29,6 +29,7 @@ import {
   Wallet,
   Building2,
   Settings,
+  Package,
 } from 'lucide-react';
 
 interface AdminLayoutProps {
@@ -42,6 +43,7 @@ const adminNavItems = [
   { title: 'Conversas', href: '/admin/conversations', icon: MessageSquare },
   { title: 'Vendas', href: '/admin/sales', icon: DollarSign },
   { title: 'Financeiro', href: '/admin/finance', icon: Wallet },
+  { title: 'Produtos', href: '/admin/products', icon: Package },
   { title: 'Eventos', href: '/admin/events', icon: Activity },
 ];
 

@@ -83,7 +83,8 @@ export function SalesTable({ isLoading = false }: SalesTableProps) {
   const getPaymentMethodBadge = (method: PaymentMethod | null) => {
     const labels: Record<PaymentMethod, string> = {
       pix: 'PIX',
-      cartao: 'Cartão',
+      debito: 'Débito',
+      credito: 'Crédito',
       boleto: 'Boleto',
       dinheiro: 'Dinheiro',
       convenio: 'Convênio',
