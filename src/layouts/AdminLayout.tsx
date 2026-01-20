@@ -30,6 +30,8 @@ import {
   Building2,
   Settings,
   Package,
+  Calendar,
+  Plug,
 } from 'lucide-react';
 
 interface AdminLayoutProps {
@@ -41,10 +43,12 @@ const adminNavItems = [
   { title: 'Kanban', href: '/admin/kanban', icon: Kanban },
   { title: 'Leads', href: '/admin/leads', icon: Users },
   { title: 'Conversas', href: '/admin/conversations', icon: MessageSquare },
+  { title: 'Agenda', href: '/admin/agenda', icon: Calendar },
   { title: 'Vendas', href: '/admin/sales', icon: DollarSign },
   { title: 'Financeiro', href: '/admin/finance', icon: Wallet },
   { title: 'Produtos', href: '/admin/products', icon: Package },
   { title: 'Eventos', href: '/admin/events', icon: Activity },
+  { title: 'Integrações', href: '/admin/integrations', icon: Plug },
 ];
 
 export default function AdminLayout({ children }: AdminLayoutProps) {

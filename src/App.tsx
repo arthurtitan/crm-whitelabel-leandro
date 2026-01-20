@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { FinanceProvider } from "@/contexts/FinanceContext";
 import { TagProvider } from "@/contexts/TagContext";
 import { ProductProvider } from "@/contexts/ProductContext";
+import { CalendarProvider } from "@/contexts/CalendarContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 
 // Pages
@@ -30,10 +31,12 @@ import AdminEventsPage from "./pages/admin/AdminEventsPage";
 import AdminConversationsPage from "./pages/admin/AdminConversationsPage";
 import AdminFinancePage from "./pages/admin/AdminFinancePage";
 import AdminProductsPage from "./pages/admin/AdminProductsPage";
+import AdminIntegrationsPage from "./pages/admin/AdminIntegrationsPage";
+import AdminAgendaPage from "./pages/admin/AdminAgendaPage";
 
 const queryClient = new QueryClient();
 
-// Wrapper component to provide FinanceContext and TagContext with accountId from AuthContext
+// Wrapper component to provide contexts with accountId from AuthContext
 function AdminFinanceWrapper({ children }: { children: React.ReactNode }) {
   const { account } = useAuth();
   const accountId = account?.id || 'acc-1';
@@ -41,7 +44,9 @@ function AdminFinanceWrapper({ children }: { children: React.ReactNode }) {
     <FinanceProvider accountId={accountId}>
       <ProductProvider accountId={accountId}>
         <TagProvider accountId={accountId}>
-          {children}
+          <CalendarProvider accountId={accountId}>
+            {children}
+          </CalendarProvider>
         </TagProvider>
       </ProductProvider>
     </FinanceProvider>
@@ -200,7 +205,31 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
-              {/* Agent Routes - Reuse Admin Layout with agent access */}
+              <Route
+                path="/admin/integrations"
+                element={
+                  <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+                    <AdminFinanceWrapper>
+                      <AdminLayout>
+                        <AdminIntegrationsPage />
+                      </AdminLayout>
+                    </AdminFinanceWrapper>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/agenda"
+                element={
+                  <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+                    <AdminFinanceWrapper>
+                      <AdminLayout>
+                        <AdminAgendaPage />
+                      </AdminLayout>
+                    </AdminFinanceWrapper>
+                  </ProtectedRoute>
+                }
+              />
+              {/* Agent Routes */}
               <Route
                 path="/agent"
                 element={
