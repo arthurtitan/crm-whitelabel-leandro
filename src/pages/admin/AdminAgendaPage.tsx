@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CalendarView, GoogleConnectModal, IntegrationCard } from '@/components/calendar';
+import { CalendarView, GoogleConnectModal } from '@/components/calendar';
 import { useCalendar } from '@/contexts/CalendarContext';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
@@ -12,7 +12,6 @@ import { toast } from 'sonner';
 export default function AdminAgendaPage() {
   const { selectedEvent, selectEvent, deleteEvent, isConnected, connection, connectGoogle, disconnectGoogle, syncNow } = useCalendar();
   const [showConnectModal, setShowConnectModal] = useState(false);
-  const [showSyncPanel, setShowSyncPanel] = useState(true);
 
   const isSyncing = connection.status === 'syncing';
   const connectionStatus = connection.status === 'connecting' ? 'connecting' : 
@@ -50,39 +49,30 @@ export default function AdminAgendaPage() {
         <p className="text-muted-foreground">
           {isConnected ? 'Sincronizado com Google Calendar' : 'Gerencie seus agendamentos'}
         </p>
-        <Button
-          variant="outline"
-          size="sm"
-          className="mt-4"
-          onClick={() => setShowSyncPanel(!showSyncPanel)}
-        >
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Sincronizar
-        </Button>
-      </div>
-
-      {/* Google Calendar Integration Panel */}
-      {showSyncPanel && (
-        <div className="flex justify-center">
-          <div className="w-full max-w-md">
-            <IntegrationCard
-              icon={<Calendar className="w-5 h-5" />}
-              title="Google Calendar"
-              description="Sincronize seus eventos e disponibilidade com o Google Calendar"
-              status={connectionStatus as any}
-              connectedInfo={isConnected ? {
-                identifier: connection.email || 'Conta Google',
-                connectedAt: connection.connectedAt || new Date().toISOString(),
-                lastSync: connection.lastSync,
-              } : undefined}
-              onConnect={() => setShowConnectModal(true)}
-              onDisconnect={handleDisconnect}
-              onSync={syncNow}
-              isSyncing={isSyncing}
-            />
+        {!isConnected ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-4"
+            onClick={() => setShowConnectModal(true)}
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Sincronizar
+          </Button>
+        ) : (
+          <div className="flex items-center gap-2 mt-4">
+            <Badge variant="outline" className="text-success border-success">
+              ✓ Conectado: {connection.email}
+            </Badge>
+            <Button variant="ghost" size="sm" onClick={syncNow} disabled={isSyncing}>
+              <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+            </Button>
+            <Button variant="ghost" size="sm" onClick={handleDisconnect}>
+              Desconectar
+            </Button>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       <CalendarView />
 
