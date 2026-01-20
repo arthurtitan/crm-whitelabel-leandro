@@ -31,7 +31,6 @@ import {
   Settings,
   Package,
   Calendar,
-  Plug,
 } from 'lucide-react';
 
 interface AdminLayoutProps {
@@ -48,7 +47,6 @@ const adminNavItems = [
   { title: 'Financeiro', href: '/admin/finance', icon: Wallet },
   { title: 'Produtos', href: '/admin/products', icon: Package },
   { title: 'Eventos', href: '/admin/events', icon: Activity },
-  { title: 'Integrações', href: '/admin/integrations', icon: Plug },
 ];
 
 export default function AdminLayout({ children }: AdminLayoutProps) {

@@ -1,16 +1,29 @@
 import { useState } from 'react';
-import { CalendarView } from '@/components/calendar';
+import { CalendarView, GoogleConnectModal, IntegrationCard } from '@/components/calendar';
 import { useCalendar } from '@/contexts/CalendarContext';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Calendar, Clock, MapPin, Link2, User, Trash2, Pencil, Copy, ExternalLink } from 'lucide-react';
+import { Calendar, Clock, MapPin, Link2, User, Trash2, Pencil, Copy, ExternalLink, Settings } from 'lucide-react';
 import { toast } from 'sonner';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 
 export default function AdminAgendaPage() {
-  const { selectedEvent, selectEvent, deleteEvent, isConnected } = useCalendar();
+  const { selectedEvent, selectEvent, deleteEvent, isConnected, connection, connectGoogle, disconnectGoogle, syncNow } = useCalendar();
+  const [showConnectModal, setShowConnectModal] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  const isSyncing = connection.status === 'syncing';
+  const connectionStatus = connection.status === 'connecting' ? 'connecting' : 
+                           connection.status === 'syncing' ? 'connected' :
+                           connection.status === 'connected' ? 'connected' :
+                           connection.status === 'error' ? 'error' : 'disconnected';
 
   const handleCopyLink = () => {
     if (selectedEvent?.meetingLink) {
@@ -25,6 +38,16 @@ export default function AdminAgendaPage() {
     }
   };
 
+  const handleConnect = async () => {
+    await connectGoogle();
+    setShowConnectModal(false);
+  };
+
+  const handleDisconnect = async () => {
+    await disconnectGoogle();
+    toast.success('Google Calendar desconectado');
+  };
+
   return (
     <div className="space-y-6 animate-fade-in h-[calc(100vh-12rem)]">
       <div className="flex items-center justify-between">
@@ -34,9 +57,47 @@ export default function AdminAgendaPage() {
             {isConnected ? 'Sincronizado com Google Calendar' : 'Gerencie seus agendamentos'}
           </p>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setSettingsOpen(!settingsOpen)}
+        >
+          <Settings className="w-4 h-4 mr-2" />
+          Configurações
+        </Button>
       </div>
 
+      {/* Google Calendar Integration Settings */}
+      <Collapsible open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <CollapsibleContent className="space-y-4">
+          <div className="max-w-md">
+            <IntegrationCard
+              icon={<Calendar className="w-5 h-5" />}
+              title="Google Calendar"
+              description="Sincronize seus eventos e disponibilidade com o Google Calendar"
+              status={connectionStatus as any}
+              connectedInfo={isConnected ? {
+                identifier: connection.email || 'Conta Google',
+                connectedAt: connection.connectedAt || new Date().toISOString(),
+                lastSync: connection.lastSync,
+              } : undefined}
+              onConnect={() => setShowConnectModal(true)}
+              onDisconnect={handleDisconnect}
+              onSync={syncNow}
+              isSyncing={isSyncing}
+            />
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+
       <CalendarView />
+
+      {/* Google Connect Modal */}
+      <GoogleConnectModal
+        open={showConnectModal}
+        onOpenChange={setShowConnectModal}
+        onConnect={handleConnect}
+      />
 
       {/* Event Details Sheet */}
       <Sheet open={!!selectedEvent} onOpenChange={(open) => !open && selectEvent(null)}>

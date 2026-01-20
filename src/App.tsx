@@ -31,7 +31,6 @@ import AdminEventsPage from "./pages/admin/AdminEventsPage";
 import AdminConversationsPage from "./pages/admin/AdminConversationsPage";
 import AdminFinancePage from "./pages/admin/AdminFinancePage";
 import AdminProductsPage from "./pages/admin/AdminProductsPage";
-import AdminIntegrationsPage from "./pages/admin/AdminIntegrationsPage";
 import AdminAgendaPage from "./pages/admin/AdminAgendaPage";
 
 const queryClient = new QueryClient();
@@ -200,18 +199,6 @@ const App = () => (
                     <AdminFinanceWrapper>
                       <AdminLayout>
                         <AdminProductsPage />
-                      </AdminLayout>
-                    </AdminFinanceWrapper>
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/integrations"
-                element={
-                  <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
-                    <AdminFinanceWrapper>
-                      <AdminLayout>
-                        <AdminIntegrationsPage />
                       </AdminLayout>
                     </AdminFinanceWrapper>
                   </ProtectedRoute>
