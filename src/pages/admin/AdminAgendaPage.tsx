@@ -116,20 +116,21 @@ export default function AdminAgendaPage() {
                     </div>
                   )}
                   {selectedEvent.meetingLink && (
-                    <div className="flex items-center gap-3">
-                      <Link2 className="w-5 h-5 text-muted-foreground" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm truncate text-muted-foreground">{selectedEvent.meetingLink}</p>
-                        <div className="flex gap-2 mt-1">
-                          <Button variant="outline" size="sm" onClick={handleCopyLink}>
-                            <Copy className="w-3 h-3 mr-1" /> Copiar
-                          </Button>
-                          <Button variant="outline" size="sm" asChild>
-                            <a href={selectedEvent.meetingLink} target="_blank" rel="noopener noreferrer">
-                              <ExternalLink className="w-3 h-3 mr-1" /> Abrir
-                            </a>
-                          </Button>
-                        </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-3">
+                        <Link2 className="w-5 h-5 text-muted-foreground" />
+                        <span className="font-medium">Google Meet</span>
+                      </div>
+                      <p className="text-sm text-muted-foreground ml-8 break-all">{selectedEvent.meetingLink}</p>
+                      <div className="flex gap-2 ml-8">
+                        <Button variant="outline" size="sm" onClick={handleCopyLink}>
+                          <Copy className="w-3 h-3 mr-1" /> Copiar
+                        </Button>
+                        <Button variant="outline" size="sm" asChild>
+                          <a href={selectedEvent.meetingLink} target="_blank" rel="noopener noreferrer">
+                            <ExternalLink className="w-3 h-3 mr-1" /> Abrir
+                          </a>
+                        </Button>
                       </div>
                     </div>
                   )}
@@ -143,8 +144,10 @@ export default function AdminAgendaPage() {
                         <div key={idx} className="flex items-center gap-2 text-sm">
                           <User className="w-4 h-4 text-muted-foreground" />
                           <span>{attendee.name}</span>
-                          <Badge variant="outline" className="text-xs">
-                            {attendee.status === 'confirmed' ? '✅ Confirmado' : '⏳ Pendente'}
+                          <Badge variant="outline" className={attendee.status === 'confirmed' ? 'text-success border-success' : ''}>
+                            {attendee.status === 'confirmed' ? '✓ Confirmado' : 
+                             attendee.status === 'declined' ? '✗ Recusado' :
+                             attendee.status === 'tentative' ? '? Talvez' : '⏳ Pendente'}
                           </Badge>
                         </div>
                       ))}
@@ -155,7 +158,7 @@ export default function AdminAgendaPage() {
                 {selectedEvent.notes && (
                   <div>
                     <h4 className="font-medium mb-2">Observações</h4>
-                    <p className="text-sm text-muted-foreground">{selectedEvent.notes}</p>
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">{selectedEvent.notes}</p>
                   </div>
                 )}
               </div>
