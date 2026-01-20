@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { FinanceProvider } from "@/contexts/FinanceContext";
 import { TagProvider } from "@/contexts/TagContext";
+import { ProductProvider } from "@/contexts/ProductContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 
 // Pages
@@ -28,6 +29,7 @@ import AdminSalesPage from "./pages/admin/AdminSalesPage";
 import AdminEventsPage from "./pages/admin/AdminEventsPage";
 import AdminConversationsPage from "./pages/admin/AdminConversationsPage";
 import AdminFinancePage from "./pages/admin/AdminFinancePage";
+import AdminProductsPage from "./pages/admin/AdminProductsPage";
 
 const queryClient = new QueryClient();
 
@@ -37,9 +39,11 @@ function AdminFinanceWrapper({ children }: { children: React.ReactNode }) {
   const accountId = account?.id || 'acc-1';
   return (
     <FinanceProvider accountId={accountId}>
-      <TagProvider accountId={accountId}>
-        {children}
-      </TagProvider>
+      <ProductProvider accountId={accountId}>
+        <TagProvider accountId={accountId}>
+          {children}
+        </TagProvider>
+      </ProductProvider>
     </FinanceProvider>
   );
 }
@@ -184,7 +188,18 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
-
+              <Route
+                path="/admin/products"
+                element={
+                  <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+                    <AdminFinanceWrapper>
+                      <AdminLayout>
+                        <AdminProductsPage />
+                      </AdminLayout>
+                    </AdminFinanceWrapper>
+                  </ProtectedRoute>
+                }
+              />
               {/* Agent Routes - Reuse Admin Layout with agent access */}
               <Route
                 path="/agent"

@@ -7,7 +7,7 @@ export type UserStatus = 'active' | 'inactive' | 'suspended';
 export type ConversationStatus = 'open' | 'pending' | 'resolved';
 export type AssigneeType = 'user' | 'agent_bot';
 export type SaleStatus = 'pending' | 'paid' | 'refunded';
-export type PaymentMethod = 'pix' | 'boleto' | 'cartao' | 'dinheiro' | 'convenio';
+export type PaymentMethod = 'pix' | 'boleto' | 'debito' | 'credito' | 'dinheiro' | 'convenio';
 export type ActorType = 'user' | 'agent_bot' | 'system' | 'external';
 export type TransactionType = 'charge' | 'refund';
 export type ContactOrigin = 'whatsapp' | 'instagram' | 'site' | 'manual';
@@ -189,9 +189,10 @@ export interface Product {
   nome: string;
   valor_padrao: number;
   metodos_pagamento: PaymentMethod[];
-  convenio_nome?: string | null;
+  convenios_aceitos: string[];
   ativo: boolean;
   created_at: string;
+  updated_at: string;
 }
 
 export interface Sale {

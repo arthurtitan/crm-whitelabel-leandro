@@ -17,7 +17,8 @@ interface PaymentMethodChartProps {
 
 const COLORS: Record<PaymentMethod | 'none', string> = {
   pix: 'hsl(var(--success))',
-  cartao: 'hsl(var(--primary))',
+  debito: 'hsl(220 70% 50%)',
+  credito: 'hsl(var(--primary))',
   boleto: 'hsl(var(--warning))',
   dinheiro: 'hsl(142 71% 45%)',
   convenio: 'hsl(280 65% 60%)',
@@ -26,7 +27,8 @@ const COLORS: Record<PaymentMethod | 'none', string> = {
 
 const LABELS: Record<PaymentMethod | 'none', string> = {
   pix: 'PIX',
-  cartao: 'Cartão',
+  debito: 'Débito',
+  credito: 'Crédito',
   boleto: 'Boleto',
   dinheiro: 'Dinheiro',
   convenio: 'Convênio',
@@ -35,7 +37,8 @@ const LABELS: Record<PaymentMethod | 'none', string> = {
 
 const chartConfig = {
   pix: { label: 'PIX', color: COLORS.pix },
-  cartao: { label: 'Cartão', color: COLORS.cartao },
+  debito: { label: 'Débito', color: COLORS.debito },
+  credito: { label: 'Crédito', color: COLORS.credito },
   boleto: { label: 'Boleto', color: COLORS.boleto },
   dinheiro: { label: 'Dinheiro', color: COLORS.dinheiro },
   convenio: { label: 'Convênio', color: COLORS.convenio },

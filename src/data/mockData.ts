@@ -228,18 +228,18 @@ export const mockConversations: Conversation[] = [
 
 // ============= PRODUCTS =============
 export const mockProducts: Product[] = [
-  { id: 'prod-1', account_id: 'acc-1', nome: 'Consulta Inicial', valor_padrao: 350.00, metodos_pagamento: ['pix', 'cartao', 'dinheiro'], ativo: true, created_at: '2024-06-15T10:00:00Z' },
-  { id: 'prod-2', account_id: 'acc-1', nome: 'Acompanhamento Mensal', valor_padrao: 280.00, metodos_pagamento: ['pix', 'cartao', 'boleto'], ativo: true, created_at: '2024-06-15T10:00:00Z' },
-  { id: 'prod-3', account_id: 'acc-1', nome: 'Avaliação Completa', valor_padrao: 950.00, metodos_pagamento: ['pix', 'cartao', 'boleto', 'convenio'], convenio_nome: 'Unimed', ativo: true, created_at: '2024-06-15T10:00:00Z' },
-  { id: 'prod-4', account_id: 'acc-1', nome: 'Procedimento Especial', valor_padrao: 1500.00, metodos_pagamento: ['pix', 'cartao'], ativo: true, created_at: '2024-06-15T10:00:00Z' },
-  { id: 'prod-5', account_id: 'acc-1', nome: 'Retorno', valor_padrao: 150.00, metodos_pagamento: ['pix', 'cartao', 'dinheiro', 'convenio'], convenio_nome: null, ativo: true, created_at: '2024-06-15T10:00:00Z' },
-  { id: 'prod-6', account_id: 'acc-2', nome: 'Consultoria Tech', valor_padrao: 5000.00, metodos_pagamento: ['pix', 'cartao', 'boleto'], ativo: true, created_at: '2024-08-20T14:00:00Z' },
+  { id: 'prod-1', account_id: 'acc-1', nome: 'Consulta Inicial', valor_padrao: 350.00, metodos_pagamento: ['pix', 'credito', 'dinheiro'], convenios_aceitos: [], ativo: true, created_at: '2024-06-15T10:00:00Z', updated_at: '2024-06-15T10:00:00Z' },
+  { id: 'prod-2', account_id: 'acc-1', nome: 'Acompanhamento Mensal', valor_padrao: 280.00, metodos_pagamento: ['pix', 'credito', 'boleto'], convenios_aceitos: [], ativo: true, created_at: '2024-06-15T10:00:00Z', updated_at: '2024-06-15T10:00:00Z' },
+  { id: 'prod-3', account_id: 'acc-1', nome: 'Avaliação Completa', valor_padrao: 950.00, metodos_pagamento: ['pix', 'credito', 'boleto', 'convenio'], convenios_aceitos: ['Unimed', 'Bradesco Saúde', 'Amil'], ativo: true, created_at: '2024-06-15T10:00:00Z', updated_at: '2024-06-15T10:00:00Z' },
+  { id: 'prod-4', account_id: 'acc-1', nome: 'Procedimento Especial', valor_padrao: 1500.00, metodos_pagamento: ['pix', 'credito', 'debito'], convenios_aceitos: [], ativo: true, created_at: '2024-06-15T10:00:00Z', updated_at: '2024-06-15T10:00:00Z' },
+  { id: 'prod-5', account_id: 'acc-1', nome: 'Retorno', valor_padrao: 150.00, metodos_pagamento: ['pix', 'credito', 'dinheiro', 'convenio'], convenios_aceitos: ['Unimed', 'SulAmérica'], ativo: true, created_at: '2024-06-15T10:00:00Z', updated_at: '2024-06-15T10:00:00Z' },
+  { id: 'prod-6', account_id: 'acc-2', nome: 'Consultoria Tech', valor_padrao: 5000.00, metodos_pagamento: ['pix', 'credito', 'boleto'], convenios_aceitos: [], ativo: true, created_at: '2024-08-20T14:00:00Z', updated_at: '2024-08-20T14:00:00Z' },
 ];
 
 // ============= SALES =============
 export const mockSales: Sale[] = [
   { id: 'sale-1', account_id: 'acc-1', contact_id: 'contact-1', product_id: 'prod-4', valor: 1500.00, status: 'paid', metodo_pagamento: 'pix', responsavel_id: 'user-agent-1', created_at: '2025-01-10T12:00:00Z', paid_at: '2025-01-10T12:05:00Z', refunded_at: null },
-  { id: 'sale-2', account_id: 'acc-1', contact_id: 'contact-6', product_id: 'prod-1', valor: 2800.00, status: 'paid', metodo_pagamento: 'cartao', responsavel_id: 'user-agent-1', created_at: '2025-01-19T10:30:00Z', paid_at: '2025-01-19T10:35:00Z', refunded_at: null },
+  { id: 'sale-2', account_id: 'acc-1', contact_id: 'contact-6', product_id: 'prod-1', valor: 2800.00, status: 'paid', metodo_pagamento: 'credito', responsavel_id: 'user-agent-1', created_at: '2025-01-19T10:30:00Z', paid_at: '2025-01-19T10:35:00Z', refunded_at: null },
   { id: 'sale-3', account_id: 'acc-1', contact_id: 'contact-2', product_id: 'prod-3', valor: 950.00, status: 'pending', metodo_pagamento: 'boleto', responsavel_id: 'user-agent-2', created_at: '2025-01-18T16:00:00Z', paid_at: null, refunded_at: null },
   { id: 'sale-4', account_id: 'acc-1', contact_id: 'contact-3', product_id: 'prod-2', valor: 3200.00, status: 'pending', metodo_pagamento: null, responsavel_id: 'user-admin-1', created_at: '2025-01-19T08:00:00Z', paid_at: null, refunded_at: null },
   { id: 'sale-5', account_id: 'acc-2', contact_id: 'contact-9', product_id: 'prod-6', valor: 15000.00, status: 'paid', metodo_pagamento: 'pix', responsavel_id: 'user-agent-3', created_at: '2025-01-15T14:00:00Z', paid_at: '2025-01-15T14:30:00Z', refunded_at: null },
