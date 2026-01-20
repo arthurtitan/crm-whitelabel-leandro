@@ -480,14 +480,34 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
           {formData.metodoPagamento === 'convenio' && (
             <div className="space-y-2">
               <Label htmlFor="convenioNome">Nome do Convênio *</Label>
-              <Input
-                id="convenioNome"
-                value={formData.convenioNome}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, convenioNome: e.target.value }))
-                }
-                placeholder="Ex: Unimed, Bradesco Saúde..."
-              />
+              {selectedProduct?.convenios_aceitos && selectedProduct.convenios_aceitos.length > 0 ? (
+                <Select
+                  value={formData.convenioNome}
+                  onValueChange={(v) =>
+                    setFormData((prev) => ({ ...prev, convenioNome: v }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o convênio" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {selectedProduct.convenios_aceitos.map((convenio) => (
+                      <SelectItem key={convenio} value={convenio}>
+                        {convenio}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  id="convenioNome"
+                  value={formData.convenioNome}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, convenioNome: e.target.value }))
+                  }
+                  placeholder="Ex: Unimed, Bradesco Saúde..."
+                />
+              )}
             </div>
           )}
 
