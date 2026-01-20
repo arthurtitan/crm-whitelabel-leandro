@@ -6,18 +6,13 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Calendar, Clock, MapPin, Link2, User, Trash2, Pencil, Copy, ExternalLink, Settings } from 'lucide-react';
+import { Calendar, Clock, MapPin, Link2, User, Trash2, Pencil, Copy, ExternalLink, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible';
 
 export default function AdminAgendaPage() {
   const { selectedEvent, selectEvent, deleteEvent, isConnected, connection, connectGoogle, disconnectGoogle, syncNow } = useCalendar();
   const [showConnectModal, setShowConnectModal] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [showSyncPanel, setShowSyncPanel] = useState(true);
 
   const isSyncing = connection.status === 'syncing';
   const connectionStatus = connection.status === 'connecting' ? 'connecting' : 
@@ -50,27 +45,26 @@ export default function AdminAgendaPage() {
 
   return (
     <div className="space-y-6 animate-fade-in h-[calc(100vh-12rem)]">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Agenda</h1>
-          <p className="text-muted-foreground">
-            {isConnected ? 'Sincronizado com Google Calendar' : 'Gerencie seus agendamentos'}
-          </p>
-        </div>
+      <div className="flex flex-col items-center justify-center text-center">
+        <h1 className="text-2xl font-bold">Agenda</h1>
+        <p className="text-muted-foreground">
+          {isConnected ? 'Sincronizado com Google Calendar' : 'Gerencie seus agendamentos'}
+        </p>
         <Button
           variant="outline"
           size="sm"
-          onClick={() => setSettingsOpen(!settingsOpen)}
+          className="mt-4"
+          onClick={() => setShowSyncPanel(!showSyncPanel)}
         >
-          <Settings className="w-4 h-4 mr-2" />
-          Configurações
+          <RefreshCw className="w-4 h-4 mr-2" />
+          Sincronizar
         </Button>
       </div>
 
-      {/* Google Calendar Integration Settings */}
-      <Collapsible open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <CollapsibleContent className="space-y-4">
-          <div className="max-w-md">
+      {/* Google Calendar Integration Panel */}
+      {showSyncPanel && (
+        <div className="flex justify-center">
+          <div className="w-full max-w-md">
             <IntegrationCard
               icon={<Calendar className="w-5 h-5" />}
               title="Google Calendar"
@@ -87,8 +81,8 @@ export default function AdminAgendaPage() {
               isSyncing={isSyncing}
             />
           </div>
-        </CollapsibleContent>
-      </Collapsible>
+        </div>
+      )}
 
       <CalendarView />
 
