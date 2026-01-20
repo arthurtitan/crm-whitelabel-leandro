@@ -158,15 +158,6 @@ export default function AdminAgendaPage() {
                     <p className="text-sm text-muted-foreground">{selectedEvent.notes}</p>
                   </div>
                 )}
-
-                <div className="flex gap-2 pt-4 border-t">
-                  <Button variant="destructive" size="sm" onClick={handleDelete}>
-                    <Trash2 className="w-4 h-4 mr-1" /> Cancelar
-                  </Button>
-                  <Button variant="outline" size="sm">
-                    <Pencil className="w-4 h-4 mr-1" /> Editar
-                  </Button>
-                </div>
               </div>
             </>
           )}
