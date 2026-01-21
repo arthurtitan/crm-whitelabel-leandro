@@ -1,6 +1,7 @@
-import { ReactNode, useState } from 'react';
+import { ReactNode, useState, useMemo } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePermissions } from '@/hooks/usePermissions';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -28,7 +29,6 @@ import {
   Activity,
   Wallet,
   Building2,
-  Settings,
   Package,
   Calendar,
 } from 'lucide-react';
@@ -53,8 +53,14 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const { user, account, logout, isImpersonating, exitImpersonation } = useAuth();
+  const { canAccessRoute } = usePermissions();
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Filter nav items based on user permissions
+  const visibleNavItems = useMemo(() => {
+    return adminNavItems.filter(item => canAccessRoute(item.href));
+  }, [canAccessRoute]);
 
   const handleLogout = () => {
     logout();
@@ -131,7 +137,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         {/* Navigation */}
         <ScrollArea className="h-[calc(100vh-8rem)]">
           <nav className="p-3 space-y-1">
-            {adminNavItems.map((item) => {
+            {visibleNavItems.map((item) => {
               const isActive = location.pathname === item.href;
               return (
                 <Link
@@ -207,7 +213,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       >
         <ScrollArea className="h-[calc(100%-5rem)]">
           <nav className="p-3 space-y-1">
-            {adminNavItems.map((item) => {
+            {visibleNavItems.map((item) => {
               const isActive = location.pathname === item.href;
               return (
                 <Link

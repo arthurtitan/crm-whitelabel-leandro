@@ -156,7 +156,8 @@ export default function SuperAdminUsersPage() {
     const passwordsMatch = formData.password === formData.confirmPassword;
     const passwordMinLength = formData.password.length >= 6;
     const accountValid = formData.role === 'super_admin' || formData.account_id;
-    const permissionsValid = formData.role !== 'agent' || formData.permissions.length > 0;
+    // Agents must have at least 'dashboard' permission
+    const permissionsValid = formData.role !== 'agent' || formData.permissions.includes('dashboard');
     
     return baseValid && passwordsMatch && passwordMinLength && accountValid && permissionsValid;
   };
@@ -225,7 +226,8 @@ export default function SuperAdminUsersPage() {
   const isEditFormValid = () => {
     const baseValid = editFormData.nome && editFormData.email;
     const accountValid = editFormData.role === 'super_admin' || editFormData.account_id;
-    const permissionsValid = editFormData.role !== 'agent' || editFormData.permissions.length > 0;
+    // Agents must have at least 'dashboard' permission
+    const permissionsValid = editFormData.role !== 'agent' || editFormData.permissions.includes('dashboard');
     
     // Password validation only if password is being changed
     if (editFormData.password || editFormData.confirmPassword) {
@@ -459,9 +461,9 @@ export default function SuperAdminUsersPage() {
                     </div>
                   </div>
 
-                  {formData.permissions.length === 0 && (
+                  {!formData.permissions.includes('dashboard') && (
                     <p className="text-sm text-warning">
-                      Selecione pelo menos uma área de acesso
+                      A permissão "Dashboard" é obrigatória
                     </p>
                   )}
                 </div>
@@ -829,9 +831,9 @@ export default function SuperAdminUsersPage() {
                     </div>
                   </div>
 
-                  {editFormData.permissions.length === 0 && (
+                  {!editFormData.permissions.includes('dashboard') && (
                     <p className="text-sm text-warning">
-                      Selecione pelo menos uma área de acesso
+                      A permissão "Dashboard" é obrigatória
                     </p>
                   )}
                 </div>
