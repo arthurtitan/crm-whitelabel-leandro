@@ -40,8 +40,14 @@ export function SaleItemsRow({
   const { getProductById } = useFinance();
   const { user } = useAuth();
 
-  // Only the user who created the sale can confirm or refund it
-  const canManageSale = user?.id === sale.responsavel_id;
+  // Check if user can manage this sale
+  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
+  const isOwner = user?.id === sale.responsavel_id;
+  const hasRefundPermission = user?.permissions?.includes('refunds') || false;
+  
+  // Admins can always confirm/refund; Agents need ownership + refunds permission for refunds
+  const canConfirmPayment = isAdmin || isOwner;
+  const canRefundSale = isAdmin || (isOwner && hasRefundPermission);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -140,13 +146,18 @@ export function SaleItemsRow({
                 <Eye className="w-4 h-4 mr-2" />
                 Ver Detalhes
               </DropdownMenuItem>
-              {sale.status === 'pending' && canManageSale && (
+              {sale.status === 'pending' && canConfirmPayment && (
                 <DropdownMenuItem onClick={() => onMarkAsPaid(sale.id)}>
                   <CheckCircle className="w-4 h-4 mr-2 text-success" />
                   Confirmar Pagamento
                 </DropdownMenuItem>
               )}
-              {sale.status === 'paid' && canManageSale && (
+              {sale.status === 'pending' && !canConfirmPayment && (
+                <DropdownMenuItem disabled className="text-muted-foreground">
+                  Somente o responsável pode confirmar
+                </DropdownMenuItem>
+              )}
+              {sale.status === 'paid' && canRefundSale && (
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive"
                   onClick={() => onRefundSale(sale.id, sale.valor)}
@@ -155,9 +166,9 @@ export function SaleItemsRow({
                   Estornar Venda Completa
                 </DropdownMenuItem>
               )}
-              {(!canManageSale && (sale.status === 'pending' || sale.status === 'paid')) && (
+              {sale.status === 'paid' && !canRefundSale && (
                 <DropdownMenuItem disabled className="text-muted-foreground">
-                  Somente o responsável pode gerenciar
+                  {!isOwner ? 'Somente o responsável pode estornar' : 'Sem permissão para estornar'}
                 </DropdownMenuItem>
               )}
               {sale.status === 'refunded' && (
