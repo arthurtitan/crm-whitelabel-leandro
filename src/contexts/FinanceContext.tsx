@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useMemo, ReactNode, useCallback } from 'react';
 import { Sale, SaleItem, Contact, LeadFunnelState, SaleStatus, PaymentMethod, Product, ContactOrigin, LeadNote } from '@/types/crm';
+import { useAuth } from '@/contexts/AuthContext';
 import { 
   mockSales, 
   mockContacts, 
@@ -13,6 +14,8 @@ interface FinanceEvent {
   id: string;
   type: 'sale.created' | 'sale.paid' | 'sale.cancelled' | 'sale.refunded';
   saleId: string;
+  actorId: string;
+  actorName: string;
   payload: Record<string, unknown>;
   createdAt: string;
 }
@@ -120,6 +123,7 @@ interface FinanceProviderProps {
 }
 
 export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
+  const { user } = useAuth();
   const [sales, setSales] = useState<Sale[]>(
     mockSales.filter((s) => s.account_id === accountId)
   );
@@ -331,18 +335,20 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
     [contacts, sales]
   );
 
-  // Create event helper
+  // Create event helper with actor tracking
   const createEvent = useCallback((type: FinanceEvent['type'], saleId: string, payload: Record<string, unknown>) => {
     const event: FinanceEvent = {
       id: `evt-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       type,
       saleId,
+      actorId: user?.id || 'unknown',
+      actorName: user?.nome || 'Usuário',
       payload,
       createdAt: new Date().toISOString(),
     };
     setEvents((prev) => [event, ...prev]);
     return event;
-  }, []);
+  }, [user]);
 
   // Actions
   const createSale = useCallback(

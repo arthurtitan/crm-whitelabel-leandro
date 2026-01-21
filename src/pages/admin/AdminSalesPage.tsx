@@ -6,10 +6,12 @@ import { RefundConfirmationDialog } from '@/components/finance/RefundConfirmatio
 import { CreateSaleDialog } from '@/components/finance/CreateSaleDialog';
 import { SaleItemsRow } from '@/components/finance/SaleItemsRow';
 import { SaleDetailsSheet } from '@/components/finance/SaleDetailsSheet';
+import { SalesAuditLog } from '@/components/finance/SalesAuditLog';
 import { AgentFilter } from '@/components/dashboard/AgentFilter';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Table,
   TableBody,
@@ -32,6 +34,8 @@ import {
   TrendingUp,
   CheckCircle,
   Clock,
+  FileText,
+  ShoppingCart,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -50,6 +54,7 @@ export default function AdminSalesPage() {
   const [statusFilter, setStatusFilter] = useState<SaleStatus | 'all'>('all');
   const [selectedAgent, setSelectedAgent] = useState<string>('all');
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
+  const [activeTab, setActiveTab] = useState<'sales' | 'report'>('sales');
   const [refundDialog, setRefundDialog] = useState<{ open: boolean; saleId: string | null; valor: number }>({
     open: false,
     saleId: null,
@@ -94,24 +99,11 @@ export default function AdminSalesPage() {
     setRefundDialog({ open: false, saleId: null, valor: 0 });
   };
 
-  return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold">Vendas</h1>
-          <p className="text-muted-foreground">Gerencie vendas e pagamentos</p>
-        </div>
-        <CreateSaleDialog
-          trigger={
-            <Button className="bg-gradient-primary hover:opacity-90 gap-2">
-              <Plus className="w-4 h-4" />
-              Nova Venda
-            </Button>
-          }
-        />
-      </div>
+  const showTabs = isAdmin && user?.role === 'admin';
 
+  // Sales content component to avoid duplication
+  const SalesContent = () => (
+    <>
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
@@ -198,7 +190,7 @@ export default function AdminSalesPage() {
             </Select>
             
             {/* Agent Filter - Only for Admins */}
-            {isAdmin && user?.role === 'admin' && (
+            {showTabs && (
               <AgentFilter value={selectedAgent} onChange={setSelectedAgent} />
             )}
           </div>
@@ -243,6 +235,54 @@ export default function AdminSalesPage() {
           </Table>
         </CardContent>
       </Card>
+    </>
+  );
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold">Vendas</h1>
+          <p className="text-muted-foreground">Gerencie vendas e pagamentos</p>
+        </div>
+        <CreateSaleDialog
+          trigger={
+            <Button className="bg-gradient-primary hover:opacity-90 gap-2">
+              <Plus className="w-4 h-4" />
+              Nova Venda
+            </Button>
+          }
+        />
+      </div>
+
+      {/* Conditional Tabs for Admins */}
+      {showTabs ? (
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'sales' | 'report')}>
+          <TabsList className="bg-muted">
+            <TabsTrigger value="sales" className="gap-2">
+              <ShoppingCart className="w-4 h-4" />
+              Vendas
+            </TabsTrigger>
+            <TabsTrigger value="report" className="gap-2">
+              <FileText className="w-4 h-4" />
+              Relatório
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="sales" className="mt-6 space-y-6">
+            <SalesContent />
+          </TabsContent>
+
+          <TabsContent value="report" className="mt-6">
+            <SalesAuditLog />
+          </TabsContent>
+        </Tabs>
+      ) : (
+        <div className="space-y-6">
+          <SalesContent />
+        </div>
+      )}
 
       {/* Refund Dialog with Password Confirmation */}
       <RefundConfirmationDialog
