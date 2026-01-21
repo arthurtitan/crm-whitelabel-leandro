@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Sale, SaleItem } from '@/types/crm';
 import { useFinance } from '@/contexts/FinanceContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -25,6 +26,7 @@ import {
   Receipt,
   Repeat,
   Building,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface SaleDetailsSheetProps {
@@ -43,6 +45,7 @@ export function SaleDetailsSheet({
   onRefundSale,
 }: SaleDetailsSheetProps) {
   const { getProductById, getContactById, refundSaleItem } = useFinance();
+  const { user } = useAuth();
   const [itemRefundDialog, setItemRefundDialog] = useState<{
     open: boolean;
     item: SaleItem | null;
@@ -56,6 +59,9 @@ export function SaleDetailsSheet({
   if (!sale) return null;
 
   const contact = getContactById(sale.contact_id);
+  
+  // Only the user who created the sale can confirm or refund it
+  const canManageSale = user?.id === sale.responsavel_id;
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -137,7 +143,7 @@ export function SaleDetailsSheet({
             <div className="flex items-center justify-between">
               {getStatusBadge(sale.status)}
               <div className="flex gap-2">
-                {sale.status === 'pending' && (
+                {sale.status === 'pending' && canManageSale && (
                   <Button
                     size="sm"
                     className="bg-success hover:bg-success/90 gap-1"
@@ -150,7 +156,7 @@ export function SaleDetailsSheet({
                     Confirmar
                   </Button>
                 )}
-                {sale.status === 'paid' && (
+                {sale.status === 'paid' && canManageSale && (
                   <Button
                     size="sm"
                     variant="destructive"
@@ -166,6 +172,16 @@ export function SaleDetailsSheet({
                 )}
               </div>
             </div>
+
+            {/* Warning for non-owner */}
+            {!canManageSale && (sale.status === 'pending' || sale.status === 'paid') && (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 border border-border">
+                <ShieldAlert className="w-4 h-4 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">
+                  Somente o responsável pela venda pode confirmar ou estornar.
+                </p>
+              </div>
+            )}
 
             <Separator />
 
@@ -286,7 +302,7 @@ export function SaleDetailsSheet({
                           <p className={`font-bold ${isRefunded ? 'line-through text-muted-foreground' : ''}`}>
                             {formatCurrency(item.valor_total)}
                           </p>
-                          {sale.status === 'paid' && !isRefunded && sale.items.length > 1 && (
+                          {sale.status === 'paid' && !isRefunded && sale.items.length > 1 && canManageSale && (
                             <Button
                               variant="ghost"
                               size="sm"

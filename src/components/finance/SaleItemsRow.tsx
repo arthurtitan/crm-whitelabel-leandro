@@ -1,6 +1,7 @@
 import { Fragment } from 'react';
 import { Sale } from '@/types/crm';
 import { useFinance } from '@/contexts/FinanceContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { TableCell, TableRow } from '@/components/ui/table';
@@ -37,6 +38,10 @@ export function SaleItemsRow({
   onInspect,
 }: SaleItemsRowProps) {
   const { getProductById } = useFinance();
+  const { user } = useAuth();
+
+  // Only the user who created the sale can confirm or refund it
+  const canManageSale = user?.id === sale.responsavel_id;
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -135,19 +140,24 @@ export function SaleItemsRow({
                 <Eye className="w-4 h-4 mr-2" />
                 Ver Detalhes
               </DropdownMenuItem>
-              {sale.status === 'pending' && (
+              {sale.status === 'pending' && canManageSale && (
                 <DropdownMenuItem onClick={() => onMarkAsPaid(sale.id)}>
                   <CheckCircle className="w-4 h-4 mr-2 text-success" />
                   Confirmar Pagamento
                 </DropdownMenuItem>
               )}
-              {sale.status === 'paid' && (
+              {sale.status === 'paid' && canManageSale && (
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive"
                   onClick={() => onRefundSale(sale.id, sale.valor)}
                 >
                   <RotateCcw className="w-4 h-4 mr-2" />
                   Estornar Venda Completa
+                </DropdownMenuItem>
+              )}
+              {(!canManageSale && (sale.status === 'pending' || sale.status === 'paid')) && (
+                <DropdownMenuItem disabled className="text-muted-foreground">
+                  Somente o responsável pode gerenciar
                 </DropdownMenuItem>
               )}
               {sale.status === 'refunded' && (
