@@ -75,6 +75,7 @@ interface FinanceContextType {
   markAsPaid: (saleId: string) => void;
   cancelSale: (saleId: string) => void;
   refundSale: (saleId: string, reason: string) => void;
+  refundSaleItem: (saleId: string, itemId: string, reason: string) => void;
   updateSale: (saleId: string, data: Partial<Sale>) => { success: boolean; error?: string };
   
   // Helpers
@@ -443,6 +444,40 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
     [createEvent]
   );
 
+  const refundSaleItem = useCallback(
+    (saleId: string, itemId: string, reason: string) => {
+      setSales((prev) =>
+        prev.map((s) => {
+          if (s.id !== saleId) return s;
+
+          // Mark the specific item as refunded
+          const updatedItems = s.items.map((item) =>
+            item.id === itemId
+              ? { ...item, refunded: true, refunded_at: new Date().toISOString(), refund_reason: reason }
+              : item
+          );
+
+          // Recalculate total value excluding refunded items
+          const activeItems = updatedItems.filter((item) => !(item as any).refunded);
+          const newTotal = activeItems.reduce((sum, item) => sum + item.valor_total, 0);
+
+          // If all items are refunded, mark the sale as refunded
+          const allRefunded = updatedItems.every((item) => (item as any).refunded);
+
+          return {
+            ...s,
+            items: updatedItems,
+            valor: newTotal,
+            status: allRefunded ? ('refunded' as SaleStatus) : s.status,
+            refunded_at: allRefunded ? new Date().toISOString() : s.refunded_at,
+          };
+        })
+      );
+      createEvent('sale.refunded', saleId, { itemId, reason, refunded_at: new Date().toISOString() });
+    },
+    [createEvent]
+  );
+
   const updateSale = useCallback(
     (saleId: string, data: Partial<Sale>): { success: boolean; error?: string } => {
       const sale = sales.find((s) => s.id === saleId);
@@ -557,6 +592,7 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
     markAsPaid,
     cancelSale,
     refundSale,
+    refundSaleItem,
     updateSale,
     getContactById,
     getContactSales,
