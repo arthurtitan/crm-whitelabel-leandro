@@ -65,9 +65,10 @@ export function SaleDetailsSheet({
   const isOwner = user?.id === sale.responsavel_id;
   const hasRefundPermission = user?.permissions?.includes('refunds') || false;
   
-  // Admins can always confirm/refund; Agents need ownership + refunds permission for refunds
-  const canConfirmPayment = isAdmin || isOwner;
-  const canRefundSale = isAdmin || (isOwner && hasRefundPermission);
+  // Only the owner can confirm payment (to ensure accountability for entries)
+  // Admins can always refund; Agents need 'refunds' permission (to prevent fraud)
+  const canConfirmPayment = isOwner;
+  const canRefundSale = isAdmin || hasRefundPermission;
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -194,9 +195,7 @@ export function SaleDetailsSheet({
               <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 border border-border">
                 <ShieldAlert className="w-4 h-4 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">
-                  {!isOwner 
-                    ? 'Somente o responsável pela venda pode estornar.' 
-                    : 'Você não possui permissão para realizar estornos.'}
+                  Você não possui permissão para realizar estornos.
                 </p>
               </div>
             )}

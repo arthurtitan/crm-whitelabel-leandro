@@ -45,9 +45,10 @@ export function SaleItemsRow({
   const isOwner = user?.id === sale.responsavel_id;
   const hasRefundPermission = user?.permissions?.includes('refunds') || false;
   
-  // Admins can always confirm/refund; Agents need ownership + refunds permission for refunds
-  const canConfirmPayment = isAdmin || isOwner;
-  const canRefundSale = isAdmin || (isOwner && hasRefundPermission);
+  // Only the owner can confirm payment (to ensure accountability for entries)
+  // Admins can always refund; Agents need 'refunds' permission (to prevent fraud)
+  const canConfirmPayment = isOwner;
+  const canRefundSale = isAdmin || hasRefundPermission;
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -168,7 +169,7 @@ export function SaleItemsRow({
               )}
               {sale.status === 'paid' && !canRefundSale && (
                 <DropdownMenuItem disabled className="text-muted-foreground">
-                  {!isOwner ? 'Somente o responsável pode estornar' : 'Sem permissão para estornar'}
+                  Sem permissão para estornar
                 </DropdownMenuItem>
               )}
               {sale.status === 'refunded' && (
