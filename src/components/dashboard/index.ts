@@ -1,4 +1,6 @@
 export { DashboardFilters } from './DashboardFilters';
+export { AgentFilter } from './AgentFilter';
+export { PageFilters } from './PageFilters';
 export { KPICard } from './KPICard';
 export { IAvsHumanCard } from './IAvsHumanCard';
 export { ConversationsChart } from './ConversationsChart';

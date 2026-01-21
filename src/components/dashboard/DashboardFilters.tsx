@@ -18,21 +18,27 @@ import { format, subDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { DateRange } from 'react-day-picker';
+import { AgentFilter } from './AgentFilter';
 
 interface DashboardFiltersProps {
   onPeriodChange?: (period: string, dateRange?: DateRange) => void;
   onChannelChange?: (channel: string) => void;
   onTypeChange?: (type: string) => void;
+  onAgentChange?: (agentId: string) => void;
+  showAgentFilter?: boolean;
 }
 
 export function DashboardFilters({
   onPeriodChange,
   onChannelChange,
   onTypeChange,
+  onAgentChange,
+  showAgentFilter = false,
 }: DashboardFiltersProps) {
   const [activePeriod, setActivePeriod] = useState('7d');
   const [channel, setChannel] = useState('all');
   const [type, setType] = useState('all');
+  const [selectedAgent, setSelectedAgent] = useState('all');
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: subDays(new Date(), 7),
     to: new Date(),
@@ -73,6 +79,11 @@ export function DashboardFilters({
   const handleTypeChange = (value: string) => {
     setType(value);
     onTypeChange?.(value);
+  };
+
+  const handleAgentChange = (value: string) => {
+    setSelectedAgent(value);
+    onAgentChange?.(value);
   };
 
   return (
@@ -172,6 +183,14 @@ export function DashboardFilters({
           </SelectContent>
         </Select>
       </div>
+
+      {/* Agent Filter - Only visible for admins when enabled */}
+      {showAgentFilter && (
+        <>
+          <div className="h-6 w-px bg-border" />
+          <AgentFilter value={selectedAgent} onChange={handleAgentChange} />
+        </>
+      )}
     </div>
   );
 }

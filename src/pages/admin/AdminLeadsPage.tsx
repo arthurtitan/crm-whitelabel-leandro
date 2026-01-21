@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth, useRoleAccess } from '@/contexts/AuthContext';
 import { useFinance } from '@/contexts/FinanceContext';
 import { CreateSaleDialog } from '@/components/finance/CreateSaleDialog';
 import { LeadProfileSheet } from '@/components/leads/LeadProfileSheet';
-import { mockFunnelStages } from '@/data/mockData';
+import { AgentFilter } from '@/components/dashboard/AgentFilter';
+import { mockFunnelStages, mockUsers } from '@/data/mockData';
 import { Contact, ContactOrigin } from '@/types/crm';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -55,6 +56,7 @@ import {
   DollarSign,
   Eye,
   ExternalLink,
+  User as UserIcon,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -62,6 +64,7 @@ import { toast } from 'sonner';
 
 export default function AdminLeadsPage() {
   const { account, user } = useAuth();
+  const { isAdmin } = useRoleAccess();
   const { 
     contacts, 
     leadFunnelStates, 
@@ -75,6 +78,7 @@ export default function AdminLeadsPage() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [originFilter, setOriginFilter] = useState<string>('all');
+  const [selectedAgent, setSelectedAgent] = useState<string>('all');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [saleContactId, setSaleContactId] = useState<string | null>(null);
@@ -87,6 +91,7 @@ export default function AdminLeadsPage() {
     origem: 'manual' as ContactOrigin,
   });
 
+  // Filter by agent if selected (based on sales association)
   const filteredContacts = useMemo(() => {
     return contacts.filter((contact) => {
       const matchesSearch =
@@ -94,9 +99,17 @@ export default function AdminLeadsPage() {
         contact.telefone?.includes(searchTerm) ||
         contact.email?.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesOrigin = originFilter === 'all' || contact.origem === originFilter;
-      return matchesSearch && matchesOrigin;
+      
+      // Filter by agent - leads are associated via sales they handled
+      let matchesAgent = true;
+      if (selectedAgent !== 'all' && isAdmin) {
+        const contactSales = getContactSales(contact.id);
+        matchesAgent = contactSales.some(sale => sale.responsavel_id === selectedAgent);
+      }
+      
+      return matchesSearch && matchesOrigin && matchesAgent;
     });
-  }, [contacts, searchTerm, originFilter]);
+  }, [contacts, searchTerm, originFilter, selectedAgent, isAdmin, getContactSales]);
 
   const getStage = (contactId: string) => {
     const state = leadFunnelStates.find((lfs) => lfs.contact_id === contactId);
@@ -308,6 +321,11 @@ export default function AdminLeadsPage() {
                 <SelectItem value="manual">Manual</SelectItem>
               </SelectContent>
             </Select>
+            
+            {/* Agent Filter - Only for Admins */}
+            {isAdmin && user?.role === 'admin' && (
+              <AgentFilter value={selectedAgent} onChange={setSelectedAgent} />
+            )}
           </div>
         </CardContent>
       </Card>
