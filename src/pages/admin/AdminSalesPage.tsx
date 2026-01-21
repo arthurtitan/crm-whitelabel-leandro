@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useFinance } from '@/contexts/FinanceContext';
-import { SaleStatus } from '@/types/crm';
+import { Sale, SaleStatus } from '@/types/crm';
 import { RefundConfirmationDialog } from '@/components/finance/RefundConfirmationDialog';
 import { CreateSaleDialog } from '@/components/finance/CreateSaleDialog';
 import { SaleItemsRow } from '@/components/finance/SaleItemsRow';
+import { SaleDetailsSheet } from '@/components/finance/SaleDetailsSheet';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -43,6 +44,7 @@ export default function AdminSalesPage() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<SaleStatus | 'all'>('all');
+  const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [refundDialog, setRefundDialog] = useState<{ open: boolean; saleId: string | null; valor: number }>({
     open: false,
     saleId: null,
@@ -214,6 +216,7 @@ export default function AdminSalesPage() {
                     contactName={getContactName(sale.contact_id)}
                     onMarkAsPaid={handleMarkAsPaid}
                     onRefundSale={(saleId, valor) => setRefundDialog({ open: true, saleId, valor })}
+                    onInspect={(sale) => setSelectedSale(sale)}
                   />
                 ))
               )}
@@ -232,6 +235,17 @@ export default function AdminSalesPage() {
         }}
         saleValue={refundDialog.valor}
         onConfirm={handleRefundConfirm}
+      />
+
+      {/* Sale Details Sheet */}
+      <SaleDetailsSheet
+        sale={selectedSale}
+        open={!!selectedSale}
+        onOpenChange={(open) => {
+          if (!open) setSelectedSale(null);
+        }}
+        onMarkAsPaid={handleMarkAsPaid}
+        onRefundSale={(saleId, valor) => setRefundDialog({ open: true, saleId, valor })}
       />
     </div>
   );

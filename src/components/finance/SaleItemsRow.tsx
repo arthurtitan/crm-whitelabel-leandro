@@ -1,5 +1,5 @@
-import { useState, Fragment } from 'react';
-import { Sale, SaleItem } from '@/types/crm';
+import { Fragment } from 'react';
+import { Sale } from '@/types/crm';
 import { useFinance } from '@/contexts/FinanceContext';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,16 +12,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { ItemRefundDialog } from './ItemRefundDialog';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
-  ChevronDown,
-  ChevronRight,
   MoreHorizontal,
   CheckCircle,
   RotateCcw,
-  Package,
+  Eye,
 } from 'lucide-react';
 
 interface SaleItemsRowProps {
@@ -29,6 +26,7 @@ interface SaleItemsRowProps {
   contactName: string;
   onMarkAsPaid: (saleId: string) => void;
   onRefundSale: (saleId: string, valor: number) => void;
+  onInspect: (sale: Sale) => void;
 }
 
 export function SaleItemsRow({
@@ -36,18 +34,9 @@ export function SaleItemsRow({
   contactName,
   onMarkAsPaid,
   onRefundSale,
+  onInspect,
 }: SaleItemsRowProps) {
-  const { getProductById, refundSaleItem } = useFinance();
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [itemRefundDialog, setItemRefundDialog] = useState<{
-    open: boolean;
-    item: SaleItem | null;
-    productName: string;
-  }>({
-    open: false,
-    item: null,
-    productName: '',
-  });
+  const { getProductById } = useFinance();
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -63,7 +52,7 @@ export function SaleItemsRow({
       case 'pending':
         return <Badge className="bg-warning/10 text-warning border-warning/20">Pendente</Badge>;
       case 'refunded':
-        return <Badge className="bg-primary/10 text-primary border-primary/20">Estornado</Badge>;
+        return <Badge className="bg-destructive/10 text-destructive border-destructive/20">Estornado</Badge>;
       default:
         return <Badge variant="outline">-</Badge>;
     }
@@ -85,92 +74,67 @@ export function SaleItemsRow({
     );
   };
 
-  const hasMultipleItems = sale.items.length > 1;
-
-  const handleItemRefundConfirm = (reason: string) => {
-    if (!itemRefundDialog.item) return;
-    refundSaleItem(sale.id, itemRefundDialog.item.id, reason);
-    setItemRefundDialog({ open: false, item: null, productName: '' });
-  };
-
-  // Render product summary
-  const renderProductSummary = () => {
-    if (sale.items.length === 0) {
-      return <span className="text-muted-foreground">Sem itens</span>;
-    }
-    if (sale.items.length === 1) {
-      const product = getProductById(sale.items[0].product_id);
-      const isRefunded = (sale.items[0] as any).refunded;
-      return (
-        <div className="flex items-center gap-2">
-          <Package className="w-4 h-4 text-muted-foreground" />
-          <span className={isRefunded ? 'line-through text-muted-foreground' : ''}>
-            {product?.nome || 'Produto'}
-          </span>
-          {sale.items[0].quantidade > 1 && (
-            <Badge variant="outline" className="text-xs">
-              x{sale.items[0].quantidade}
-            </Badge>
-          )}
-          {isRefunded && (
-            <Badge className="bg-destructive/10 text-destructive border-destructive/20 text-xs">
-              Estornado
-            </Badge>
-          )}
-        </div>
-      );
-    }
-    return (
-      <div className="flex items-center gap-2">
-        <Package className="w-4 h-4 text-muted-foreground" />
-        <span>{sale.items.length} produtos</span>
-        {hasMultipleItems && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="p-0 h-auto hover:bg-transparent text-primary"
-            onClick={() => setIsExpanded(!isExpanded)}
-          >
-            {isExpanded ? (
-              <ChevronDown className="w-4 h-4" />
-            ) : (
-              <ChevronRight className="w-4 h-4" />
-            )}
-          </Button>
-        )}
-      </div>
-    );
-  };
+  // Count active and refunded items
+  const activeItemsCount = sale.items.filter((item) => !(item as any).refunded).length;
+  const hasRefundedItems = sale.items.some((item) => (item as any).refunded);
 
   return (
-    <Fragment>
-      {/* Main sale row */}
-      <TableRow className="group">
-        <TableCell>
+    <TableRow className="group hover:bg-muted/50">
+      <TableCell>
+        <div className="flex items-center gap-2">
           <span className="font-medium">{contactName}</span>
           {sale.is_recurring && (
-            <Badge variant="outline" className="ml-2 text-xs">
+            <Badge variant="outline" className="text-xs">
               Retorno
             </Badge>
           )}
-        </TableCell>
-        <TableCell>{renderProductSummary()}</TableCell>
-        <TableCell className="font-bold">{formatCurrency(sale.valor)}</TableCell>
-        <TableCell>{getPaymentMethodBadge(sale.metodo_pagamento)}</TableCell>
-        <TableCell>{getStatusBadge(sale.status)}</TableCell>
-        <TableCell className="text-muted-foreground">
-          {format(new Date(sale.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
-        </TableCell>
-        <TableCell className="text-right">
+        </div>
+      </TableCell>
+      <TableCell>
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground">
+            {sale.items.length === 1 
+              ? getProductById(sale.items[0].product_id)?.nome || 'Produto'
+              : `${sale.items.length} itens`
+            }
+          </span>
+          {hasRefundedItems && (
+            <Badge variant="outline" className="text-xs text-warning border-warning/30">
+              Parcial
+            </Badge>
+          )}
+        </div>
+      </TableCell>
+      <TableCell className="font-bold">{formatCurrency(sale.valor)}</TableCell>
+      <TableCell>{getPaymentMethodBadge(sale.metodo_pagamento)}</TableCell>
+      <TableCell>{getStatusBadge(sale.status)}</TableCell>
+      <TableCell className="text-muted-foreground">
+        {format(new Date(sale.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
+      </TableCell>
+      <TableCell className="text-right">
+        <div className="flex items-center justify-end gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1 text-primary hover:text-primary hover:bg-primary/10"
+            onClick={() => onInspect(sale)}
+          >
+            <Eye className="w-4 h-4" />
+            Detalhes
+          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon">
+              <Button variant="ghost" size="icon" className="h-8 w-8">
                 <MoreHorizontal className="w-4 h-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Ações da Venda</DropdownMenuLabel>
+            <DropdownMenuContent align="end" className="bg-popover">
+              <DropdownMenuLabel>Ações Rápidas</DropdownMenuLabel>
               <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => onInspect(sale)}>
+                <Eye className="w-4 h-4 mr-2" />
+                Ver Detalhes
+              </DropdownMenuItem>
               {sale.status === 'pending' && (
                 <DropdownMenuItem onClick={() => onMarkAsPaid(sale.id)}>
                   <CheckCircle className="w-4 h-4 mr-2 text-success" />
@@ -179,7 +143,7 @@ export function SaleItemsRow({
               )}
               {sale.status === 'paid' && (
                 <DropdownMenuItem
-                  className="text-destructive"
+                  className="text-destructive focus:text-destructive"
                   onClick={() => onRefundSale(sale.id, sale.valor)}
                 >
                   <RotateCcw className="w-4 h-4 mr-2" />
@@ -193,84 +157,8 @@ export function SaleItemsRow({
               )}
             </DropdownMenuContent>
           </DropdownMenu>
-        </TableCell>
-      </TableRow>
-
-      {/* Expanded item rows */}
-      {isExpanded && hasMultipleItems && sale.items.map((item, index) => {
-        const product = getProductById(item.product_id);
-        const isRefunded = (item as any).refunded;
-        return (
-          <TableRow
-            key={item.id}
-            className={`bg-muted/30 ${isRefunded ? 'opacity-60' : ''}`}
-          >
-            <TableCell className="pl-8">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-muted-foreground/40" />
-                <span className="text-sm text-muted-foreground">Item {index + 1}</span>
-              </div>
-            </TableCell>
-            <TableCell>
-              <div className="flex items-center gap-2">
-                <span className={isRefunded ? 'line-through text-muted-foreground' : ''}>
-                  {product?.nome || 'Produto'}
-                </span>
-                <Badge variant="outline" className="text-xs">
-                  x{item.quantidade}
-                </Badge>
-                {isRefunded && (
-                  <Badge className="bg-destructive/10 text-destructive border-destructive/20 text-xs">
-                    Estornado
-                  </Badge>
-                )}
-              </div>
-            </TableCell>
-            <TableCell className={isRefunded ? 'line-through text-muted-foreground' : ''}>
-              {formatCurrency(item.valor_total)}
-            </TableCell>
-            <TableCell>
-              <span className="text-xs text-muted-foreground">
-                {formatCurrency(item.valor_unitario)} un.
-              </span>
-            </TableCell>
-            <TableCell />
-            <TableCell />
-            <TableCell className="text-right">
-              {sale.status === 'paid' && !isRefunded && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                  onClick={() =>
-                    setItemRefundDialog({
-                      open: true,
-                      item,
-                      productName: product?.nome || 'Produto',
-                    })
-                  }
-                >
-                  <RotateCcw className="w-3 h-3 mr-1" />
-                  Estornar
-                </Button>
-              )}
-            </TableCell>
-          </TableRow>
-        );
-      })}
-
-      {/* Item Refund Dialog */}
-      <ItemRefundDialog
-        open={itemRefundDialog.open}
-        onOpenChange={(open) => {
-          if (!open) {
-            setItemRefundDialog({ open: false, item: null, productName: '' });
-          }
-        }}
-        productName={itemRefundDialog.productName}
-        itemValue={itemRefundDialog.item?.valor_total || 0}
-        onConfirm={handleItemRefundConfirm}
-      />
-    </Fragment>
+        </div>
+      </TableCell>
+    </TableRow>
   );
 }
