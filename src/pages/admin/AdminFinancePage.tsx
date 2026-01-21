@@ -17,6 +17,7 @@ export default function AdminFinancePage() {
   const [period, setPeriod] = useState('7d');
   const [channel, setChannel] = useState('all');
   const [type, setType] = useState('all');
+  const [selectedAgent, setSelectedAgent] = useState('all');
 
   const isLoading = viewState === 'loading';
   const isEmpty = viewState === 'empty';
@@ -76,6 +77,8 @@ export default function AdminFinancePage() {
         onPeriodChange={setPeriod}
         onChannelChange={setChannel}
         onTypeChange={setType}
+        onAgentChange={setSelectedAgent}
+        showAgentFilter={true}
       />
 
       {isEmpty ? (

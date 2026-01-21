@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useFinance } from '@/contexts/FinanceContext';
+import { useAuth, useRoleAccess } from '@/contexts/AuthContext';
 import { Sale, SaleStatus } from '@/types/crm';
 import { RefundConfirmationDialog } from '@/components/finance/RefundConfirmationDialog';
 import { CreateSaleDialog } from '@/components/finance/CreateSaleDialog';
 import { SaleItemsRow } from '@/components/finance/SaleItemsRow';
 import { SaleDetailsSheet } from '@/components/finance/SaleDetailsSheet';
+import { AgentFilter } from '@/components/dashboard/AgentFilter';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,6 +36,8 @@ import {
 import { toast } from 'sonner';
 
 export default function AdminSalesPage() {
+  const { user } = useAuth();
+  const { isAdmin } = useRoleAccess();
   const { 
     sales, 
     getContactById, 
@@ -44,6 +48,7 @@ export default function AdminSalesPage() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<SaleStatus | 'all'>('all');
+  const [selectedAgent, setSelectedAgent] = useState<string>('all');
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [refundDialog, setRefundDialog] = useState<{ open: boolean; saleId: string | null; valor: number }>({
     open: false,
@@ -51,12 +56,21 @@ export default function AdminSalesPage() {
     valor: 0,
   });
 
-  const filteredSales = sales.filter((sale) => {
-    const contact = getContactById(sale.contact_id);
-    const matchesSearch = contact?.nome?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || sale.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const filteredSales = useMemo(() => {
+    return sales.filter((sale) => {
+      const contact = getContactById(sale.contact_id);
+      const matchesSearch = contact?.nome?.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesStatus = statusFilter === 'all' || sale.status === statusFilter;
+      
+      // Filter by agent (responsavel_id)
+      let matchesAgent = true;
+      if (selectedAgent !== 'all' && isAdmin) {
+        matchesAgent = sale.responsavel_id === selectedAgent;
+      }
+      
+      return matchesSearch && matchesStatus && matchesAgent;
+    });
+  }, [sales, searchTerm, statusFilter, selectedAgent, isAdmin, getContactById]);
 
   // KPIs from context
   const totalRevenue = kpis.faturamentoBruto;
@@ -182,6 +196,11 @@ export default function AdminSalesPage() {
                 <SelectItem value="refunded">Estornados</SelectItem>
               </SelectContent>
             </Select>
+            
+            {/* Agent Filter - Only for Admins */}
+            {isAdmin && user?.role === 'admin' && (
+              <AgentFilter value={selectedAgent} onChange={setSelectedAgent} />
+            )}
           </div>
         </CardContent>
       </Card>
