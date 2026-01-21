@@ -19,17 +19,26 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { useFinance } from '@/contexts/FinanceContext';
-import { PaymentMethod } from '@/types/crm';
-import { Plus, AlertCircle, CheckCircle, UserPlus, AlertTriangle } from 'lucide-react';
+import { useFinance, CreateSaleItem } from '@/contexts/FinanceContext';
+import { PaymentMethod, Product } from '@/types/crm';
+import { Plus, AlertCircle, CheckCircle, UserPlus, AlertTriangle, Trash2, Package } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
+import { Card, CardContent } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
 
 interface NewContactForm {
   nome: string;
   telefone: string;
   email: string;
   origem: string;
+}
+
+interface SaleItemForm {
+  id: string;
+  productId: string;
+  quantidade: number;
+  valorUnitario: string;
 }
 
 interface CreateSaleDialogProps {
@@ -44,13 +53,14 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
   const [open, setOpen] = useState(false);
   const [isCreatingNewContact, setIsCreatingNewContact] = useState(false);
   
-  const [formData, setFormData] = useState({
-    contactId: '',
-    productId: '',
-    valor: '',
-    metodoPagamento: '' as PaymentMethod | '',
-    convenioNome: '',
-  });
+  const [contactId, setContactId] = useState('');
+  const [metodoPagamento, setMetodoPagamento] = useState<PaymentMethod | ''>('');
+  const [convenioNome, setConvenioNome] = useState('');
+  
+  // Múltiplos itens da venda
+  const [items, setItems] = useState<SaleItemForm[]>([
+    { id: `item-${Date.now()}`, productId: '', quantidade: 1, valorUnitario: '' }
+  ]);
   
   const [newContact, setNewContact] = useState<NewContactForm>({
     nome: '',
@@ -61,26 +71,47 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
   
   const [validation, setValidation] = useState<{ allowed: boolean; reason?: string } | null>(null);
 
-  const selectedProduct = useMemo(
-    () => products.find((p) => p.id === formData.productId),
-    [products, formData.productId]
-  );
-
+  // Get available payment methods (intersection of all selected products)
   const availablePaymentMethods = useMemo(() => {
-    if (!selectedProduct) return [];
-    return selectedProduct.metodos_pagamento;
-  }, [selectedProduct]);
+    const selectedProducts = items
+      .map(item => products.find(p => p.id === item.productId))
+      .filter((p): p is Product => !!p);
+    
+    if (selectedProducts.length === 0) return [];
+    
+    // Return intersection of all payment methods
+    return selectedProducts.reduce<PaymentMethod[]>((acc, product, index) => {
+      if (index === 0) return [...product.metodos_pagamento];
+      return acc.filter(method => product.metodos_pagamento.includes(method));
+    }, []);
+  }, [items, products]);
 
-  const valorDifersFromDefault = useMemo(() => {
-    if (!selectedProduct || !formData.valor) return false;
-    const valor = parseFloat(formData.valor);
-    return valor !== selectedProduct.valor_padrao;
-  }, [selectedProduct, formData.valor]);
+  // Get available convenios (union of all selected products)
+  const availableConvenios = useMemo(() => {
+    const selectedProducts = items
+      .map(item => products.find(p => p.id === item.productId))
+      .filter((p): p is Product => !!p);
+    
+    const conveniosSet = new Set<string>();
+    selectedProducts.forEach(p => {
+      p.convenios_aceitos.forEach(c => conveniosSet.add(c));
+    });
+    
+    return Array.from(conveniosSet);
+  }, [items, products]);
+
+  // Calculate total value
+  const valorTotal = useMemo(() => {
+    return items.reduce((sum, item) => {
+      const valor = parseFloat(item.valorUnitario) || 0;
+      return sum + (valor * item.quantidade);
+    }, 0);
+  }, [items]);
 
   // Handle preSelectedContactId
   useEffect(() => {
     if (preSelectedContactId) {
-      setFormData((prev) => ({ ...prev, contactId: preSelectedContactId }));
+      setContactId(preSelectedContactId);
       const result = canCreateSale(preSelectedContactId);
       setValidation(result);
       setOpen(true);
@@ -90,25 +121,42 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
   const handleContactChange = (value: string) => {
     if (value === 'new') {
       setIsCreatingNewContact(true);
-      setFormData((prev) => ({ ...prev, contactId: '' }));
-      // New contacts are auto-added to "Qualificado" stage, so they're eligible
+      setContactId('');
       setValidation({ allowed: true });
     } else {
       setIsCreatingNewContact(false);
-      setFormData((prev) => ({ ...prev, contactId: value }));
+      setContactId(value);
       const result = canCreateSale(value);
       setValidation(result);
     }
   };
 
-  const handleProductChange = (productId: string) => {
-    const product = products.find((p) => p.id === productId);
-    setFormData((prev) => ({
+  const handleAddItem = () => {
+    setItems(prev => [
       ...prev,
-      productId,
-      valor: product ? product.valor_padrao.toString() : '',
-      metodoPagamento: '',
-      convenioNome: '',
+      { id: `item-${Date.now()}`, productId: '', quantidade: 1, valorUnitario: '' }
+    ]);
+  };
+
+  const handleRemoveItem = (id: string) => {
+    if (items.length <= 1) return;
+    setItems(prev => prev.filter(item => item.id !== id));
+  };
+
+  const handleItemChange = (id: string, field: keyof SaleItemForm, value: string | number) => {
+    setItems(prev => prev.map(item => {
+      if (item.id !== id) return item;
+      
+      if (field === 'productId') {
+        const product = products.find(p => p.id === value);
+        return {
+          ...item,
+          productId: value as string,
+          valorUnitario: product ? product.valor_padrao.toString() : '',
+        };
+      }
+      
+      return { ...item, [field]: value };
     }));
   };
 
@@ -119,32 +167,29 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
         toast.error('Nome e telefone são obrigatórios para novo cliente');
         return;
       }
-    } else if (!formData.contactId) {
+    } else if (!contactId) {
       toast.error('Selecione um cliente');
       return;
     }
 
-    if (!formData.productId) {
-      toast.error('Selecione um produto/procedimento');
+    // Validate items
+    const validItems = items.filter(item => item.productId && parseFloat(item.valorUnitario) > 0);
+    if (validItems.length === 0) {
+      toast.error('Adicione pelo menos um produto válido');
       return;
     }
 
-    if (!formData.valor || parseFloat(formData.valor) <= 0) {
-      toast.error('Informe um valor válido');
-      return;
-    }
-
-    if (!formData.metodoPagamento) {
+    if (!metodoPagamento) {
       toast.error('Selecione o método de pagamento');
       return;
     }
 
-    if (formData.metodoPagamento === 'convenio' && !formData.convenioNome.trim()) {
+    if (metodoPagamento === 'convenio' && !convenioNome.trim()) {
       toast.error('Informe o nome do convênio');
       return;
     }
 
-    let contactId = formData.contactId;
+    let finalContactId = contactId;
 
     // Create new contact if needed
     if (isCreatingNewContact) {
@@ -159,22 +204,28 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
         toast.error(newContactResult.error || 'Erro ao criar cliente');
         return;
       }
-      contactId = newContactResult.contactId;
+      finalContactId = newContactResult.contactId;
     }
+
+    // Build items for API
+    const saleItems: CreateSaleItem[] = validItems.map(item => ({
+      productId: item.productId,
+      quantidade: item.quantidade,
+      valorUnitario: parseFloat(item.valorUnitario),
+    }));
 
     // Create sale
     const result = createSale({
-      contactId,
-      productId: formData.productId,
-      valor: parseFloat(formData.valor),
-      metodoPagamento: formData.metodoPagamento as PaymentMethod,
+      contactId: finalContactId,
+      items: saleItems,
+      metodoPagamento: metodoPagamento as PaymentMethod,
       responsavelId: user?.id || 'user-admin-1',
-      convenioNome: formData.metodoPagamento === 'convenio' ? formData.convenioNome : undefined,
+      convenioNome: metodoPagamento === 'convenio' ? convenioNome : undefined,
       skipValidation: isCreatingNewContact,
     });
 
     if (result.success) {
-      const contactName = isCreatingNewContact ? newContact.nome : getContactById(contactId)?.nome || 'Cliente';
+      const contactName = isCreatingNewContact ? newContact.nome : getContactById(finalContactId)?.nome || 'Cliente';
       toast.success(`Venda registrada para ${contactName}!`);
       handleClose();
     } else {
@@ -189,7 +240,10 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
   };
 
   const resetForm = () => {
-    setFormData({ contactId: '', productId: '', valor: '', metodoPagamento: '', convenioNome: '' });
+    setContactId('');
+    setMetodoPagamento('');
+    setConvenioNome('');
+    setItems([{ id: `item-${Date.now()}`, productId: '', quantidade: 1, valorUnitario: '' }]);
     setNewContact({ nome: '', telefone: '', email: '', origem: 'manual' });
     setValidation(null);
     setIsCreatingNewContact(false);
@@ -213,12 +267,21 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
     ? contacts.find((c) => c.id === preSelectedContactId)
     : null;
 
+  // Check if any item has value different from default
+  const hasValueDifferentFromDefault = useMemo(() => {
+    return items.some(item => {
+      const product = products.find(p => p.id === item.productId);
+      if (!product || !item.valorUnitario) return false;
+      return parseFloat(item.valorUnitario) !== product.valor_padrao;
+    });
+  }, [items, products]);
+
   // Determine if form is valid
   const isFormValid = useMemo(() => {
     // Check contact
     if (isCreatingNewContact) {
       if (!newContact.nome.trim() || !newContact.telefone.trim()) return false;
-    } else if (!preSelectedContactId && !formData.contactId) {
+    } else if (!preSelectedContactId && !contactId) {
       return false;
     } else if (!preSelectedContactId && !isCreatingNewContact && !validation?.allowed) {
       return false;
@@ -226,14 +289,20 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
       return false;
     }
 
-    // Check product and value
-    if (!formData.productId || !formData.valor || !formData.metodoPagamento) return false;
+    // Check items
+    const hasValidItem = items.some(item => 
+      item.productId && parseFloat(item.valorUnitario) > 0
+    );
+    if (!hasValidItem) return false;
+
+    // Check payment method
+    if (!metodoPagamento) return false;
 
     // Check convenio name if needed
-    if (formData.metodoPagamento === 'convenio' && !formData.convenioNome.trim()) return false;
+    if (metodoPagamento === 'convenio' && !convenioNome.trim()) return false;
 
     return true;
-  }, [isCreatingNewContact, newContact, preSelectedContactId, formData, validation]);
+  }, [isCreatingNewContact, newContact, preSelectedContactId, contactId, validation, items, metodoPagamento, convenioNome]);
 
   return (
     <Dialog
@@ -256,11 +325,11 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
           </Button>
         </DialogTrigger>
       )}
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Registrar Nova Venda</DialogTitle>
           <DialogDescription>
-            Crie uma nova venda vinculando um cliente e produto. Vendas são lançamentos manuais.
+            Adicione produtos e serviços para registrar uma venda.
           </DialogDescription>
         </DialogHeader>
 
@@ -275,7 +344,7 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
               </div>
             ) : (
               <Select 
-                value={isCreatingNewContact ? 'new' : formData.contactId} 
+                value={isCreatingNewContact ? 'new' : contactId} 
                 onValueChange={handleContactChange}
               >
                 <SelectTrigger>
@@ -310,7 +379,7 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
             )}
 
             {/* Validation feedback for existing contact */}
-            {!isCreatingNewContact && !preSelectedContactId && validation && formData.contactId && (
+            {!isCreatingNewContact && !preSelectedContactId && validation && contactId && (
               <Alert
                 variant={validation.allowed ? 'default' : 'destructive'}
                 className="mt-2"
@@ -385,81 +454,160 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
             </div>
           )}
 
-          {/* Product Selection */}
-          <div className="space-y-2">
-            <Label htmlFor="product">Produto / Procedimento *</Label>
-            <Select value={formData.productId} onValueChange={handleProductChange}>
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione o produto" />
-              </SelectTrigger>
-              <SelectContent>
-                {products.length === 0 ? (
-                  <SelectItem value="none" disabled>
-                    Nenhum produto cadastrado
-                  </SelectItem>
-                ) : (
-                  products.map((product) => (
-                    <SelectItem key={product.id} value={product.id}>
-                      <div className="flex items-center justify-between gap-4 w-full">
-                        <span>{product.nome}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {formatCurrency(product.valor_padrao)}
+          <Separator />
+
+          {/* Products/Items Section */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label className="flex items-center gap-2">
+                <Package className="w-4 h-4" />
+                Produtos / Procedimentos *
+              </Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleAddItem}
+                className="gap-1"
+              >
+                <Plus className="w-3 h-3" />
+                Adicionar Item
+              </Button>
+            </div>
+
+            <div className="space-y-3">
+              {items.map((item, index) => {
+                const product = products.find(p => p.id === item.productId);
+                const valorDiffers = product && item.valorUnitario && 
+                  parseFloat(item.valorUnitario) !== product.valor_padrao;
+                
+                return (
+                  <Card key={item.id} className="border-border">
+                    <CardContent className="p-3 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-muted-foreground">
+                          Item {index + 1}
                         </span>
+                        {items.length > 1 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-destructive hover:text-destructive"
+                            onClick={() => handleRemoveItem(item.id)}
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        )}
                       </div>
-                    </SelectItem>
-                  ))
-                )}
-              </SelectContent>
-            </Select>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="sm:col-span-2 space-y-1">
+                          <Label className="text-xs">Produto</Label>
+                          <Select 
+                            value={item.productId} 
+                            onValueChange={(v) => handleItemChange(item.id, 'productId', v)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {products.length === 0 ? (
+                                <SelectItem value="none" disabled>
+                                  Nenhum produto cadastrado
+                                </SelectItem>
+                              ) : (
+                                products.map((p) => (
+                                  <SelectItem key={p.id} value={p.id}>
+                                    <div className="flex items-center justify-between gap-4 w-full">
+                                      <span>{p.nome}</span>
+                                      <span className="text-xs text-muted-foreground">
+                                        {formatCurrency(p.valor_padrao)}
+                                      </span>
+                                    </div>
+                                  </SelectItem>
+                                ))
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label className="text-xs">Qtd.</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={item.quantidade}
+                            onChange={(e) => handleItemChange(item.id, 'quantidade', parseInt(e.target.value) || 1)}
+                            className="text-center"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Valor Unitário</Label>
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+                              R$
+                            </span>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={item.valorUnitario}
+                              onChange={(e) => handleItemChange(item.id, 'valorUnitario', e.target.value)}
+                              className="pl-10"
+                              placeholder="0,00"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Subtotal</Label>
+                          <div className="h-9 px-3 flex items-center rounded-md border border-input bg-muted/50 text-sm font-medium">
+                            {formatCurrency((parseFloat(item.valorUnitario) || 0) * item.quantidade)}
+                          </div>
+                        </div>
+                      </div>
+
+                      {valorDiffers && (
+                        <Alert className="py-2 bg-warning/10 border-warning/20">
+                          <AlertTriangle className="h-3 w-3 text-warning" />
+                          <AlertDescription className="text-xs">
+                            Valor diferente do padrão ({formatCurrency(product.valor_padrao)})
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+
+            {/* Total */}
+            <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border border-border">
+              <span className="font-medium">Total da Venda</span>
+              <span className="text-xl font-bold text-primary">
+                {formatCurrency(valorTotal)}
+              </span>
+            </div>
           </div>
 
-          {/* Value */}
-          <div className="space-y-2">
-            <Label htmlFor="valor">Valor *</Label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                R$
-              </span>
-              <Input
-                id="valor"
-                type="number"
-                step="0.01"
-                min="0"
-                value={formData.valor}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, valor: e.target.value }))
-                }
-                className="pl-10"
-                placeholder="0,00"
-              />
-            </div>
-            {valorDifersFromDefault && selectedProduct && (
-              <Alert className="mt-2 bg-warning/10 border-warning/20">
-                <AlertTriangle className="h-4 w-4 text-warning" />
-                <AlertDescription className="text-sm">
-                  Valor diferente do padrão ({formatCurrency(selectedProduct.valor_padrao)}). 
-                  Confirme se é uma promoção ou desconto.
-                </AlertDescription>
-              </Alert>
-            )}
-          </div>
+          <Separator />
 
           {/* Payment Method */}
           <div className="space-y-2">
             <Label htmlFor="paymentMethod">Método de Pagamento *</Label>
             <Select
-              value={formData.metodoPagamento}
-              onValueChange={(v) =>
-                setFormData((prev) => ({
-                  ...prev,
-                  metodoPagamento: v as PaymentMethod,
-                  convenioNome: v !== 'convenio' ? '' : prev.convenioNome,
-                }))
-              }
-              disabled={!selectedProduct}
+              value={metodoPagamento}
+              onValueChange={(v) => {
+                setMetodoPagamento(v as PaymentMethod);
+                if (v !== 'convenio') setConvenioNome('');
+              }}
+              disabled={availablePaymentMethods.length === 0}
             >
               <SelectTrigger>
-                <SelectValue placeholder={selectedProduct ? 'Selecione' : 'Selecione um produto primeiro'} />
+                <SelectValue placeholder={availablePaymentMethods.length === 0 ? 'Selecione um produto primeiro' : 'Selecione'} />
               </SelectTrigger>
               <SelectContent>
                 {availablePaymentMethods.map((method) => (
@@ -477,21 +625,19 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
           </div>
 
           {/* Convenio Name (if convenio selected) */}
-          {formData.metodoPagamento === 'convenio' && (
+          {metodoPagamento === 'convenio' && (
             <div className="space-y-2">
               <Label htmlFor="convenioNome">Nome do Convênio *</Label>
-              {selectedProduct?.convenios_aceitos && selectedProduct.convenios_aceitos.length > 0 ? (
+              {availableConvenios.length > 0 ? (
                 <Select
-                  value={formData.convenioNome}
-                  onValueChange={(v) =>
-                    setFormData((prev) => ({ ...prev, convenioNome: v }))
-                  }
+                  value={convenioNome}
+                  onValueChange={setConvenioNome}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o convênio" />
                   </SelectTrigger>
                   <SelectContent>
-                    {selectedProduct.convenios_aceitos.map((convenio) => (
+                    {availableConvenios.map((convenio) => (
                       <SelectItem key={convenio} value={convenio}>
                         {convenio}
                       </SelectItem>
@@ -501,10 +647,8 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
               ) : (
                 <Input
                   id="convenioNome"
-                  value={formData.convenioNome}
-                  onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, convenioNome: e.target.value }))
-                  }
+                  value={convenioNome}
+                  onChange={(e) => setConvenioNome(e.target.value)}
                   placeholder="Ex: Unimed, Bradesco Saúde..."
                 />
               )}

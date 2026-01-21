@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useMemo, ReactNode, useCallback } from 'react';
-import { Sale, Contact, LeadFunnelState, SaleStatus, PaymentMethod, Product, ContactOrigin, LeadNote } from '@/types/crm';
+import { Sale, SaleItem, Contact, LeadFunnelState, SaleStatus, PaymentMethod, Product, ContactOrigin, LeadNote } from '@/types/crm';
 import { 
   mockSales, 
   mockContacts, 
@@ -31,10 +31,18 @@ interface UpdateContactData {
   origem?: ContactOrigin;
 }
 
+/** Item individual para criação de venda */
+export interface CreateSaleItem {
+  productId: string;
+  quantidade: number;
+  valorUnitario: number;
+}
+
 interface CreateSaleData {
   contactId: string;
-  productId: string;
-  valor: number;
+  /** @deprecated Use items[] para múltiplos produtos */
+  productId?: string;
+  items: CreateSaleItem[];
   metodoPagamento: PaymentMethod;
   responsavelId: string;
   convenioNome?: string;
@@ -345,15 +353,31 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
         }
       }
 
-      // Check if this is a recurring sale
-      const isRecurring = checkIsRecurringSale(data.contactId, data.productId);
+      // Build items array with generated IDs
+      const saleId = `sale-${Date.now()}`;
+      const items: SaleItem[] = data.items.map((item, index) => ({
+        id: `item-${saleId}-${index}`,
+        product_id: item.productId,
+        quantidade: item.quantidade,
+        valor_unitario: item.valorUnitario,
+        valor_total: item.quantidade * item.valorUnitario,
+      }));
+
+      // Calculate total value from items
+      const valorTotal = items.reduce((sum, item) => sum + item.valor_total, 0);
+
+      // Check if any product is recurring
+      const isRecurring = data.items.some(item => 
+        checkIsRecurringSale(data.contactId, item.productId)
+      );
 
       const newSale: Sale = {
-        id: `sale-${Date.now()}`,
+        id: saleId,
         account_id: accountId,
         contact_id: data.contactId,
-        product_id: data.productId,
-        valor: data.valor,
+        product_id: data.items[0]?.productId, // backwards compatibility
+        items,
+        valor: valorTotal,
         status: 'pending',
         metodo_pagamento: data.metodoPagamento,
         convenio_nome: data.convenioNome,
@@ -367,7 +391,8 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
       setSales((prev) => [newSale, ...prev]);
       createEvent('sale.created', newSale.id, { 
         contactId: data.contactId, 
-        valor: data.valor,
+        valor: valorTotal,
+        itemsCount: items.length,
         isRecurring,
       });
 
