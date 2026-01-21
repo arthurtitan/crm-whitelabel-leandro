@@ -1,11 +1,14 @@
-import { useState } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useState, useMemo } from 'react';
+import { useAuth, useRoleAccess } from '@/contexts/AuthContext';
+import { useCalendar } from '@/contexts/CalendarContext';
 import {
   Users,
   MessageSquare,
   Clock,
   ArrowRightLeft,
+  CalendarCheck,
 } from 'lucide-react';
+import { startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
 
 // Dashboard Components
 import { DashboardFilters } from '@/components/dashboard/DashboardFilters';
@@ -110,11 +113,42 @@ const mockDashboardData = {
 type ViewState = 'loading' | 'empty' | 'data';
 
 export default function AdminDashboard() {
-  const { account } = useAuth();
+  const { user, account } = useAuth();
+  const { isAdmin } = useRoleAccess();
+  const { events } = useCalendar();
+  
   const [viewState, setViewState] = useState<ViewState>('data');
   const [period, setPeriod] = useState('7d');
   const [channel, setChannel] = useState('all');
   const [type, setType] = useState('all');
+  const [selectedAgent, setSelectedAgent] = useState('all');
+
+  // Calculate appointments count based on role and selected agent
+  const appointmentsCount = useMemo(() => {
+    const now = new Date();
+    const monthStart = startOfMonth(now);
+    const monthEnd = endOfMonth(now);
+    
+    // Filter events to only include appointments/meetings this month
+    const monthEvents = events.filter(event => {
+      const eventDate = parseISO(event.start);
+      return isWithinInterval(eventDate, { start: monthStart, end: monthEnd }) &&
+             (event.type === 'meeting' || event.type === 'appointment');
+    });
+    
+    // If agent, show only their own appointments
+    if (!isAdmin) {
+      return monthEvents.filter(event => event.createdBy === user?.id).length;
+    }
+    
+    // If admin with agent filter applied
+    if (selectedAgent !== 'all') {
+      return monthEvents.filter(event => event.createdBy === selectedAgent).length;
+    }
+    
+    // Admin with no filter - show all
+    return monthEvents.length;
+  }, [events, isAdmin, user?.id, selectedAgent]);
 
   // Simulate different states for demonstration
   const handleStateChange = (state: ViewState) => {
@@ -176,6 +210,8 @@ export default function AdminDashboard() {
         onPeriodChange={setPeriod}
         onChannelChange={setChannel}
         onTypeChange={setType}
+        onAgentChange={setSelectedAgent}
+        showAgentFilter={isAdmin && user?.role === 'admin'}
       />
 
       {isEmpty ? (
@@ -186,7 +222,7 @@ export default function AdminDashboard() {
       ) : (
         <>
           {/* KPI Cards - Row 1 */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <KPICard
               title="Total de Leads"
               subtitle="Contatos únicos que tiveram conversa"
@@ -203,6 +239,15 @@ export default function AdminDashboard() {
               icon={MessageSquare}
               iconColor="text-info"
               iconBgColor="bg-info/10"
+              isLoading={isLoading}
+            />
+            <KPICard
+              title="Agendamentos"
+              subtitle={isAdmin ? (selectedAgent !== 'all' ? 'Do agente selecionado' : 'De todos os usuários') : 'Seus agendamentos'}
+              value={appointmentsCount}
+              icon={CalendarCheck}
+              iconColor="text-success"
+              iconBgColor="bg-success/10"
               isLoading={isLoading}
             />
             <KPICard
