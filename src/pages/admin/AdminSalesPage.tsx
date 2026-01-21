@@ -1,13 +1,12 @@
 import { useState } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
 import { useFinance } from '@/contexts/FinanceContext';
 import { SaleStatus } from '@/types/crm';
 import { RefundConfirmationDialog } from '@/components/finance/RefundConfirmationDialog';
 import { CreateSaleDialog } from '@/components/finance/CreateSaleDialog';
+import { SaleItemsRow } from '@/components/finance/SaleItemsRow';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import {
   Table,
   TableBody,
@@ -16,14 +15,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import {
   Select,
   SelectContent,
@@ -34,15 +25,11 @@ import {
 import {
   Plus,
   Search,
-  MoreHorizontal,
-  CheckCircle,
-  RotateCcw,
   DollarSign,
   TrendingUp,
+  CheckCircle,
   Clock,
 } from 'lucide-react';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 
 export default function AdminSalesPage() {
@@ -78,36 +65,6 @@ export default function AdminSalesPage() {
   const getContactName = (contactId: string) => {
     const contact = getContactById(contactId);
     return contact?.nome || 'Cliente';
-  };
-
-  const getStatusBadge = (status: SaleStatus) => {
-    switch (status) {
-      case 'paid':
-        return <Badge className="bg-success/10 text-success border-success/20">Pago</Badge>;
-      case 'pending':
-        return <Badge className="bg-warning/10 text-warning border-warning/20">Pendente</Badge>;
-      case 'refunded':
-        return <Badge className="bg-primary/10 text-primary border-primary/20">Estornado</Badge>;
-      default:
-        return <Badge variant="outline">-</Badge>;
-    }
-  };
-
-  const getPaymentMethodBadge = (method: string | null) => {
-    switch (method) {
-      case 'pix':
-        return <Badge variant="secondary">PIX</Badge>;
-      case 'cartao':
-        return <Badge variant="secondary">Cartão</Badge>;
-      case 'boleto':
-        return <Badge variant="secondary">Boleto</Badge>;
-      case 'dinheiro':
-        return <Badge variant="secondary">Dinheiro</Badge>;
-      case 'convenio':
-        return <Badge variant="secondary">Convênio</Badge>;
-      default:
-        return <Badge variant="secondary">-</Badge>;
-    }
   };
 
   const handleMarkAsPaid = (saleId: string) => {
@@ -234,7 +191,8 @@ export default function AdminSalesPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Cliente</TableHead>
-                <TableHead>Valor</TableHead>
+                <TableHead>Produtos</TableHead>
+                <TableHead>Valor Total</TableHead>
                 <TableHead>Método</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Data</TableHead>
@@ -244,56 +202,19 @@ export default function AdminSalesPage() {
             <TableBody>
               {filteredSales.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                     Nenhuma venda encontrada
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredSales.map((sale) => (
-                  <TableRow key={sale.id}>
-                    <TableCell className="font-medium">{getContactName(sale.contact_id)}</TableCell>
-                    <TableCell className="font-bold">
-                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(sale.valor)}
-                    </TableCell>
-                    <TableCell>{getPaymentMethodBadge(sale.metodo_pagamento)}</TableCell>
-                    <TableCell>{getStatusBadge(sale.status)}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {format(new Date(sale.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreHorizontal className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                          <DropdownMenuSeparator />
-                          {sale.status === 'pending' && (
-                            <DropdownMenuItem onClick={() => handleMarkAsPaid(sale.id)}>
-                              <CheckCircle className="w-4 h-4 mr-2 text-success" />
-                              Confirmar Pagamento
-                            </DropdownMenuItem>
-                          )}
-                          {sale.status === 'paid' && (
-                            <DropdownMenuItem
-                              className="text-destructive"
-                              onClick={() => setRefundDialog({ open: true, saleId: sale.id, valor: sale.valor })}
-                            >
-                              <RotateCcw className="w-4 h-4 mr-2" />
-                              Estornar
-                            </DropdownMenuItem>
-                          )}
-                          {sale.status === 'refunded' && (
-                            <DropdownMenuItem disabled>
-                              Nenhuma ação disponível
-                            </DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
+                  <SaleItemsRow
+                    key={sale.id}
+                    sale={sale}
+                    contactName={getContactName(sale.contact_id)}
+                    onMarkAsPaid={handleMarkAsPaid}
+                    onRefundSale={(saleId, valor) => setRefundDialog({ open: true, saleId, valor })}
+                  />
                 ))
               )}
             </TableBody>

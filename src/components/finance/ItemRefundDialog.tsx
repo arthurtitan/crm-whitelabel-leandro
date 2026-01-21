@@ -1,0 +1,175 @@
+import { useState } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Lock, AlertTriangle } from 'lucide-react';
+import { toast } from 'sonner';
+
+// Demo credentials for validation (matching AuthContext)
+const DEMO_CREDENTIALS: Record<string, string> = {
+  'superadmin@sistema.com': 'Admin@123',
+  'carlos@clinicavidaplena.com': 'Admin@123',
+  'ana@clinicavidaplena.com': 'Agent@123',
+  'pedro@clinicavidaplena.com': 'Agent@123',
+  'marina@techsolutions.com': 'Admin@123',
+  'lucas@techsolutions.com': 'Agent@123',
+};
+
+interface ItemRefundDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  productName: string;
+  itemValue: number;
+  onConfirm: (reason: string) => void;
+}
+
+export function ItemRefundDialog({
+  open,
+  onOpenChange,
+  productName,
+  itemValue,
+  onConfirm,
+}: ItemRefundDialogProps) {
+  const { user } = useAuth();
+  const [password, setPassword] = useState('');
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState('');
+  const [isValidating, setIsValidating] = useState(false);
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(value);
+  };
+
+  const handleConfirm = async () => {
+    if (!password.trim()) {
+      setError('Digite sua senha para confirmar');
+      return;
+    }
+
+    if (!reason.trim()) {
+      setError('Informe o motivo do estorno');
+      return;
+    }
+
+    setIsValidating(true);
+    setError('');
+
+    // Simulate validation delay
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    // Validate password
+    const userEmail = user?.email;
+    if (!userEmail) {
+      setError('Erro ao identificar usuário');
+      setIsValidating(false);
+      return;
+    }
+
+    const validPassword = DEMO_CREDENTIALS[userEmail];
+    if (!validPassword || validPassword !== password) {
+      setError('Senha incorreta');
+      setIsValidating(false);
+      return;
+    }
+
+    // Password validated, proceed with refund
+    setIsValidating(false);
+    onConfirm(reason);
+    handleClose();
+    toast.success('Item estornado com sucesso!');
+  };
+
+  const handleClose = () => {
+    setPassword('');
+    setReason('');
+    setError('');
+    setIsValidating(false);
+    onOpenChange(false);
+  };
+
+  return (
+    <AlertDialog open={open} onOpenChange={handleClose}>
+      <AlertDialogContent className="sm:max-w-md">
+        <AlertDialogHeader>
+          <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+            <AlertTriangle className="w-5 h-5" />
+            Estornar Item
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            Você está prestes a estornar o item{' '}
+            <strong className="text-foreground">{productName}</strong> no valor de{' '}
+            <strong className="text-foreground">{formatCurrency(itemValue)}</strong>.
+            Esta ação não pode ser desfeita.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+
+        <div className="space-y-4 py-4">
+          <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+            <p className="text-sm text-destructive font-medium">
+              Para confirmar o estorno, digite sua senha de acesso ao sistema.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="item-refund-reason">Motivo do estorno</Label>
+            <Textarea
+              id="item-refund-reason"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Descreva o motivo do estorno..."
+              rows={2}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="item-refund-password" className="flex items-center gap-2">
+              <Lock className="w-4 h-4" />
+              Sua senha
+            </Label>
+            <Input
+              id="item-refund-password"
+              type="password"
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                setError('');
+              }}
+              placeholder="Digite sua senha para confirmar"
+              className={error ? 'border-destructive' : ''}
+            />
+            {error && (
+              <p className="text-sm text-destructive">{error}</p>
+            )}
+          </div>
+        </div>
+
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={handleClose} disabled={isValidating}>
+            Cancelar
+          </AlertDialogCancel>
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={isValidating || !password || !reason}
+            className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-destructive text-destructive-foreground hover:bg-destructive/90 h-10 px-4 py-2"
+          >
+            {isValidating ? 'Validando...' : 'Confirmar Estorno'}
+          </button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
