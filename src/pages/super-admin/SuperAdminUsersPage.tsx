@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { mockUsers, mockAccounts } from '@/data/mockData';
 import { User, UserRole, UserStatus } from '@/types/crm';
+import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -53,6 +54,16 @@ import {
   Shield,
   Eye,
   EyeOff,
+  LayoutDashboard,
+  Kanban,
+  Users,
+  MessageSquare,
+  Calendar,
+  DollarSign,
+  Wallet,
+  Package,
+  Activity,
+  RotateCcw,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -80,13 +91,22 @@ export default function SuperAdminUsersPage() {
 
   const [showPassword, setShowPassword] = useState(false);
 
-  // Agent permission areas
+  // Agent permission areas - matching actual system pages
   const agentPermissionAreas = [
-    { id: 'leads', label: 'Leads / Funil' },
-    { id: 'conversations', label: 'Conversas' },
-    { id: 'sales', label: 'Vendas' },
-    { id: 'events', label: 'Eventos' },
-    { id: 'reports', label: 'Relatórios' },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'kanban', label: 'Kanban', icon: Kanban },
+    { id: 'leads', label: 'Leads', icon: Users },
+    { id: 'conversations', label: 'Conversas', icon: MessageSquare },
+    { id: 'agenda', label: 'Agenda', icon: Calendar },
+    { id: 'sales', label: 'Vendas', icon: DollarSign },
+    { id: 'finance', label: 'Financeiro', icon: Wallet },
+    { id: 'products', label: 'Produtos', icon: Package },
+    { id: 'events', label: 'Eventos', icon: Activity },
+  ];
+
+  // Special action permissions
+  const agentActionPermissions = [
+    { id: 'refunds', label: 'Realizar Estornos', icon: RotateCcw },
   ];
 
   const [formData, setFormData] = useState({
@@ -363,32 +383,84 @@ export default function SuperAdminUsersPage() {
 
               {/* Agent Permissions */}
               {formData.role === 'agent' && (
-                <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
-                  <Label className="font-medium">
-                    Permissões de Acesso <span className="text-destructive">*</span>
-                  </Label>
-                  <p className="text-sm text-muted-foreground">
-                    Selecione as áreas que este agente poderá acessar
-                  </p>
-                  <div className="grid grid-cols-2 gap-3 pt-2">
-                    {agentPermissionAreas.map((area) => (
-                      <div key={area.id} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`perm-${area.id}`}
-                          checked={formData.permissions.includes(area.id)}
-                          onCheckedChange={() => togglePermission(area.id)}
-                        />
-                        <label
-                          htmlFor={`perm-${area.id}`}
-                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                        >
-                          {area.label}
-                        </label>
-                      </div>
-                    ))}
+                <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+                  <div>
+                    <Label className="font-medium">
+                      Permissões de Acesso <span className="text-destructive">*</span>
+                    </Label>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Selecione as páginas e ações que este agente poderá acessar
+                    </p>
                   </div>
+                  
+                  {/* Page permissions */}
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Páginas</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {agentPermissionAreas.map((area) => (
+                        <div 
+                          key={area.id} 
+                          className={cn(
+                            "flex items-center gap-2 p-2 rounded-md border cursor-pointer transition-colors",
+                            formData.permissions.includes(area.id) 
+                              ? "bg-primary/10 border-primary" 
+                              : "bg-background hover:bg-muted"
+                          )}
+                          onClick={() => togglePermission(area.id)}
+                        >
+                          <Checkbox
+                            id={`perm-${area.id}`}
+                            checked={formData.permissions.includes(area.id)}
+                            onCheckedChange={() => togglePermission(area.id)}
+                            className="pointer-events-none"
+                          />
+                          <area.icon className="w-4 h-4 text-muted-foreground" />
+                          <label
+                            htmlFor={`perm-${area.id}`}
+                            className="text-sm font-medium leading-none cursor-pointer flex-1"
+                          >
+                            {area.label}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Action permissions */}
+                  <div className="space-y-2 pt-2 border-t">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Ações Especiais</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {agentActionPermissions.map((action) => (
+                        <div 
+                          key={action.id} 
+                          className={cn(
+                            "flex items-center gap-2 p-2 rounded-md border cursor-pointer transition-colors",
+                            formData.permissions.includes(action.id) 
+                              ? "bg-primary/10 border-primary" 
+                              : "bg-background hover:bg-muted"
+                          )}
+                          onClick={() => togglePermission(action.id)}
+                        >
+                          <Checkbox
+                            id={`perm-${action.id}`}
+                            checked={formData.permissions.includes(action.id)}
+                            onCheckedChange={() => togglePermission(action.id)}
+                            className="pointer-events-none"
+                          />
+                          <action.icon className="w-4 h-4 text-muted-foreground" />
+                          <label
+                            htmlFor={`perm-${action.id}`}
+                            className="text-sm font-medium leading-none cursor-pointer flex-1"
+                          >
+                            {action.label}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
                   {formData.permissions.length === 0 && (
-                    <p className="text-sm text-amber-600">
+                    <p className="text-sm text-warning">
                       Selecione pelo menos uma área de acesso
                     </p>
                   )}
@@ -681,32 +753,84 @@ export default function SuperAdminUsersPage() {
 
               {/* Agent Permissions */}
               {editFormData.role === 'agent' && (
-                <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
-                  <Label className="font-medium">
-                    Permissões de Acesso <span className="text-destructive">*</span>
-                  </Label>
-                  <p className="text-sm text-muted-foreground">
-                    Selecione as áreas que este agente poderá acessar
-                  </p>
-                  <div className="grid grid-cols-2 gap-3 pt-2">
-                    {agentPermissionAreas.map((area) => (
-                      <div key={area.id} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`edit-perm-${area.id}`}
-                          checked={editFormData.permissions.includes(area.id)}
-                          onCheckedChange={() => toggleEditPermission(area.id)}
-                        />
-                        <label
-                          htmlFor={`edit-perm-${area.id}`}
-                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                        >
-                          {area.label}
-                        </label>
-                      </div>
-                    ))}
+                <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+                  <div>
+                    <Label className="font-medium">
+                      Permissões de Acesso <span className="text-destructive">*</span>
+                    </Label>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Selecione as páginas e ações que este agente poderá acessar
+                    </p>
                   </div>
+                  
+                  {/* Page permissions */}
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Páginas</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {agentPermissionAreas.map((area) => (
+                        <div 
+                          key={area.id} 
+                          className={cn(
+                            "flex items-center gap-2 p-2 rounded-md border cursor-pointer transition-colors",
+                            editFormData.permissions.includes(area.id) 
+                              ? "bg-primary/10 border-primary" 
+                              : "bg-background hover:bg-muted"
+                          )}
+                          onClick={() => toggleEditPermission(area.id)}
+                        >
+                          <Checkbox
+                            id={`edit-perm-${area.id}`}
+                            checked={editFormData.permissions.includes(area.id)}
+                            onCheckedChange={() => toggleEditPermission(area.id)}
+                            className="pointer-events-none"
+                          />
+                          <area.icon className="w-4 h-4 text-muted-foreground" />
+                          <label
+                            htmlFor={`edit-perm-${area.id}`}
+                            className="text-sm font-medium leading-none cursor-pointer flex-1"
+                          >
+                            {area.label}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Action permissions */}
+                  <div className="space-y-2 pt-2 border-t">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Ações Especiais</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {agentActionPermissions.map((action) => (
+                        <div 
+                          key={action.id} 
+                          className={cn(
+                            "flex items-center gap-2 p-2 rounded-md border cursor-pointer transition-colors",
+                            editFormData.permissions.includes(action.id) 
+                              ? "bg-primary/10 border-primary" 
+                              : "bg-background hover:bg-muted"
+                          )}
+                          onClick={() => toggleEditPermission(action.id)}
+                        >
+                          <Checkbox
+                            id={`edit-perm-${action.id}`}
+                            checked={editFormData.permissions.includes(action.id)}
+                            onCheckedChange={() => toggleEditPermission(action.id)}
+                            className="pointer-events-none"
+                          />
+                          <action.icon className="w-4 h-4 text-muted-foreground" />
+                          <label
+                            htmlFor={`edit-perm-${action.id}`}
+                            className="text-sm font-medium leading-none cursor-pointer flex-1"
+                          >
+                            {action.label}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
                   {editFormData.permissions.length === 0 && (
-                    <p className="text-sm text-amber-600">
+                    <p className="text-sm text-warning">
                       Selecione pelo menos uma área de acesso
                     </p>
                   )}
