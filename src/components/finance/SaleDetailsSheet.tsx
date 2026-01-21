@@ -60,8 +60,14 @@ export function SaleDetailsSheet({
 
   const contact = getContactById(sale.contact_id);
   
-  // Only the user who created the sale can confirm or refund it
-  const canManageSale = user?.id === sale.responsavel_id;
+  // Check if user can manage this sale
+  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
+  const isOwner = user?.id === sale.responsavel_id;
+  const hasRefundPermission = user?.permissions?.includes('refunds') || false;
+  
+  // Admins can always confirm/refund; Agents need ownership + refunds permission for refunds
+  const canConfirmPayment = isAdmin || isOwner;
+  const canRefundSale = isAdmin || (isOwner && hasRefundPermission);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -143,7 +149,7 @@ export function SaleDetailsSheet({
             <div className="flex items-center justify-between">
               {getStatusBadge(sale.status)}
               <div className="flex gap-2">
-                {sale.status === 'pending' && canManageSale && (
+                {sale.status === 'pending' && canConfirmPayment && (
                   <Button
                     size="sm"
                     className="bg-success hover:bg-success/90 gap-1"
@@ -156,7 +162,7 @@ export function SaleDetailsSheet({
                     Confirmar
                   </Button>
                 )}
-                {sale.status === 'paid' && canManageSale && (
+                {sale.status === 'paid' && canRefundSale && (
                   <Button
                     size="sm"
                     variant="destructive"
@@ -173,12 +179,24 @@ export function SaleDetailsSheet({
               </div>
             </div>
 
-            {/* Warning for non-owner */}
-            {!canManageSale && (sale.status === 'pending' || sale.status === 'paid') && (
+            {/* Warning for non-owner on pending */}
+            {!canConfirmPayment && sale.status === 'pending' && (
               <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 border border-border">
                 <ShieldAlert className="w-4 h-4 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">
-                  Somente o responsável pela venda pode confirmar ou estornar.
+                  Somente o responsável pela venda pode confirmar o pagamento.
+                </p>
+              </div>
+            )}
+
+            {/* Warning for non-refund permission on paid */}
+            {!canRefundSale && sale.status === 'paid' && (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 border border-border">
+                <ShieldAlert className="w-4 h-4 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">
+                  {!isOwner 
+                    ? 'Somente o responsável pela venda pode estornar.' 
+                    : 'Você não possui permissão para realizar estornos.'}
                 </p>
               </div>
             )}
@@ -302,7 +320,7 @@ export function SaleDetailsSheet({
                           <p className={`font-bold ${isRefunded ? 'line-through text-muted-foreground' : ''}`}>
                             {formatCurrency(item.valor_total)}
                           </p>
-                          {sale.status === 'paid' && !isRefunded && sale.items.length > 1 && canManageSale && (
+                          {sale.status === 'paid' && !isRefunded && sale.items.length > 1 && canRefundSale && (
                             <Button
                               variant="ghost"
                               size="sm"
