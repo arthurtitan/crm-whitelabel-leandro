@@ -8,3 +8,4 @@ export { RefundConfirmationDialog } from './RefundConfirmationDialog';
 export { ItemRefundDialog } from './ItemRefundDialog';
 export { SaleItemsRow } from './SaleItemsRow';
 export { SaleDetailsSheet } from './SaleDetailsSheet';
+export { SalesAuditLog } from './SalesAuditLog';
