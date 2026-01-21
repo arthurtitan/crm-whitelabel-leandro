@@ -248,17 +248,27 @@ export const mockSales: Sale[] = [
 ];
 
 // ============= EVENTS =============
+// Logs focados em ações relevantes de autenticação (excluindo SuperAdmin)
 export const mockEvents: CRMEvent[] = [
-  { id: 'evt-1', account_id: null, event_type: 'auth.login.success', actor_type: 'user', actor_id: 'user-sa-1', entity_type: 'user', entity_id: 'user-sa-1', channel: null, payload: { ip: '192.168.1.1', device: 'Chrome/Windows' }, created_at: '2025-01-19T08:00:00Z' },
-  { id: 'evt-2', account_id: 'acc-1', event_type: 'auth.login.success', actor_type: 'user', actor_id: 'user-admin-1', entity_type: 'user', entity_id: 'user-admin-1', channel: null, payload: { ip: '192.168.1.2', device: 'Safari/Mac' }, created_at: '2025-01-19T07:30:00Z' },
-  { id: 'evt-3', account_id: 'acc-1', event_type: 'conversation.opened', actor_type: 'external', actor_id: null, entity_type: 'conversation', entity_id: 'conv-4', channel: 'whatsapp', payload: { contact_id: 'contact-4' }, created_at: '2025-01-19T09:00:00Z' },
-  { id: 'evt-4', account_id: 'acc-1', event_type: 'message.received', actor_type: 'external', actor_id: 'contact-4', entity_type: 'conversation', entity_id: 'conv-4', channel: 'whatsapp', payload: { text: 'Olá, gostaria de informações sobre consultas' }, created_at: '2025-01-19T09:01:00Z' },
-  { id: 'evt-5', account_id: 'acc-1', event_type: 'conversation.assigned.bot', actor_type: 'system', actor_id: null, entity_type: 'conversation', entity_id: 'conv-2', channel: 'instagram', payload: { bot_id: 'bot-1', reason: 'auto_assign' }, created_at: '2025-01-18T14:00:30Z' },
-  { id: 'evt-6', account_id: 'acc-1', event_type: 'lead.stage.changed', actor_type: 'user', actor_id: 'user-agent-1', entity_type: 'contact', entity_id: 'contact-1', channel: null, payload: { from_stage: 'stage-3', to_stage: 'stage-4' }, created_at: '2025-01-19T08:00:00Z' },
-  { id: 'evt-7', account_id: 'acc-1', event_type: 'sale.created', actor_type: 'user', actor_id: 'user-agent-1', entity_type: 'sale', entity_id: 'sale-2', channel: null, payload: { contact_id: 'contact-6', valor: 2800 }, created_at: '2025-01-19T10:30:00Z' },
-  { id: 'evt-8', account_id: 'acc-1', event_type: 'sale.paid', actor_type: 'system', actor_id: null, entity_type: 'sale', entity_id: 'sale-2', channel: null, payload: { metodo: 'cartao', paid_at: '2025-01-19T10:35:00Z' }, created_at: '2025-01-19T10:35:00Z' },
-  { id: 'evt-9', account_id: 'acc-1', event_type: 'conversation.resolved', actor_type: 'user', actor_id: 'user-agent-1', entity_type: 'conversation', entity_id: 'conv-5', channel: 'whatsapp', payload: { resolution_time_minutes: 127 }, created_at: '2025-01-19T10:00:00Z' },
-  { id: 'evt-10', account_id: 'acc-1', event_type: 'message.sent', actor_type: 'agent_bot', actor_id: 'bot-1', entity_type: 'conversation', entity_id: 'conv-6', channel: 'instagram', payload: { text: 'Olá! Sou a Marília, como posso ajudar?' }, created_at: '2025-01-18T15:01:00Z' },
+  // Admin login - Clínica Vida Plena
+  { id: 'evt-2', account_id: 'acc-1', event_type: 'auth.login.success', actor_type: 'user', actor_id: 'user-admin-1', entity_type: 'user', entity_id: 'user-admin-1', channel: null, payload: { ip: '192.168.1.2', browser: 'Safari 17.0', os: 'macOS Sonoma', device: 'MacBook Pro' }, created_at: '2025-01-19T07:30:00Z' },
+  { id: 'evt-3', account_id: 'acc-1', event_type: 'auth.logout', actor_type: 'user', actor_id: 'user-admin-1', entity_type: 'user', entity_id: 'user-admin-1', channel: null, payload: { session_duration_minutes: 240 }, created_at: '2025-01-19T11:30:00Z' },
+  // Agent 1 - Ana
+  { id: 'evt-4', account_id: 'acc-1', event_type: 'auth.login.success', actor_type: 'user', actor_id: 'user-agent-1', entity_type: 'user', entity_id: 'user-agent-1', channel: null, payload: { ip: '192.168.1.50', browser: 'Chrome 121.0', os: 'Windows 11', device: 'Desktop' }, created_at: '2025-01-19T08:00:00Z' },
+  { id: 'evt-5', account_id: 'acc-1', event_type: 'auth.logout', actor_type: 'user', actor_id: 'user-agent-1', entity_type: 'user', entity_id: 'user-agent-1', channel: null, payload: { session_duration_minutes: 480 }, created_at: '2025-01-19T16:00:00Z' },
+  // Agent 2 - Pedro
+  { id: 'evt-6', account_id: 'acc-1', event_type: 'auth.login.success', actor_type: 'user', actor_id: 'user-agent-2', entity_type: 'user', entity_id: 'user-agent-2', channel: null, payload: { ip: '192.168.1.51', browser: 'Firefox 122.0', os: 'Ubuntu 22.04', device: 'Desktop' }, created_at: '2025-01-19T09:15:00Z' },
+  { id: 'evt-7', account_id: 'acc-1', event_type: 'auth.login.failed', actor_type: 'user', actor_id: 'user-agent-2', entity_type: 'user', entity_id: 'user-agent-2', channel: null, payload: { ip: '192.168.1.51', browser: 'Firefox 122.0', os: 'Ubuntu 22.04', reason: 'Senha incorreta' }, created_at: '2025-01-19T09:14:30Z' },
+  // Account 2 - TechSolutions (Admin)
+  { id: 'evt-8', account_id: 'acc-2', event_type: 'auth.login.success', actor_type: 'user', actor_id: 'user-admin-2', entity_type: 'user', entity_id: 'user-admin-2', channel: null, payload: { ip: '10.0.0.25', browser: 'Edge 121.0', os: 'Windows 11', device: 'Surface Pro' }, created_at: '2025-01-19T08:45:00Z' },
+  // Account 2 - TechSolutions (Agent - Lucas)
+  { id: 'evt-9', account_id: 'acc-2', event_type: 'auth.login.success', actor_type: 'user', actor_id: 'user-agent-3', entity_type: 'user', entity_id: 'user-agent-3', channel: null, payload: { ip: '10.0.0.30', browser: 'Chrome 121.0', os: 'macOS Ventura', device: 'iMac' }, created_at: '2025-01-19T09:00:00Z' },
+  { id: 'evt-10', account_id: 'acc-2', event_type: 'auth.logout', actor_type: 'user', actor_id: 'user-agent-3', entity_type: 'user', entity_id: 'user-agent-3', channel: null, payload: { session_duration_minutes: 360 }, created_at: '2025-01-19T15:00:00Z' },
+  // Histórico anterior
+  { id: 'evt-11', account_id: 'acc-1', event_type: 'auth.login.success', actor_type: 'user', actor_id: 'user-agent-1', entity_type: 'user', entity_id: 'user-agent-1', channel: null, payload: { ip: '192.168.1.50', browser: 'Chrome 121.0', os: 'Windows 11', device: 'Desktop' }, created_at: '2025-01-18T08:00:00Z' },
+  { id: 'evt-12', account_id: 'acc-1', event_type: 'auth.logout', actor_type: 'user', actor_id: 'user-agent-1', entity_type: 'user', entity_id: 'user-agent-1', channel: null, payload: { session_duration_minutes: 510 }, created_at: '2025-01-18T16:30:00Z' },
+  { id: 'evt-13', account_id: 'acc-1', event_type: 'auth.login.success', actor_type: 'user', actor_id: 'user-admin-1', entity_type: 'user', entity_id: 'user-admin-1', channel: null, payload: { ip: '192.168.1.2', browser: 'Safari 17.0', os: 'macOS Sonoma', device: 'MacBook Pro' }, created_at: '2025-01-18T07:00:00Z' },
+  { id: 'evt-14', account_id: 'acc-1', event_type: 'auth.logout', actor_type: 'user', actor_id: 'user-admin-1', entity_type: 'user', entity_id: 'user-admin-1', channel: null, payload: { session_duration_minutes: 600 }, created_at: '2025-01-18T17:00:00Z' },
 ];
 
 // ============= TAGS (CHATWOOT ↔ KANBAN) =============
