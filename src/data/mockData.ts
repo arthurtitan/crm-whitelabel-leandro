@@ -6,6 +6,7 @@ import {
   Funnel,
   FunnelStage,
   Sale,
+  SaleItem,
   Product,
   CRMEvent,
   AgentBot,
@@ -238,12 +239,12 @@ export const mockProducts: Product[] = [
 
 // ============= SALES =============
 export const mockSales: Sale[] = [
-  { id: 'sale-1', account_id: 'acc-1', contact_id: 'contact-1', product_id: 'prod-4', valor: 1500.00, status: 'paid', metodo_pagamento: 'pix', responsavel_id: 'user-agent-1', created_at: '2025-01-10T12:00:00Z', paid_at: '2025-01-10T12:05:00Z', refunded_at: null },
-  { id: 'sale-2', account_id: 'acc-1', contact_id: 'contact-6', product_id: 'prod-1', valor: 2800.00, status: 'paid', metodo_pagamento: 'credito', responsavel_id: 'user-agent-1', created_at: '2025-01-19T10:30:00Z', paid_at: '2025-01-19T10:35:00Z', refunded_at: null },
-  { id: 'sale-3', account_id: 'acc-1', contact_id: 'contact-2', product_id: 'prod-3', valor: 950.00, status: 'pending', metodo_pagamento: 'boleto', responsavel_id: 'user-agent-2', created_at: '2025-01-18T16:00:00Z', paid_at: null, refunded_at: null },
-  { id: 'sale-4', account_id: 'acc-1', contact_id: 'contact-3', product_id: 'prod-2', valor: 3200.00, status: 'pending', metodo_pagamento: null, responsavel_id: 'user-admin-1', created_at: '2025-01-19T08:00:00Z', paid_at: null, refunded_at: null },
-  { id: 'sale-5', account_id: 'acc-2', contact_id: 'contact-9', product_id: 'prod-6', valor: 15000.00, status: 'paid', metodo_pagamento: 'pix', responsavel_id: 'user-agent-3', created_at: '2025-01-15T14:00:00Z', paid_at: '2025-01-15T14:30:00Z', refunded_at: null },
-  { id: 'sale-6', account_id: 'acc-1', contact_id: 'contact-1', product_id: 'prod-5', valor: 500.00, status: 'refunded', metodo_pagamento: 'pix', responsavel_id: 'user-agent-1', created_at: '2025-01-05T10:00:00Z', paid_at: '2025-01-05T10:05:00Z', refunded_at: '2025-01-08T09:00:00Z' },
+  { id: 'sale-1', account_id: 'acc-1', contact_id: 'contact-1', items: [{ id: 'item-1', product_id: 'prod-4', quantidade: 1, valor_unitario: 1500.00, valor_total: 1500.00 }], valor: 1500.00, status: 'paid', metodo_pagamento: 'pix', responsavel_id: 'user-agent-1', created_at: '2025-01-10T12:00:00Z', paid_at: '2025-01-10T12:05:00Z', refunded_at: null },
+  { id: 'sale-2', account_id: 'acc-1', contact_id: 'contact-6', items: [{ id: 'item-2', product_id: 'prod-1', quantidade: 1, valor_unitario: 2800.00, valor_total: 2800.00 }], valor: 2800.00, status: 'paid', metodo_pagamento: 'credito', responsavel_id: 'user-agent-1', created_at: '2025-01-19T10:30:00Z', paid_at: '2025-01-19T10:35:00Z', refunded_at: null },
+  { id: 'sale-3', account_id: 'acc-1', contact_id: 'contact-2', items: [{ id: 'item-3', product_id: 'prod-3', quantidade: 1, valor_unitario: 950.00, valor_total: 950.00 }], valor: 950.00, status: 'pending', metodo_pagamento: 'boleto', responsavel_id: 'user-agent-2', created_at: '2025-01-18T16:00:00Z', paid_at: null, refunded_at: null },
+  { id: 'sale-4', account_id: 'acc-1', contact_id: 'contact-3', items: [{ id: 'item-4', product_id: 'prod-2', quantidade: 1, valor_unitario: 3200.00, valor_total: 3200.00 }], valor: 3200.00, status: 'pending', metodo_pagamento: null, responsavel_id: 'user-admin-1', created_at: '2025-01-19T08:00:00Z', paid_at: null, refunded_at: null },
+  { id: 'sale-5', account_id: 'acc-2', contact_id: 'contact-9', items: [{ id: 'item-5', product_id: 'prod-6', quantidade: 1, valor_unitario: 15000.00, valor_total: 15000.00 }], valor: 15000.00, status: 'paid', metodo_pagamento: 'pix', responsavel_id: 'user-agent-3', created_at: '2025-01-15T14:00:00Z', paid_at: '2025-01-15T14:30:00Z', refunded_at: null },
+  { id: 'sale-6', account_id: 'acc-1', contact_id: 'contact-1', items: [{ id: 'item-6', product_id: 'prod-5', quantidade: 1, valor_unitario: 500.00, valor_total: 500.00 }], valor: 500.00, status: 'refunded', metodo_pagamento: 'pix', responsavel_id: 'user-agent-1', created_at: '2025-01-05T10:00:00Z', paid_at: '2025-01-05T10:05:00Z', refunded_at: '2025-01-08T09:00:00Z' },
 ];
 
 // ============= EVENTS =============

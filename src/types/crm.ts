@@ -195,11 +195,27 @@ export interface Product {
   updated_at: string;
 }
 
+/**
+ * Item individual de uma venda (produto com quantidade e valor)
+ */
+export interface SaleItem {
+  id: string;
+  product_id: string;
+  quantidade: number;
+  valor_unitario: number;
+  valor_total: number;
+  // UI enrichment
+  product?: Product;
+}
+
 export interface Sale {
   id: string;
   account_id: string;
   contact_id: string;
-  product_id: string;
+  /** @deprecated Use items[] para múltiplos produtos */
+  product_id?: string;
+  /** Lista de itens/produtos da venda */
+  items: SaleItem[];
   valor: number;
   status: SaleStatus;
   metodo_pagamento: PaymentMethod | null;
@@ -211,6 +227,7 @@ export interface Sale {
   refunded_at: string | null;
   // UI enrichment
   contact?: Contact;
+  /** @deprecated Use items[].product */
   product?: Product;
 }
 
