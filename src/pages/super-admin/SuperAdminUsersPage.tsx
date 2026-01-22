@@ -64,6 +64,7 @@ import {
   Package,
   Activity,
   RotateCcw,
+  Lightbulb,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -102,6 +103,7 @@ export default function SuperAdminUsersPage() {
     { id: 'finance', label: 'Financeiro', icon: Wallet },
     { id: 'products', label: 'Produtos', icon: Package },
     { id: 'events', label: 'Eventos', icon: Activity },
+    { id: 'insights', label: 'Insights', icon: Lightbulb },
   ];
 
   // Special action permissions

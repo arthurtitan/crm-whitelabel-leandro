@@ -32,6 +32,7 @@ import AdminConversationsPage from "./pages/admin/AdminConversationsPage";
 import AdminFinancePage from "./pages/admin/AdminFinancePage";
 import AdminProductsPage from "./pages/admin/AdminProductsPage";
 import AdminAgendaPage from "./pages/admin/AdminAgendaPage";
+import AdminInsightsPage from "./pages/admin/AdminInsightsPage";
 
 const queryClient = new QueryClient();
 
@@ -211,6 +212,18 @@ const App = () => (
                     <AdminFinanceWrapper>
                       <AdminLayout>
                         <AdminAgendaPage />
+                      </AdminLayout>
+                    </AdminFinanceWrapper>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/insights"
+                element={
+                  <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+                    <AdminFinanceWrapper>
+                      <AdminLayout>
+                        <AdminInsightsPage />
                       </AdminLayout>
                     </AdminFinanceWrapper>
                   </ProtectedRoute>
