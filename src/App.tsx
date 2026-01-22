@@ -29,7 +29,7 @@ import AdminKanbanPage from "./pages/admin/AdminKanbanPage";
 import AdminLeadsPage from "./pages/admin/AdminLeadsPage";
 import AdminSalesPage from "./pages/admin/AdminSalesPage";
 import AdminEventsPage from "./pages/admin/AdminEventsPage";
-import AdminConversationsPage from "./pages/admin/AdminConversationsPage";
+
 import AdminFinancePage from "./pages/admin/AdminFinancePage";
 import AdminProductsPage from "./pages/admin/AdminProductsPage";
 import AdminAgendaPage from "./pages/admin/AdminAgendaPage";
@@ -141,18 +141,6 @@ const App = () => (
                     <AdminFinanceWrapper>
                       <AdminLayout>
                         <AdminLeadsPage />
-                      </AdminLayout>
-                    </AdminFinanceWrapper>
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/conversations"
-                element={
-                  <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
-                    <AdminFinanceWrapper>
-                      <AdminLayout>
-                        <AdminConversationsPage />
                       </AdminLayout>
                     </AdminFinanceWrapper>
                   </ProtectedRoute>

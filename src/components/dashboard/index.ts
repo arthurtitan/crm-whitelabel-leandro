@@ -3,8 +3,6 @@ export { AgentFilter } from './AgentFilter';
 export { PageFilters } from './PageFilters';
 export { KPICard } from './KPICard';
 export { IAvsHumanCard } from './IAvsHumanCard';
-export { ConversationsChart } from './ConversationsChart';
-export { DailyConversationsChart } from './DailyConversationsChart';
 export { HourlyPeakChart } from './HourlyPeakChart';
 export { BacklogCard } from './BacklogCard';
 export { AgentPerformanceTable } from './AgentPerformanceTable';
