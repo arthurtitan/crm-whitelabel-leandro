@@ -26,6 +26,15 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -91,6 +100,13 @@ export default function SuperAdminUsersPage() {
   const navigate = useNavigate();
 
   const [showPassword, setShowPassword] = useState(false);
+
+  // Delete confirmation with password
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [showDeletePassword, setShowDeletePassword] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Agent permission areas - matching actual system pages
   const agentPermissionAreas = [
@@ -279,8 +295,45 @@ export default function SuperAdminUsersPage() {
     toast.success('Usuário atualizado com sucesso!');
   };
 
-  const handleDelete = (userId: string) => {
-    setUsers(users.filter((u) => u.id !== userId));
+  // Opens delete confirmation modal
+  const openDeleteConfirm = (user: User) => {
+    setUserToDelete(user);
+    setDeletePassword('');
+    setShowDeletePassword(false);
+    setDeleteConfirmOpen(true);
+  };
+
+  // Executes deletion after password validation
+  const handleConfirmDelete = async () => {
+    if (!userToDelete || !deletePassword) return;
+    
+    setDeleteLoading(true);
+    
+    /**
+     * TODO: Backend Integration
+     * Endpoint: POST /functions/v1/verify-admin-password
+     * Headers: { Authorization: Bearer {jwt} }
+     * Body: { password: string }
+     * Response: { valid: boolean, error?: string }
+     */
+    
+    // Mock: simulates validation (accepts any password with 6+ characters)
+    await new Promise(resolve => setTimeout(resolve, 800));
+    
+    const isPasswordValid = deletePassword.length >= 6;
+    
+    if (!isPasswordValid) {
+      toast.error('Senha incorreta. Tente novamente.');
+      setDeleteLoading(false);
+      return;
+    }
+    
+    // Execute deletion
+    setUsers(users.filter((u) => u.id !== userToDelete.id));
+    setDeleteConfirmOpen(false);
+    setUserToDelete(null);
+    setDeletePassword('');
+    setDeleteLoading(false);
     toast.success('Usuário excluído com sucesso!');
   };
 
@@ -652,7 +705,7 @@ export default function SuperAdminUsersPage() {
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           className="text-destructive"
-                          onClick={() => handleDelete(user.id)}
+                          onClick={() => openDeleteConfirm(user)}
                         >
                           <Trash2 className="w-4 h-4 mr-2" />
                           Excluir
@@ -904,6 +957,86 @@ export default function SuperAdminUsersPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog with Password */}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <Shield className="w-5 h-5" />
+              Confirmar Exclusão
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Você está prestes a excluir o usuário <strong>{userToDelete?.nome}</strong>. 
+              Esta ação é irreversível e removerá todos os dados associados a este usuário.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+              <p className="text-sm text-destructive font-medium">
+                Para confirmar esta ação, digite sua senha de Super Admin:
+              </p>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="delete-password">Senha</Label>
+              <div className="relative">
+                <Input
+                  id="delete-password"
+                  type={showDeletePassword ? 'text' : 'password'}
+                  value={deletePassword}
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  placeholder="Digite sua senha"
+                  className="pr-10"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                  onClick={() => setShowDeletePassword(!showDeletePassword)}
+                >
+                  {showDeletePassword ? (
+                    <EyeOff className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <Eye className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+          
+          <AlertDialogFooter>
+            <AlertDialogCancel 
+              onClick={() => {
+                setDeletePassword('');
+                setUserToDelete(null);
+              }}
+              disabled={deleteLoading}
+            >
+              Cancelar
+            </AlertDialogCancel>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={!deletePassword || deletePassword.length < 6 || deleteLoading}
+            >
+              {deleteLoading ? (
+                <>
+                  <span className="animate-spin mr-2">⏳</span>
+                  Verificando...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Confirmar Exclusão
+                </>
+              )}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
