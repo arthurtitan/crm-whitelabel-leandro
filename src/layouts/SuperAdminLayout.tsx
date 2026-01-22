@@ -17,15 +17,14 @@ import {
   LayoutDashboard,
   Building2,
   Users,
-  Settings,
   LogOut,
   ChevronLeft,
   ChevronRight,
-  Shield,
   Menu,
   X,
   ArrowLeftRight,
 } from 'lucide-react';
+import glepsLogo from '@/assets/gleps-logo.png';
 
 interface SidebarLayoutProps {
   children: ReactNode;
@@ -70,8 +69,8 @@ export default function SuperAdminLayout({ children }: SidebarLayoutProps) {
             {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
           <div className="flex items-center gap-2">
-            <Shield className="w-6 h-6 text-sidebar-primary" />
-            <span className="font-semibold text-sidebar-foreground">Super Admin</span>
+            <img src={glepsLogo} alt="Gleps.AI" className="w-7 h-7 object-contain" />
+            <span className="font-semibold text-sidebar-foreground">Gleps Admin</span>
           </div>
         </div>
       </header>
@@ -96,11 +95,13 @@ export default function SuperAdminLayout({ children }: SidebarLayoutProps) {
         <div className="h-16 flex items-center justify-between px-4 border-b border-sidebar-border">
           {!collapsed && (
             <div className="flex items-center gap-2">
-              <Shield className="w-7 h-7 text-sidebar-primary" />
-              <span className="font-bold text-lg text-sidebar-foreground">Super Admin</span>
+              <img src={glepsLogo} alt="Gleps.AI" className="w-8 h-8 object-contain" />
+              <span className="font-bold text-lg text-sidebar-foreground">Gleps Admin</span>
             </div>
           )}
-          {collapsed && <Shield className="w-7 h-7 text-sidebar-primary mx-auto" />}
+          {collapsed && (
+            <img src={glepsLogo} alt="Gleps.AI" className="w-8 h-8 object-contain mx-auto" />
+          )}
           <button
             onClick={() => setCollapsed(!collapsed)}
             className={cn(

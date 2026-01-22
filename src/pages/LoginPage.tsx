@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { AlertCircle, Eye, EyeOff, LogIn, Shield } from 'lucide-react';
+import { AlertCircle, Eye, EyeOff, LogIn } from 'lucide-react';
+import glepsLogo from '@/assets/gleps-logo.png';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -56,20 +57,29 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <div className="w-full max-w-md space-y-6 animate-fade-in">
+      {/* Background gradient effect */}
+      <div className="fixed inset-0 bg-gradient-to-br from-background via-background to-primary/5 pointer-events-none" />
+      <div className="fixed top-1/4 -left-1/4 w-1/2 h-1/2 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="fixed bottom-1/4 -right-1/4 w-1/2 h-1/2 bg-accent/10 rounded-full blur-3xl pointer-events-none" />
+      
+      <div className="relative w-full max-w-md space-y-6 animate-fade-in">
         {/* Logo/Brand */}
-        <div className="text-center space-y-2">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-brand mb-4">
-            <Shield className="w-8 h-8 text-white" />
+        <div className="text-center space-y-3">
+          <div className="inline-flex items-center justify-center mb-2">
+            <img 
+              src={glepsLogo} 
+              alt="Gleps.AI" 
+              className="w-20 h-20 object-contain logo-glow"
+            />
           </div>
-          <h1 className="text-3xl font-bold text-gradient">CRM Multi-Tenant</h1>
+          <h1 className="text-3xl font-bold text-gradient-gleps">Painel Gleps</h1>
           <p className="text-muted-foreground">
-            Sistema integrado ao Chatwoot
+            Powered by <span className="text-primary font-medium">Gleps.AI</span>
           </p>
         </div>
 
         {/* Login Card */}
-        <Card className="border-border/50 shadow-lg">
+        <Card className="border-border/50 shadow-lg glass-strong">
           <CardHeader className="space-y-1">
             <CardTitle className="text-2xl">Entrar</CardTitle>
             <CardDescription>
@@ -124,7 +134,7 @@ export default function LoginPage() {
               
               <Button 
                 type="submit" 
-                className="w-full h-11 bg-gradient-primary hover:opacity-90 transition-opacity"
+                className="w-full h-11 bg-gradient-primary hover:opacity-90 transition-opacity glow-primary"
                 disabled={isLoading}
               >
                 {isLoading ? (
@@ -144,7 +154,7 @@ export default function LoginPage() {
         </Card>
 
         {/* Demo Credentials */}
-        <Card className="border-border/50">
+        <Card className="border-border/50 glass">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Credenciais de demonstração

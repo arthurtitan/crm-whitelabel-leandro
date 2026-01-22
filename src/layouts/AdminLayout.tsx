@@ -27,11 +27,11 @@ import {
   DollarSign,
   Activity,
   Wallet,
-  Building2,
   Package,
   Calendar,
   Lightbulb,
 } from 'lucide-react';
+import glepsLogo from '@/assets/gleps-logo.png';
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -88,9 +88,9 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
           <div className="flex items-center gap-2">
-            <Building2 className="w-6 h-6 text-sidebar-primary" />
+            <img src={glepsLogo} alt="Gleps.AI" className="w-7 h-7 object-contain" />
             <span className="font-semibold text-sidebar-foreground truncate max-w-[150px]">
-              {account?.nome || 'Admin'}
+              Painel Gleps
             </span>
           </div>
         </div>
@@ -116,13 +116,15 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         <div className="h-16 flex items-center justify-between px-4 border-b border-sidebar-border">
           {!collapsed && (
             <div className="flex items-center gap-2 overflow-hidden">
-              <Building2 className="w-7 h-7 text-sidebar-primary flex-shrink-0" />
+              <img src={glepsLogo} alt="Gleps.AI" className="w-8 h-8 object-contain flex-shrink-0" />
               <span className="font-bold text-lg text-sidebar-foreground truncate">
-                {account?.nome || 'Admin'}
+                Painel Gleps
               </span>
             </div>
           )}
-          {collapsed && <Building2 className="w-7 h-7 text-sidebar-primary mx-auto" />}
+          {collapsed && (
+            <img src={glepsLogo} alt="Gleps.AI" className="w-8 h-8 object-contain mx-auto" />
+          )}
           <button
             onClick={() => setCollapsed(!collapsed)}
             className={cn(
