@@ -24,6 +24,7 @@ export interface Account {
   limite_usuarios: number;
   chatwoot_account_id: string | null;
   chatwoot_api_key: string | null;
+  chatwoot_base_url: string | null; // Ex: https://app.chatwoot.com ou https://chatwoot.empresa.com
   created_at: string;
   updated_at: string;
 }

@@ -8,21 +8,30 @@ import { mockChatwootAgents } from '@/data/mockChatwootData';
  * 
  * Request:
  * POST /functions/v1/fetch-chatwoot-agents
- * Body: { chatwoot_account_id: string, chatwoot_api_key: string }
+ * Body: { 
+ *   chatwoot_base_url: string,    // Ex: https://app.chatwoot.com
+ *   chatwoot_account_id: string,  // Ex: 12345
+ *   chatwoot_api_key: string      // Access Token do usuário/agente
+ * }
  * 
  * Response:
  * { success: boolean, agents: ChatwootAgent[], error?: string }
  * 
  * A Edge Function deve:
  * 1. Receber credenciais (nunca expor API key no frontend)
- * 2. Fazer request para: GET https://{CHATWOOT_URL}/api/v1/accounts/{id}/agents
- * 3. Headers: { api_access_token: apiKey }
- * 4. Retornar lista de agentes ou erro
+ * 2. Validar formato da URL base (remover trailing slash se houver)
+ * 3. Fazer request para: GET {BASE_URL}/api/v1/accounts/{ACCOUNT_ID}/agents
+ * 4. Headers: { api_access_token: apiKey }
+ * 5. Retornar lista de agentes ou erro
+ * 
+ * Exemplo de URL final:
+ * https://app.chatwoot.com/api/v1/accounts/12345/agents
  */
 
 export interface FetchAgentsParams {
-  accountId: string;
-  apiKey: string;
+  baseUrl: string;   // URL da instância Chatwoot (ex: https://app.chatwoot.com)
+  accountId: string; // ID da conta no Chatwoot
+  apiKey: string;    // Access Token para autenticação
 }
 
 export interface FetchAgentsResult {
@@ -41,7 +50,11 @@ export interface FetchAgentsResult {
  * const response = await fetch('/functions/v1/fetch-chatwoot-agents', {
  *   method: 'POST',
  *   headers: { 'Content-Type': 'application/json' },
- *   body: JSON.stringify({ chatwoot_account_id: accountId, chatwoot_api_key: apiKey })
+ *   body: JSON.stringify({ 
+ *     chatwoot_base_url: baseUrl,
+ *     chatwoot_account_id: accountId, 
+ *     chatwoot_api_key: apiKey 
+ *   })
  * });
  * return await response.json();
  */
@@ -50,11 +63,22 @@ export async function fetchChatwootAgents(params: FetchAgentsParams): Promise<Fe
   await new Promise(resolve => setTimeout(resolve, 1500));
   
   // Validação mock (em produção seria validado pelo backend)
-  if (!params.accountId || !params.apiKey) {
+  if (!params.baseUrl || !params.accountId || !params.apiKey) {
     return { 
       success: false, 
       agents: [], 
-      error: 'Account ID e API Key são obrigatórios' 
+      error: 'URL Base, Account ID e API Key são obrigatórios' 
+    };
+  }
+
+  // Valida formato da URL
+  try {
+    new URL(params.baseUrl);
+  } catch {
+    return { 
+      success: false, 
+      agents: [], 
+      error: 'URL Base inválida. Use o formato: https://app.chatwoot.com' 
     };
   }
   
@@ -63,7 +87,7 @@ export async function fetchChatwootAgents(params: FetchAgentsParams): Promise<Fe
     return { 
       success: false, 
       agents: [], 
-      error: 'API Key inválida. Verifique as credenciais.' 
+      error: 'API Key inválida. Verifique as credenciais.'
     };
   }
   

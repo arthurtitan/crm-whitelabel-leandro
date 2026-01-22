@@ -86,6 +86,7 @@ interface CreateFormData {
   status: AccountStatus;
   limiteAgentes: number;
   chatwootEnabled: boolean;
+  chatwootBaseUrl: string;
   chatwootAccountId: string;
   chatwootApiKey: string;
 }
@@ -96,6 +97,7 @@ const initialFormData: CreateFormData = {
   status: 'active',
   limiteAgentes: 10,
   chatwootEnabled: false,
+  chatwootBaseUrl: '',
   chatwootAccountId: '',
   chatwootApiKey: '',
 };
@@ -140,6 +142,7 @@ export default function SuperAdminAccountsPage() {
     setConnectionError(null);
     
     const result = await fetchChatwootAgents({
+      baseUrl: formData.chatwootBaseUrl,
       accountId: formData.chatwootAccountId,
       apiKey: formData.chatwootApiKey,
     });
@@ -166,6 +169,7 @@ export default function SuperAdminAccountsPage() {
       limite_usuarios: formData.limiteAgentes,
       chatwoot_account_id: formData.chatwootEnabled ? formData.chatwootAccountId : null,
       chatwoot_api_key: formData.chatwootEnabled ? formData.chatwootApiKey : null,
+      chatwoot_base_url: formData.chatwootEnabled ? formData.chatwootBaseUrl : null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -303,6 +307,7 @@ export default function SuperAdminAccountsPage() {
   };
 
   const canTestConnection = formData.chatwootEnabled && 
+    formData.chatwootBaseUrl.trim() !== '' &&
     formData.chatwootAccountId.trim() !== '' && 
     formData.chatwootApiKey.trim() !== '';
 
@@ -428,6 +433,18 @@ export default function SuperAdminAccountsPage() {
                     {formData.chatwootEnabled && (
                       <div className="space-y-3 pt-2">
                         <div className="space-y-2">
+                          <Label htmlFor="chatwootBaseUrl">URL da Instância</Label>
+                          <Input
+                            id="chatwootBaseUrl"
+                            value={formData.chatwootBaseUrl}
+                            onChange={(e) => setFormData({ ...formData, chatwootBaseUrl: e.target.value })}
+                            placeholder="https://app.chatwoot.com"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            URL do Chatwoot Cloud ou da sua instância self-hosted
+                          </p>
+                        </div>
+                        <div className="space-y-2">
                           <Label htmlFor="chatwootAccountId">Account ID</Label>
                           <Input
                             id="chatwootAccountId"
@@ -443,7 +460,7 @@ export default function SuperAdminAccountsPage() {
                             type="password"
                             value={formData.chatwootApiKey}
                             onChange={(e) => setFormData({ ...formData, chatwootApiKey: e.target.value })}
-                            placeholder="Chave de API do Chatwoot"
+                            placeholder="Access Token do usuário"
                           />
                         </div>
 
