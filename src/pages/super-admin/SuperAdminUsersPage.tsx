@@ -66,7 +66,7 @@ import {
   LayoutDashboard,
   Kanban,
   Users,
-  MessageSquare,
+  
   Calendar,
   DollarSign,
   Wallet,
@@ -113,7 +113,6 @@ export default function SuperAdminUsersPage() {
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'kanban', label: 'Kanban', icon: Kanban },
     { id: 'leads', label: 'Leads', icon: Users },
-    { id: 'conversations', label: 'Conversas', icon: MessageSquare },
     { id: 'agenda', label: 'Agenda', icon: Calendar },
     { id: 'sales', label: 'Vendas', icon: DollarSign },
     { id: 'finance', label: 'Financeiro', icon: Wallet },

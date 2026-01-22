@@ -16,8 +16,6 @@ import { DateRange } from 'react-day-picker';
 import { DashboardFilters } from '@/components/dashboard/DashboardFilters';
 import { KPICard } from '@/components/dashboard/KPICard';
 import { IAvsHumanCard } from '@/components/dashboard/IAvsHumanCard';
-import { ConversationsChart } from '@/components/dashboard/ConversationsChart';
-import { DailyConversationsChart } from '@/components/dashboard/DailyConversationsChart';
 import { HourlyPeakChart } from '@/components/dashboard/HourlyPeakChart';
 import { BacklogCard } from '@/components/dashboard/BacklogCard';
 import { AgentPerformanceTable } from '@/components/dashboard/AgentPerformanceTable';
@@ -320,20 +318,6 @@ export default function AdminDashboard() {
           </div>
 
           {/* Charts Section */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <ConversationsChart
-              data={data.conversasPorCanal}
-              isLoading={isLoading}
-            />
-            <div className="lg:col-span-2">
-              <DailyConversationsChart
-                data={data.conversasPorDia}
-                isLoading={isLoading}
-              />
-            </div>
-          </div>
-
-          {/* Hourly Peak & Backlog */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <HourlyPeakChart data={data.picoPorHora} isLoading={isLoading} />
             <BacklogCard data={data.backlog} isLoading={isLoading} />
