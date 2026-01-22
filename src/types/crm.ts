@@ -36,9 +36,21 @@ export interface User {
   role: UserRole;
   status: UserStatus;
   permissions?: string[]; // Agent-specific permissions: leads, conversations, sales, events, reports
+  chatwoot_agent_id?: number | null; // ID do agente vinculado no Chatwoot
   last_login_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+// ============= CHATWOOT INTEGRATION =============
+
+export interface ChatwootAgent {
+  id: number;
+  name: string;
+  email: string;
+  role: 'agent' | 'administrator';
+  availability_status?: 'online' | 'busy' | 'offline';
+  thumbnail?: string;
 }
 
 export interface AgentBot {

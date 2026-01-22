@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { mockAccounts, mockUsers } from '@/data/mockData';
-import { Account, AccountStatus } from '@/types/crm';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Account, AccountStatus, ChatwootAgent, User } from '@/types/crm';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -61,15 +61,24 @@ import {
   Pause,
   Play,
   Eye,
+  Loader2,
+  CheckCircle2,
+  XCircle,
+  ArrowLeft,
+  RefreshCw,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
+import { fetchChatwootAgents } from '@/services/chatwootApi';
+import { ChatwootAgentImport, CreateUserFromChatwootDialog } from '@/components/chatwoot';
 
 // Counter for generating numeric IDs
 let accountIdCounter = 100;
 
 type Language = 'pt' | 'en';
+type CreationStep = 'form' | 'agents' | 'creating';
+type ConnectionStatus = 'idle' | 'loading' | 'success' | 'error';
 
 interface CreateFormData {
   nome: string;
@@ -105,6 +114,16 @@ export default function SuperAdminAccountsPage() {
   // Form state
   const [formData, setFormData] = useState<CreateFormData>(initialFormData);
 
+  // Chatwoot integration states
+  const [creationStep, setCreationStep] = useState<CreationStep>('form');
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('idle');
+  const [chatwootAgents, setChatwootAgents] = useState<ChatwootAgent[]>([]);
+  const [selectedAgentIds, setSelectedAgentIds] = useState<number[]>([]);
+  const [currentAgentIndex, setCurrentAgentIndex] = useState(0);
+  const [createdAccountId, setCreatedAccountId] = useState<string | null>(null);
+  const [createdUsers, setCreatedUsers] = useState<User[]>([]);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+
   const filteredAccounts = accounts.filter((account) => {
     const matchesSearch = account.nome.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || account.status === statusFilter;
@@ -112,10 +131,31 @@ export default function SuperAdminAccountsPage() {
   });
 
   const getUserCount = (accountId: string) => {
-    return mockUsers.filter((u) => u.account_id === accountId).length;
+    return mockUsers.filter((u) => u.account_id === accountId).length + 
+           createdUsers.filter((u) => u.account_id === accountId).length;
   };
 
-  const handleCreate = () => {
+  const handleTestConnection = async () => {
+    setConnectionStatus('loading');
+    setConnectionError(null);
+    
+    const result = await fetchChatwootAgents({
+      accountId: formData.chatwootAccountId,
+      apiKey: formData.chatwootApiKey,
+    });
+
+    if (result.success) {
+      setChatwootAgents(result.agents);
+      setSelectedAgentIds(result.agents.map(a => a.id)); // Auto-seleciona todos
+      setConnectionStatus('success');
+    } else {
+      setConnectionStatus('error');
+      setConnectionError(result.error || 'Falha na conexão');
+      toast.error(result.error || 'Falha na conexão com Chatwoot');
+    }
+  };
+
+  const createAccount = (): string => {
     accountIdCounter++;
     const newAccount: Account = {
       id: `acc-${accountIdCounter}`,
@@ -130,9 +170,73 @@ export default function SuperAdminAccountsPage() {
       updated_at: new Date().toISOString(),
     };
     setAccounts([newAccount, ...accounts]);
+    return newAccount.id;
+  };
+
+  const handleCreate = () => {
+    const accountId = createAccount();
     setIsCreateOpen(false);
-    setFormData(initialFormData);
+    resetForm();
     toast.success('Conta criada com sucesso!');
+  };
+
+  const handleProceedToAgents = () => {
+    if (connectionStatus !== 'success') {
+      toast.error('Teste a conexão com Chatwoot primeiro');
+      return;
+    }
+    setCreationStep('agents');
+  };
+
+  const handleStartUserCreation = () => {
+    const accountId = createAccount();
+    setCreatedAccountId(accountId);
+    setCurrentAgentIndex(0);
+    setCreationStep('creating');
+  };
+
+  const handleSkipAgentImport = () => {
+    const accountId = createAccount();
+    setIsCreateOpen(false);
+    resetForm();
+    toast.success('Conta criada com sucesso!');
+  };
+
+  const handleUserCreated = (user: User) => {
+    setCreatedUsers(prev => [...prev, user]);
+    
+    if (currentAgentIndex + 1 >= selectedAgentIds.length) {
+      // Último usuário criado
+      setIsCreateOpen(false);
+      resetForm();
+      toast.success(`Conta criada com ${selectedAgentIds.length} usuário(s) importado(s)!`);
+    } else {
+      // Próximo usuário
+      setCurrentAgentIndex(prev => prev + 1);
+    }
+  };
+
+  const handleSkipAgent = () => {
+    if (currentAgentIndex + 1 >= selectedAgentIds.length) {
+      // Último usuário
+      setIsCreateOpen(false);
+      resetForm();
+      const importedCount = createdUsers.filter(u => u.account_id === createdAccountId).length;
+      toast.success(`Conta criada${importedCount > 0 ? ` com ${importedCount} usuário(s) importado(s)` : ''}!`);
+    } else {
+      setCurrentAgentIndex(prev => prev + 1);
+    }
+  };
+
+  const resetForm = () => {
+    setFormData(initialFormData);
+    setCreationStep('form');
+    setConnectionStatus('idle');
+    setChatwootAgents([]);
+    setSelectedAgentIds([]);
+    setCurrentAgentIndex(0);
+    setCreatedAccountId(null);
+    setConnectionError(null);
   };
 
   const hasFormData = () => {
@@ -148,18 +252,18 @@ export default function SuperAdminAccountsPage() {
   };
 
   const handleCancelCreate = () => {
-    if (hasFormData()) {
+    if (hasFormData() || creationStep !== 'form') {
       setShowCancelConfirm(true);
     } else {
       setIsCreateOpen(false);
-      setFormData(initialFormData);
+      resetForm();
     }
   };
 
   const confirmCancelCreate = () => {
     setShowCancelConfirm(false);
     setIsCreateOpen(false);
-    setFormData(initialFormData);
+    resetForm();
   };
 
   const getNumericId = (id: string) => id.replace(/\D/g, '');
@@ -198,6 +302,13 @@ export default function SuperAdminAccountsPage() {
     toast.success(`Conta ${newStatus === 'active' ? 'reativada' : 'pausada'} com sucesso!`);
   };
 
+  const canTestConnection = formData.chatwootEnabled && 
+    formData.chatwootAccountId.trim() !== '' && 
+    formData.chatwootApiKey.trim() !== '';
+
+  const selectedAgents = chatwootAgents.filter(a => selectedAgentIds.includes(a.id));
+  const currentAgent = selectedAgents[currentAgentIndex];
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -206,130 +317,266 @@ export default function SuperAdminAccountsPage() {
           <h1 className="text-3xl font-bold">Contas</h1>
           <p className="text-muted-foreground">Gerencie todas as contas do sistema</p>
         </div>
-        <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+        <Dialog open={isCreateOpen} onOpenChange={(open) => {
+          if (!open) handleCancelCreate();
+          else setIsCreateOpen(true);
+        }}>
           <DialogTrigger asChild>
             <Button className="bg-gradient-primary hover:opacity-90 gap-2">
               <Plus className="w-4 h-4" />
               Nova Conta
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-lg">
             <DialogHeader>
-              <DialogTitle>Criar Nova Conta</DialogTitle>
-              <DialogDescription>Adicione uma nova conta ao sistema</DialogDescription>
+              <DialogTitle>
+                {creationStep === 'form' && 'Criar Nova Conta'}
+                {creationStep === 'agents' && 'Importar Agentes do Chatwoot'}
+              </DialogTitle>
+              <DialogDescription>
+                {creationStep === 'form' && 'Adicione uma nova conta ao sistema'}
+                {creationStep === 'agents' && 'Selecione os agentes que deseja criar no CRM'}
+              </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4">
-              {/* Nome */}
-              <div className="space-y-2">
-                <Label htmlFor="nome">Nome</Label>
-                <Input
-                  id="nome"
-                  value={formData.nome}
-                  onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
-                  placeholder="Ex: Clínica Exemplo"
-                />
-              </div>
 
-              {/* Idioma */}
-              <div className="space-y-2">
-                <Label htmlFor="idioma">Idioma</Label>
-                <Select
-                  value={formData.idioma}
-                  onValueChange={(v) => setFormData({ ...formData, idioma: v as Language })}
-                >
-                  <SelectTrigger id="idioma">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pt">Português</SelectItem>
-                    <SelectItem value="en">English</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Status */}
-              <div className="space-y-2">
-                <Label htmlFor="status">Status</Label>
-                <Select
-                  value={formData.status}
-                  onValueChange={(v) => setFormData({ ...formData, status: v as AccountStatus })}
-                >
-                  <SelectTrigger id="status">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="active">Ativa</SelectItem>
-                    <SelectItem value="paused">Pausada</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Limite de Agentes */}
-              <div className="space-y-2">
-                <Label htmlFor="limiteAgentes">Limite de Agentes</Label>
-                <Input
-                  id="limiteAgentes"
-                  type="number"
-                  min={1}
-                  value={formData.limiteAgentes}
-                  onChange={(e) => setFormData({ ...formData, limiteAgentes: parseInt(e.target.value) || 1 })}
-                />
-              </div>
-
-              {/* Chatwoot Integration */}
-              <div className="space-y-4 rounded-lg border p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label htmlFor="chatwoot-toggle" className="text-sm font-medium">
-                      Integração Chatwoot
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      Habilitar para consumir dados do Chatwoot
-                    </p>
+            {/* Step 1: Account Form */}
+            {creationStep === 'form' && (
+              <>
+                <div className="space-y-4 py-4">
+                  {/* Nome */}
+                  <div className="space-y-2">
+                    <Label htmlFor="nome">Nome</Label>
+                    <Input
+                      id="nome"
+                      value={formData.nome}
+                      onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
+                      placeholder="Ex: Clínica Exemplo"
+                    />
                   </div>
-                  <Switch
-                    id="chatwoot-toggle"
-                    checked={formData.chatwootEnabled}
-                    onCheckedChange={(checked) => setFormData({ ...formData, chatwootEnabled: checked })}
-                  />
+
+                  {/* Idioma */}
+                  <div className="space-y-2">
+                    <Label htmlFor="idioma">Idioma</Label>
+                    <Select
+                      value={formData.idioma}
+                      onValueChange={(v) => setFormData({ ...formData, idioma: v as Language })}
+                    >
+                      <SelectTrigger id="idioma">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pt">Português</SelectItem>
+                        <SelectItem value="en">English</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Status */}
+                  <div className="space-y-2">
+                    <Label htmlFor="status">Status</Label>
+                    <Select
+                      value={formData.status}
+                      onValueChange={(v) => setFormData({ ...formData, status: v as AccountStatus })}
+                    >
+                      <SelectTrigger id="status">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">Ativa</SelectItem>
+                        <SelectItem value="paused">Pausada</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Limite de Agentes */}
+                  <div className="space-y-2">
+                    <Label htmlFor="limiteAgentes">Limite de Agentes</Label>
+                    <Input
+                      id="limiteAgentes"
+                      type="number"
+                      min={1}
+                      value={formData.limiteAgentes}
+                      onChange={(e) => setFormData({ ...formData, limiteAgentes: parseInt(e.target.value) || 1 })}
+                    />
+                  </div>
+
+                  {/* Chatwoot Integration */}
+                  <div className="space-y-4 rounded-lg border p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label htmlFor="chatwoot-toggle" className="text-sm font-medium">
+                          Integração Chatwoot
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Habilitar para sincronizar agentes do Chatwoot
+                        </p>
+                      </div>
+                      <Switch
+                        id="chatwoot-toggle"
+                        checked={formData.chatwootEnabled}
+                        onCheckedChange={(checked) => {
+                          setFormData({ ...formData, chatwootEnabled: checked });
+                          if (!checked) {
+                            setConnectionStatus('idle');
+                            setChatwootAgents([]);
+                            setConnectionError(null);
+                          }
+                        }}
+                      />
+                    </div>
+
+                    {formData.chatwootEnabled && (
+                      <div className="space-y-3 pt-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="chatwootAccountId">Account ID</Label>
+                          <Input
+                            id="chatwootAccountId"
+                            value={formData.chatwootAccountId}
+                            onChange={(e) => setFormData({ ...formData, chatwootAccountId: e.target.value })}
+                            placeholder="ID da conta no Chatwoot"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="chatwootApiKey">API Key</Label>
+                          <Input
+                            id="chatwootApiKey"
+                            type="password"
+                            value={formData.chatwootApiKey}
+                            onChange={(e) => setFormData({ ...formData, chatwootApiKey: e.target.value })}
+                            placeholder="Chave de API do Chatwoot"
+                          />
+                        </div>
+
+                        {/* Test Connection Button */}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="w-full gap-2"
+                          disabled={!canTestConnection || connectionStatus === 'loading'}
+                          onClick={handleTestConnection}
+                        >
+                          {connectionStatus === 'loading' && (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          )}
+                          {connectionStatus === 'success' && (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                          )}
+                          {connectionStatus === 'error' && (
+                            <XCircle className="w-4 h-4 text-destructive" />
+                          )}
+                          {connectionStatus === 'idle' && (
+                            <RefreshCw className="w-4 h-4" />
+                          )}
+                          {connectionStatus === 'loading' 
+                            ? 'Conectando...' 
+                            : connectionStatus === 'success'
+                            ? `${chatwootAgents.length} agentes encontrados`
+                            : 'Testar Conexão e Buscar Agentes'
+                          }
+                        </Button>
+
+                        {/* Connection Status */}
+                        {connectionStatus === 'success' && (
+                          <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                            <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+                              <CheckCircle2 className="w-4 h-4" />
+                              <span className="text-sm font-medium">
+                                Conexão estabelecida!
+                              </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {chatwootAgents.length} agentes encontrados no Chatwoot
+                            </p>
+                          </div>
+                        )}
+
+                        {connectionStatus === 'error' && connectionError && (
+                          <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+                            <div className="flex items-center gap-2 text-destructive">
+                              <XCircle className="w-4 h-4" />
+                              <span className="text-sm font-medium">
+                                Falha na conexão
+                              </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {connectionError}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                {formData.chatwootEnabled && (
-                  <div className="space-y-3 pt-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="chatwootAccountId">Account ID</Label>
-                      <Input
-                        id="chatwootAccountId"
-                        value={formData.chatwootAccountId}
-                        onChange={(e) => setFormData({ ...formData, chatwootAccountId: e.target.value })}
-                        placeholder="ID da conta no Chatwoot"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="chatwootApiKey">API Key</Label>
-                      <Input
-                        id="chatwootApiKey"
-                        type="password"
-                        value={formData.chatwootApiKey}
-                        onChange={(e) => setFormData({ ...formData, chatwootApiKey: e.target.value })}
-                        placeholder="Chave de API do Chatwoot"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={handleCancelCreate}>
-                Cancelar
-              </Button>
-              <Button onClick={handleCreate} disabled={!formData.nome.trim()}>
-                Criar
-              </Button>
-            </DialogFooter>
+                <DialogFooter>
+                  <Button variant="outline" onClick={handleCancelCreate}>
+                    Cancelar
+                  </Button>
+                  {formData.chatwootEnabled && connectionStatus === 'success' ? (
+                    <Button 
+                      onClick={handleProceedToAgents} 
+                      disabled={!formData.nome.trim()}
+                    >
+                      Próximo: Importar Agentes
+                    </Button>
+                  ) : (
+                    <Button 
+                      onClick={handleCreate} 
+                      disabled={!formData.nome.trim()}
+                    >
+                      Criar Conta
+                    </Button>
+                  )}
+                </DialogFooter>
+              </>
+            )}
+
+            {/* Step 2: Agent Selection */}
+            {creationStep === 'agents' && (
+              <>
+                <div className="py-2">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="gap-1 mb-4"
+                    onClick={() => setCreationStep('form')}
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                    Voltar
+                  </Button>
+
+                  <ChatwootAgentImport
+                    agents={chatwootAgents}
+                    selectedAgentIds={selectedAgentIds}
+                    onSelectionChange={setSelectedAgentIds}
+                    onProceed={handleStartUserCreation}
+                    onSkip={handleSkipAgentImport}
+                  />
+                </div>
+              </>
+            )}
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* Step 3: User Creation Dialog (separate) */}
+      {creationStep === 'creating' && currentAgent && createdAccountId && (
+        <CreateUserFromChatwootDialog
+          open={true}
+          agent={currentAgent}
+          currentIndex={currentAgentIndex}
+          totalAgents={selectedAgents.length}
+          accountId={createdAccountId}
+          onUserCreated={handleUserCreated}
+          onSkip={handleSkipAgent}
+          onClose={() => {
+            const importedCount = createdUsers.filter(u => u.account_id === createdAccountId).length;
+            toast.success(`Conta criada${importedCount > 0 ? ` com ${importedCount} usuário(s) importado(s)` : ''}!`);
+            setIsCreateOpen(false);
+            resetForm();
+          }}
+        />
+      )}
 
       {/* Filters */}
       <Card>
