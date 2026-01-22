@@ -62,6 +62,7 @@ export const mockCalendarEvents: CalendarEvent[] = [
     end: setMinutes(setHours(addDays(weekStart, 1), 10), 0).toISOString(),
     type: 'meeting',
     source: 'google',
+    status: 'scheduled',
     location: 'Google Meet',
     meetingLink: 'https://meet.google.com/abc-defg-hij',
     attendees: [
@@ -83,6 +84,7 @@ export const mockCalendarEvents: CalendarEvent[] = [
     end: setMinutes(setHours(addDays(weekStart, 1), 11), 15).toISOString(),
     type: 'appointment',
     source: 'crm',
+    status: 'scheduled',
     location: 'Presencial - Sala 3',
     attendees: [
       { name: 'Maria Oliveira', email: 'maria@email.com', status: 'confirmed' },
@@ -102,6 +104,7 @@ export const mockCalendarEvents: CalendarEvent[] = [
     end: setMinutes(setHours(addDays(weekStart, 1), 13), 0).toISOString(),
     type: 'block',
     source: 'google',
+    status: 'scheduled',
     attendees: [],
     createdBy: 'user-1',
     createdAt: '2025-01-15T10:00:00Z',
@@ -113,6 +116,7 @@ export const mockCalendarEvents: CalendarEvent[] = [
     end: setMinutes(setHours(addDays(weekStart, 3), 11), 45).toISOString(),
     type: 'meeting',
     source: 'google',
+    status: 'cancelled',
     location: 'Google Meet',
     meetingLink: 'https://meet.google.com/xyz-uvwx-rst',
     attendees: [
@@ -134,6 +138,7 @@ export const mockCalendarEvents: CalendarEvent[] = [
     end: setMinutes(setHours(addDays(weekStart, 2), 15), 0).toISOString(),
     type: 'appointment',
     source: 'crm',
+    status: 'cancelled',
     location: 'Presencial - Consultório 1',
     attendees: [
       { name: 'Ana Santos', email: 'ana@email.com', status: 'pending' },
@@ -154,6 +159,7 @@ export const mockCalendarEvents: CalendarEvent[] = [
     end: setMinutes(setHours(addDays(weekStart, 4), 10), 0).toISOString(),
     type: 'meeting',
     source: 'google',
+    status: 'scheduled',
     location: 'Sala de Reuniões',
     attendees: [],
     createdBy: 'user-1',

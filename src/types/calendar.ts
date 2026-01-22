@@ -36,6 +36,7 @@ export interface GoogleConnection {
 
 export type EventType = 'meeting' | 'appointment' | 'block' | 'other';
 export type EventSource = 'google' | 'crm';
+export type EventStatus = 'scheduled' | 'cancelled';
 export type AttendeeStatus = 'pending' | 'confirmed' | 'declined' | 'tentative';
 export type MeetingType = 'presencial' | 'online' | 'telefone';
 
@@ -52,6 +53,7 @@ export interface CalendarEvent {
   end: string;
   type: EventType;
   source: EventSource;
+  status: EventStatus;
   location?: string;
   meetingLink?: string;
   attendees: EventAttendee[];

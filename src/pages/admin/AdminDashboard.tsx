@@ -7,8 +7,10 @@ import {
   Clock,
   ArrowRightLeft,
   CalendarCheck,
+  CalendarX,
 } from 'lucide-react';
-import { startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
+import { subDays, isWithinInterval, parseISO } from 'date-fns';
+import { DateRange } from 'react-day-picker';
 
 // Dashboard Components
 import { DashboardFilters } from '@/components/dashboard/DashboardFilters';
@@ -119,36 +121,54 @@ export default function AdminDashboard() {
   
   const [viewState, setViewState] = useState<ViewState>('data');
   const [period, setPeriod] = useState('7d');
+  const [dateRange, setDateRange] = useState<DateRange | undefined>({
+    from: subDays(new Date(), 7),
+    to: new Date(),
+  });
   const [channel, setChannel] = useState('all');
   const [type, setType] = useState('all');
   const [selectedAgent, setSelectedAgent] = useState('all');
 
-  // Calculate appointments count based on role and selected agent
-  const appointmentsCount = useMemo(() => {
-    const now = new Date();
-    const monthStart = startOfMonth(now);
-    const monthEnd = endOfMonth(now);
+  // Handle period change from filters
+  const handlePeriodChange = (newPeriod: string, range?: DateRange) => {
+    setPeriod(newPeriod);
+    if (range) {
+      setDateRange(range);
+    } else if (newPeriod === '7d') {
+      setDateRange({ from: subDays(new Date(), 7), to: new Date() });
+    } else if (newPeriod === '30d') {
+      setDateRange({ from: subDays(new Date(), 30), to: new Date() });
+    }
+  };
+
+  // Calculate appointments counts based on role, selected agent, and period
+  const { totalAppointments, cancelledAppointments } = useMemo(() => {
+    const start = dateRange?.from || subDays(new Date(), 7);
+    const end = dateRange?.to || new Date();
     
-    // Filter events to only include appointments/meetings this month
-    const monthEvents = events.filter(event => {
+    // Filter events to only include appointments/meetings within the selected period
+    const periodEvents = events.filter(event => {
       const eventDate = parseISO(event.start);
-      return isWithinInterval(eventDate, { start: monthStart, end: monthEnd }) &&
+      return isWithinInterval(eventDate, { start, end }) &&
              (event.type === 'meeting' || event.type === 'appointment');
     });
     
+    // Apply role-based filtering
+    let filteredEvents = periodEvents;
+    
     // If agent, show only their own appointments
     if (!isAdmin) {
-      return monthEvents.filter(event => event.createdBy === user?.id).length;
+      filteredEvents = periodEvents.filter(event => event.createdBy === user?.id);
+    } else if (selectedAgent !== 'all') {
+      // If admin with agent filter applied
+      filteredEvents = periodEvents.filter(event => event.createdBy === selectedAgent);
     }
     
-    // If admin with agent filter applied
-    if (selectedAgent !== 'all') {
-      return monthEvents.filter(event => event.createdBy === selectedAgent).length;
-    }
+    const total = filteredEvents.length;
+    const cancelled = filteredEvents.filter(event => event.status === 'cancelled').length;
     
-    // Admin with no filter - show all
-    return monthEvents.length;
-  }, [events, isAdmin, user?.id, selectedAgent]);
+    return { totalAppointments: total, cancelledAppointments: cancelled };
+  }, [events, isAdmin, user?.id, selectedAgent, dateRange]);
 
   // Simulate different states for demonstration
   const handleStateChange = (state: ViewState) => {
@@ -207,7 +227,7 @@ export default function AdminDashboard() {
 
       {/* Global Filters */}
       <DashboardFilters
-        onPeriodChange={setPeriod}
+        onPeriodChange={handlePeriodChange}
         onChannelChange={setChannel}
         onTypeChange={setType}
         onAgentChange={setSelectedAgent}
@@ -222,7 +242,7 @@ export default function AdminDashboard() {
       ) : (
         <>
           {/* KPI Cards - Row 1 */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             <KPICard
               title="Total de Leads"
               subtitle="Contatos únicos que tiveram conversa"
@@ -243,11 +263,20 @@ export default function AdminDashboard() {
             />
             <KPICard
               title="Agendamentos"
-              subtitle={isAdmin ? (selectedAgent !== 'all' ? 'Do agente selecionado' : 'De todos os usuários') : 'Seus agendamentos'}
-              value={appointmentsCount}
+              subtitle={isAdmin ? (selectedAgent !== 'all' ? 'Do agente selecionado' : 'Visão geral da clínica') : 'Seus agendamentos'}
+              value={totalAppointments}
               icon={CalendarCheck}
               iconColor="text-success"
               iconBgColor="bg-success/10"
+              isLoading={isLoading}
+            />
+            <KPICard
+              title="Desmarcados"
+              subtitle={isAdmin ? (selectedAgent !== 'all' ? 'Do agente selecionado' : 'Visão geral da clínica') : 'Seus cancelamentos'}
+              value={cancelledAppointments}
+              icon={CalendarX}
+              iconColor="text-destructive"
+              iconBgColor="bg-destructive/10"
               isLoading={isLoading}
             />
             <KPICard

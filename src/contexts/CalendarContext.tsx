@@ -159,6 +159,7 @@ export function CalendarProvider({ children, accountId }: CalendarProviderProps)
       end: data.end,
       type: data.type,
       source: 'crm',
+      status: 'scheduled',
       location: data.location,
       meetingLink: data.createGoogleMeet ? `https://meet.google.com/${Math.random().toString(36).slice(2, 11)}` : undefined,
       attendees: data.attendeeEmails?.map(email => ({
