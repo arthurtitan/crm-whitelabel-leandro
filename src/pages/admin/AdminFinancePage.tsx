@@ -34,8 +34,8 @@ export default function AdminFinancePage() {
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          {/* State Toggle (for demo purposes) - hidden on mobile */}
-          <div className="hidden sm:flex gap-2">
+          {/* State Toggle (for demo purposes) - responsive wrap */}
+          <div className="flex gap-2 flex-wrap">
             <button
               onClick={() => setViewState('data')}
               className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
@@ -72,13 +72,13 @@ export default function AdminFinancePage() {
         </div>
       </div>
 
-      {/* Global Filters */}
+      {/* Global Filters - Agent filter removed from Finance */}
       <DashboardFilters
         onPeriodChange={setPeriod}
         onChannelChange={setChannel}
         onTypeChange={setType}
         onAgentChange={setSelectedAgent}
-        showAgentFilter={true}
+        showAgentFilter={false}
       />
 
       {isEmpty ? (

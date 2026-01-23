@@ -27,7 +27,7 @@ export function FinanceKPICards({ isLoading = false }: FinanceKPICardsProps) {
   return (
     <div className="space-y-4">
       {/* Main KPIs - Row 1 */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="kpi-grid">
         <KPICard
           title="Faturamento Bruto"
           subtitle="Vendas pagas no período"
@@ -67,7 +67,7 @@ export function FinanceKPICards({ isLoading = false }: FinanceKPICardsProps) {
       </div>
 
       {/* Secondary KPIs - Row 2 */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="kpi-grid">
         <KPICard
           title="Vendas Pendentes"
           subtitle={formatCurrency(kpis.vendasPendentes.valor)}

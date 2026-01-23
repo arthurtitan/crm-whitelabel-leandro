@@ -43,35 +43,38 @@ export default function AdminAgendaPage() {
   };
 
   return (
-    <div className="page-container h-[calc(100vh-12rem)]">
-      <div className="flex flex-col items-center justify-center text-center">
-        <h1 className="text-xl sm:text-2xl font-bold text-foreground">Agenda</h1>
-        <p className="text-xs sm:text-sm text-muted-foreground">
-          {isConnected ? 'Sincronizado com Google Calendar' : 'Gerencie seus agendamentos'}
-        </p>
-        {!isConnected ? (
-          <Button
-            variant="outline"
-            size="sm"
-            className="mt-4"
-            onClick={() => setShowConnectModal(true)}
-          >
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Sincronizar
-          </Button>
-        ) : (
-          <div className="flex items-center gap-2 mt-4">
-            <Badge variant="outline" className="text-success border-success">
-              ✓ Conectado: {connection.email}
-            </Badge>
-            <Button variant="ghost" size="sm" onClick={syncNow} disabled={isSyncing}>
-              <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+    <div className="page-container h-[calc(100vh-8rem)]">
+      <div className="page-header">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground">Agenda</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground">
+            {isConnected ? 'Sincronizado com Google Calendar' : 'Gerencie seus agendamentos'}
+          </p>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          {!isConnected ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowConnectModal(true)}
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Sincronizar
             </Button>
-            <Button variant="ghost" size="sm" onClick={handleDisconnect}>
-              Desconectar
-            </Button>
-          </div>
-        )}
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline" className="text-success border-success text-xs">
+                ✓ {connection.email}
+              </Badge>
+              <Button variant="ghost" size="sm" onClick={syncNow} disabled={isSyncing}>
+                <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+              </Button>
+              <Button variant="ghost" size="sm" onClick={handleDisconnect}>
+                Desconectar
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
 
       <CalendarView />
