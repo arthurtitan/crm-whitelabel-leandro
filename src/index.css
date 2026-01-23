@@ -310,15 +310,15 @@
   }
 
   .kpi-grid {
-    @apply grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4;
+    @apply grid grid-cols-1 gap-4;
   }
 
   .kpi-grid-6 {
-    @apply grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-4;
+    @apply grid grid-cols-1 gap-4;
   }
 
   .chart-grid {
-    @apply grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6;
+    @apply grid grid-cols-1 gap-4 sm:gap-6;
   }
 
   .filter-container {
@@ -331,6 +331,50 @@
 
   .table-responsive {
     @apply min-w-[600px] sm:min-w-full;
+  }
+}
+
+/* Media Queries para KPI Grids - fora da layer para maior especificidade */
+@media (min-width: 480px) {
+  .kpi-grid,
+  .kpi-grid-6 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 768px) {
+  .kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .kpi-grid-6 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .chart-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .kpi-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .kpi-grid-6 {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .kpi-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+  .kpi-grid-6 {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1536px) {
+  .kpi-grid-6 {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 }
 

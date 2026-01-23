@@ -47,25 +47,25 @@ export function KPICard({
   }
 
   return (
-    <Card className={cn(className)}>
-      <CardContent>
-        <div className="flex items-start justify-between">
-          <div className="space-y-1">
+    <Card className={cn('min-w-0', className)}>
+      <CardContent className="p-4 sm:p-5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="space-y-1 min-w-0 flex-1">
             {/* Label - uppercase, muted, tracking */}
-            <p className="text-xs font-medium uppercase tracking-[0.04em] text-muted-foreground">
+            <p className="text-[10px] sm:text-xs font-medium uppercase tracking-[0.04em] text-muted-foreground truncate">
               {title}
             </p>
-            {/* KPI Number - 28px, semibold */}
-            <p className="text-[28px] font-semibold text-foreground leading-tight">
+            {/* KPI Number - responsive size */}
+            <p className="text-xl sm:text-2xl lg:text-[28px] font-semibold text-foreground leading-tight">
               {value}
             </p>
             {subtitle && (
-              <p className="text-xs text-muted-foreground">{subtitle}</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground line-clamp-2">{subtitle}</p>
             )}
             {trend && (
               <p
                 className={cn(
-                  'text-xs font-medium',
+                  'text-[10px] sm:text-xs font-medium',
                   trend.isPositive ? 'text-success' : 'text-destructive'
                 )}
               >
@@ -74,8 +74,8 @@ export function KPICard({
             )}
           </div>
           {/* Icon - muted or primary */}
-          <div className={cn('p-2.5 rounded-lg', iconBgColor)}>
-            <Icon className={cn('w-5 h-5', iconColor)} />
+          <div className={cn('p-2 sm:p-2.5 rounded-lg shrink-0', iconBgColor)}>
+            <Icon className={cn('w-4 h-4 sm:w-5 sm:h-5', iconColor)} />
           </div>
         </div>
       </CardContent>
