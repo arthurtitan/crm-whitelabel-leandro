@@ -364,75 +364,83 @@ export default function AdminInsightsPage() {
       {/* Agent Ranking Section - Only visible to Admins */}
       {isAdmin && user?.role === 'admin' && agentRanking.length > 0 && (
         <>
-          {/* Top Performers Highlight Cards */}
-          {topPerformers && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Top Seller */}
-              <Card className="border-amber-500/30 bg-gradient-to-br from-amber-500/5 to-transparent">
-                <CardContent className="pt-6">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 rounded-full bg-amber-500/10">
-                      <Trophy className="w-6 h-6 text-amber-500" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs text-muted-foreground uppercase tracking-wide">Top Vendedor</p>
-                      <p className="font-bold text-lg truncate">{topPerformers.topSeller.name}</p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <Badge variant="secondary" className="text-xs">{topPerformers.topSeller.totalSales} vendas</Badge>
-                        <span className="text-sm text-success font-medium">
-                          {formatCurrency(topPerformers.topSeller.totalRevenue)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+          {/* Podium - Visual Ranking of ALL Agents */}
+          <Card>
+            <CardHeader className="pb-4">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-amber-500/10">
+                  <Trophy className="w-5 h-5 text-amber-500" />
+                </div>
+                <div>
+                  <CardTitle className="text-base">Pódio de Performance</CardTitle>
+                  <p className="text-xs text-muted-foreground">Ranking completo de todos os agentes por faturamento</p>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {[...agentRanking].sort((a, b) => b.totalRevenue - a.totalRevenue).map((agent, index) => {
+                  const position = index + 1;
+                  const isTop3 = position <= 3;
+                  const getBorderColor = () => {
+                    if (position === 1) return 'border-amber-500/50 bg-gradient-to-r from-amber-500/10 to-transparent';
+                    if (position === 2) return 'border-slate-400/50 bg-gradient-to-r from-slate-400/10 to-transparent';
+                    if (position === 3) return 'border-amber-700/50 bg-gradient-to-r from-amber-700/10 to-transparent';
+                    return 'border-border/50 bg-muted/30';
+                  };
 
-              {/* Top Attendant */}
-              <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-transparent">
-                <CardContent className="pt-6">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 rounded-full bg-primary/10">
-                      <MessageSquare className="w-6 h-6 text-primary" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs text-muted-foreground uppercase tracking-wide">Top Atendente</p>
-                      <p className="font-bold text-lg truncate">{topPerformers.topAttendant.name}</p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <Badge variant="secondary" className="text-xs">{topPerformers.topAttendant.totalConversations} conversas</Badge>
-                        <span className="text-sm text-muted-foreground">
-                          {topPerformers.topAttendant.resolutionRate.toFixed(0)}% resolvidas
-                        </span>
+                  return (
+                    <div 
+                      key={agent.id}
+                      className={`flex items-center gap-4 p-4 rounded-lg border ${getBorderColor()} transition-all hover:scale-[1.01]`}
+                    >
+                      {/* Position */}
+                      <div className="flex-shrink-0 w-12 text-center">
+                        {getPositionDisplay(position)}
                       </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
 
-              {/* Highest Ticket */}
-              {topPerformers.topTicket && (
-                <Card className="border-success/30 bg-gradient-to-br from-success/5 to-transparent">
-                  <CardContent className="pt-6">
-                    <div className="flex items-center gap-4">
-                      <div className="p-3 rounded-full bg-success/10">
-                        <Target className="w-6 h-6 text-success" />
-                      </div>
+                      {/* Avatar */}
+                      <Avatar className={`h-10 w-10 ${isTop3 ? 'ring-2 ring-offset-2 ring-offset-background' : ''} ${position === 1 ? 'ring-amber-500' : position === 2 ? 'ring-slate-400' : position === 3 ? 'ring-amber-700' : ''}`}>
+                        <AvatarFallback className="text-sm bg-primary/10 text-primary font-semibold">
+                          {getInitials(agent.name)}
+                        </AvatarFallback>
+                      </Avatar>
+
+                      {/* Name and Role */}
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs text-muted-foreground uppercase tracking-wide">Maior Ticket Médio</p>
-                        <p className="font-bold text-lg truncate">{topPerformers.topTicket.name}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-sm text-success font-bold">
-                            {formatCurrency(topPerformers.topTicket.avgTicket)}
-                          </span>
-                          <span className="text-xs text-muted-foreground">por venda</span>
+                        <p className={`font-semibold truncate ${isTop3 ? 'text-base' : 'text-sm'}`}>{agent.name}</p>
+                        <p className="text-xs text-muted-foreground capitalize">{agent.role}</p>
+                      </div>
+
+                      {/* Metrics */}
+                      <div className="flex items-center gap-4 flex-shrink-0">
+                        <div className="text-right">
+                          <p className="text-xs text-muted-foreground">Vendas</p>
+                          <Badge variant="secondary" className="text-xs">{agent.totalSales}</Badge>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-muted-foreground">Faturamento</p>
+                          <p className={`font-bold ${isTop3 ? 'text-success' : 'text-foreground'}`}>
+                            {formatCurrency(agent.totalRevenue)}
+                          </p>
+                        </div>
+                        <div className="text-right hidden sm:block">
+                          <p className="text-xs text-muted-foreground">Ticket Médio</p>
+                          <p className="text-sm text-muted-foreground">{formatCurrency(agent.avgTicket)}</p>
+                        </div>
+                        <div className="w-24 hidden md:block">
+                          <Progress 
+                            value={(agent.totalRevenue / maxMetrics.revenue) * 100} 
+                            className="h-2"
+                          />
                         </div>
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          )}
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Full Ranking Table with Tabs */}
           <Card>
