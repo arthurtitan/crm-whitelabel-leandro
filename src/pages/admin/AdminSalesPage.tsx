@@ -105,7 +105,7 @@ export default function AdminSalesPage() {
   const SalesContent = () => (
     <>
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="kpi-grid">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-start justify-between">
@@ -200,18 +200,19 @@ export default function AdminSalesPage() {
       {/* Table */}
       <Card>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Cliente</TableHead>
-                <TableHead>Produtos</TableHead>
-                <TableHead>Valor Total</TableHead>
-                <TableHead>Método</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Data</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
+          <div className="overflow-x-auto">
+            <Table className="min-w-[700px]">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="min-w-[130px]">Cliente</TableHead>
+                  <TableHead className="min-w-[120px]">Produtos</TableHead>
+                  <TableHead className="min-w-[100px]">Valor Total</TableHead>
+                  <TableHead className="hidden md:table-cell min-w-[90px]">Método</TableHead>
+                  <TableHead className="min-w-[90px]">Status</TableHead>
+                  <TableHead className="hidden sm:table-cell min-w-[90px]">Data</TableHead>
+                  <TableHead className="text-right min-w-[80px]">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
             <TableBody>
               {filteredSales.length === 0 ? (
                 <TableRow>
@@ -233,22 +234,23 @@ export default function AdminSalesPage() {
               )}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
     </>
   );
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="page-container">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="page-header">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Vendas</h1>
-          <p className="text-muted-foreground">Gerencie vendas e pagamentos</p>
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground">Vendas</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground">Gerencie vendas e pagamentos</p>
         </div>
         <CreateSaleDialog
           trigger={
-            <Button className="bg-gradient-primary hover:opacity-90 gap-2">
+            <Button className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2">
               <Plus className="w-4 h-4" />
               Nova Venda
             </Button>

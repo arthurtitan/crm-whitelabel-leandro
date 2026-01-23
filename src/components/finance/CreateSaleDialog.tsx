@@ -325,7 +325,7 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
           </Button>
         </DialogTrigger>
       )}
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Registrar Nova Venda</DialogTitle>
           <DialogDescription>
@@ -402,7 +402,7 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
           {isCreatingNewContact && !preSelectedContactId && (
             <div className="space-y-3 p-4 bg-muted/50 rounded-lg border border-border">
               <p className="text-sm font-medium text-muted-foreground">Dados do novo cliente</p>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label htmlFor="nome" className="text-xs">Nome *</Label>
                   <Input
@@ -422,7 +422,7 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label htmlFor="email" className="text-xs">Email (opcional)</Label>
                   <Input
@@ -665,11 +665,11 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
           </Alert>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={handleClose}>
+        <DialogFooter className="flex-col sm:flex-row gap-2">
+          <Button variant="outline" onClick={handleClose} className="w-full sm:w-auto">
             Cancelar
           </Button>
-          <Button onClick={handleSubmit} disabled={!isFormValid}>
+          <Button onClick={handleSubmit} disabled={!isFormValid} className="w-full sm:w-auto">
             Registrar Venda
           </Button>
         </DialogFooter>

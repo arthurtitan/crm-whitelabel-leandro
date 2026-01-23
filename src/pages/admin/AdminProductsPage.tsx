@@ -83,12 +83,12 @@ export default function AdminProductsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="page-container">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Produtos & Procedimentos</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">Produtos & Procedimentos</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground">
             Cadastre os serviços oferecidos e defina os meios de pagamento aceitos
           </p>
         </div>

@@ -23,12 +23,12 @@ export default function AdminFinancePage() {
   const isEmpty = viewState === 'empty';
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="page-container">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Dashboard Financeiro</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground">Dashboard Financeiro</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground">
             Métricas financeiras e gestão de vendas
           </p>
         </div>
@@ -92,7 +92,7 @@ export default function AdminFinancePage() {
           <FinanceKPICards isLoading={isLoading} />
 
           {/* Charts Section */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="chart-grid">
             <RevenueChart isLoading={isLoading} />
             <PaymentMethodChart isLoading={isLoading} />
           </div>

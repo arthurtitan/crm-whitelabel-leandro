@@ -339,12 +339,12 @@ export default function AdminInsightsPage() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="page-container">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="page-header">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Insights</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground">Insights</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground">
             Análises e métricas de performance
             {!isAdmin && ' (seus dados)'}
           </p>

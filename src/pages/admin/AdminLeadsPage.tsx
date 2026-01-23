@@ -216,12 +216,12 @@ export default function AdminLeadsPage() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="page-container">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="page-header">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Leads</h1>
-          <p className="text-muted-foreground">Gerencie todos os leads da conta</p>
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground">Leads</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground">Gerencie todos os leads da conta</p>
         </div>
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
           <DialogTrigger asChild>
@@ -230,7 +230,7 @@ export default function AdminLeadsPage() {
               Novo Lead
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Cadastrar Lead</DialogTitle>
               <DialogDescription>Adicione um novo lead manualmente</DialogDescription>
@@ -245,7 +245,7 @@ export default function AdminLeadsPage() {
                   placeholder="Nome completo"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="telefone">Telefone *</Label>
                   <Input
@@ -284,11 +284,11 @@ export default function AdminLeadsPage() {
                 </Select>
               </div>
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => { setIsCreateOpen(false); resetForm(); }}>
+            <DialogFooter className="flex-col sm:flex-row gap-2">
+              <Button variant="outline" onClick={() => { setIsCreateOpen(false); resetForm(); }} className="w-full sm:w-auto">
                 Cancelar
               </Button>
-              <Button onClick={handleCreate} disabled={!formData.nome || !formData.telefone}>
+              <Button onClick={handleCreate} disabled={!formData.nome || !formData.telefone} className="w-full sm:w-auto">
                 Cadastrar
               </Button>
             </DialogFooter>
@@ -333,15 +333,16 @@ export default function AdminLeadsPage() {
       {/* Table */}
       <Card>
         <CardContent className="p-0">
-          <Table>
+          <div className="overflow-x-auto">
+            <Table className="min-w-[700px]">
             <TableHeader>
               <TableRow>
-                <TableHead>Lead</TableHead>
-                <TableHead>Contato</TableHead>
-                <TableHead>Origem</TableHead>
-                <TableHead>Etapa</TableHead>
-                <TableHead>Criado em</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
+                <TableHead className="min-w-[150px]">Lead</TableHead>
+                <TableHead className="min-w-[140px]">Contato</TableHead>
+                <TableHead className="min-w-[100px]">Origem</TableHead>
+                <TableHead className="hidden md:table-cell min-w-[100px]">Etapa</TableHead>
+                <TableHead className="hidden sm:table-cell min-w-[100px]">Criado em</TableHead>
+                <TableHead className="text-right min-w-[80px]">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -377,7 +378,7 @@ export default function AdminLeadsPage() {
                       </div>
                     </TableCell>
                     <TableCell>{getOriginBadge(contact.origem)}</TableCell>
-                    <TableCell>
+                    <TableCell className="hidden md:table-cell">
                       {stage ? (
                         <Badge
                           variant="outline"
@@ -392,7 +393,7 @@ export default function AdminLeadsPage() {
                         <span className="text-muted-foreground text-sm">-</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="text-muted-foreground hidden sm:table-cell">
                       {format(new Date(contact.created_at), 'dd/MM/yyyy', { locale: ptBR })}
                     </TableCell>
                     <TableCell className="text-right">
@@ -439,6 +440,7 @@ export default function AdminLeadsPage() {
               })}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 

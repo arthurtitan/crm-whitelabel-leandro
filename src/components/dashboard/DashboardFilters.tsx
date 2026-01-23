@@ -91,10 +91,10 @@ export function DashboardFilters({
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-4 p-4 bg-card rounded-lg border border-border">
-      <div className="flex items-center gap-2">
-        <CalendarIcon className="w-4 h-4 text-muted-foreground" />
-        <div className="flex bg-muted rounded-lg p-1 gap-1">
+    <div className="flex flex-col gap-3 p-4 bg-card rounded-lg border border-border sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
+      <div className="flex items-center gap-2 w-full sm:w-auto">
+        <CalendarIcon className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+        <div className="flex flex-wrap bg-muted rounded-lg p-1 gap-1">
           {periods.map((period) => (
             <Button
               key={period.value}
@@ -150,11 +150,11 @@ export function DashboardFilters({
       {/* Channel Filter */}
       {showChannelFilter && (
         <>
-          <div className="h-6 w-px bg-border" />
-          <div className="flex items-center gap-2">
-            <MessageCircle className="w-4 h-4 text-muted-foreground" />
+          <div className="hidden sm:block h-6 w-px bg-border" />
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <MessageCircle className="w-4 h-4 text-muted-foreground flex-shrink-0" />
             <Select value={channel} onValueChange={handleChannelChange}>
-              <SelectTrigger className="w-[140px] h-8">
+              <SelectTrigger className="w-full sm:w-[140px] h-9 sm:h-8">
                 <SelectValue placeholder="Canal" />
               </SelectTrigger>
               <SelectContent className="bg-popover border border-border z-50">
@@ -170,10 +170,10 @@ export function DashboardFilters({
 
       {/* Type Filter (IA/Human) */}
       {showTypeFilter && (
-        <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-muted-foreground" />
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <Filter className="w-4 h-4 text-muted-foreground flex-shrink-0" />
           <Select value={type} onValueChange={handleTypeChange}>
-            <SelectTrigger className="w-[140px] h-8">
+            <SelectTrigger className="w-full sm:w-[140px] h-9 sm:h-8">
               <SelectValue placeholder="Tipo" />
             </SelectTrigger>
             <SelectContent className="bg-popover border border-border z-50">
@@ -198,8 +198,10 @@ export function DashboardFilters({
       {/* Agent Filter - Only visible for admins when enabled */}
       {showAgentFilter && (
         <>
-          <div className="h-6 w-px bg-border" />
-          <AgentFilter value={selectedAgent} onChange={handleAgentChange} />
+          <div className="hidden sm:block h-6 w-px bg-border" />
+          <div className="w-full sm:w-auto">
+            <AgentFilter value={selectedAgent} onChange={handleAgentChange} />
+          </div>
         </>
       )}
     </div>
