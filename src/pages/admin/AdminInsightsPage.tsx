@@ -394,120 +394,124 @@ export default function AdminInsightsPage() {
                 {/* Sales Ranking Tab */}
                 <TabsContent value="sales">
                   <ScrollArea className="h-[350px]">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-16">Pos.</TableHead>
-                          <TableHead>Agente</TableHead>
-                          <TableHead className="text-center">Vendas</TableHead>
-                          <TableHead className="text-right">Faturamento</TableHead>
-                          <TableHead className="text-right">Ticket Médio</TableHead>
-                          <TableHead className="w-[120px]">Performance</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {[...agentRanking].sort((a, b) => b.totalRevenue - a.totalRevenue).map((agent, index) => (
-                          <TableRow 
-                            key={agent.id}
-                            className={index < 3 ? 'bg-primary/5' : ''}
-                          >
-                            <TableCell className="text-center">
-                              {getPositionDisplay(index + 1)}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-3">
-                                <Avatar className="h-8 w-8">
-                                  <AvatarFallback className="text-xs bg-primary/10 text-primary">
-                                    {getInitials(agent.name)}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <div>
-                                  <p className="font-medium">{agent.name}</p>
-                                  <p className="text-xs text-muted-foreground capitalize">{agent.role}</p>
-                                </div>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <Badge variant="secondary">{agent.totalSales}</Badge>
-                            </TableCell>
-                            <TableCell className="text-right font-semibold text-success">
-                              {formatCurrency(agent.totalRevenue)}
-                            </TableCell>
-                            <TableCell className="text-right text-muted-foreground">
-                              {formatCurrency(agent.avgTicket)}
-                            </TableCell>
-                            <TableCell>
-                              <Progress 
-                                value={(agent.totalRevenue / maxMetrics.revenue) * 100} 
-                                className="h-2"
-                              />
-                            </TableCell>
+                    <div className="overflow-x-auto">
+                      <Table className="min-w-[550px]">
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-14 min-w-[56px]">Pos.</TableHead>
+                            <TableHead className="min-w-[140px]">Agente</TableHead>
+                            <TableHead className="text-center min-w-[70px]">Vendas</TableHead>
+                            <TableHead className="text-right min-w-[100px]">Faturamento</TableHead>
+                            <TableHead className="text-right min-w-[90px] hidden sm:table-cell">Ticket Médio</TableHead>
+                            <TableHead className="w-[100px] hidden md:table-cell">Performance</TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {[...agentRanking].sort((a, b) => b.totalRevenue - a.totalRevenue).map((agent, index) => (
+                            <TableRow 
+                              key={agent.id}
+                              className={index < 3 ? 'bg-primary/5' : ''}
+                            >
+                              <TableCell className="text-center">
+                                {getPositionDisplay(index + 1)}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <Avatar className="h-7 w-7 sm:h-8 sm:w-8">
+                                    <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                                      {getInitials(agent.name)}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className="min-w-0">
+                                    <p className="font-medium truncate">{agent.name}</p>
+                                    <p className="text-xs text-muted-foreground capitalize hidden sm:block">{agent.role}</p>
+                                  </div>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Badge variant="secondary">{agent.totalSales}</Badge>
+                              </TableCell>
+                              <TableCell className="text-right font-semibold text-success">
+                                {formatCurrency(agent.totalRevenue)}
+                              </TableCell>
+                              <TableCell className="text-right text-muted-foreground hidden sm:table-cell">
+                                {formatCurrency(agent.avgTicket)}
+                              </TableCell>
+                              <TableCell className="hidden md:table-cell">
+                                <Progress 
+                                  value={(agent.totalRevenue / maxMetrics.revenue) * 100} 
+                                  className="h-2"
+                                />
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </ScrollArea>
                 </TabsContent>
 
                 {/* Conversations Ranking Tab */}
                 <TabsContent value="conversations">
                   <ScrollArea className="h-[350px]">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-16">Pos.</TableHead>
-                          <TableHead>Agente</TableHead>
-                          <TableHead className="text-center">Conversas</TableHead>
-                          <TableHead className="text-center">Resolvidas</TableHead>
-                          <TableHead className="text-center">Taxa</TableHead>
-                          <TableHead className="w-[120px]">Performance</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {[...agentRanking].sort((a, b) => b.totalConversations - a.totalConversations).map((agent, index) => (
-                          <TableRow 
-                            key={agent.id}
-                            className={index < 3 ? 'bg-primary/5' : ''}
-                          >
-                            <TableCell className="text-center">
-                              {getPositionDisplay(index + 1)}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-3">
-                                <Avatar className="h-8 w-8">
-                                  <AvatarFallback className="text-xs bg-primary/10 text-primary">
-                                    {getInitials(agent.name)}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <div>
-                                  <p className="font-medium">{agent.name}</p>
-                                  <p className="text-xs text-muted-foreground capitalize">{agent.role}</p>
-                                </div>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <Badge variant="secondary">{agent.totalConversations}</Badge>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <Badge variant="outline" className="text-success">
-                                {agent.resolvedConversations}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <span className={`font-medium ${agent.resolutionRate >= 80 ? 'text-success' : agent.resolutionRate >= 50 ? 'text-warning' : 'text-destructive'}`}>
-                                {agent.resolutionRate.toFixed(0)}%
-                              </span>
-                            </TableCell>
-                            <TableCell>
-                              <Progress 
-                                value={(agent.totalConversations / maxMetrics.conversations) * 100} 
-                                className="h-2"
-                              />
-                            </TableCell>
+                    <div className="overflow-x-auto">
+                      <Table className="min-w-[520px]">
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-14 min-w-[56px]">Pos.</TableHead>
+                            <TableHead className="min-w-[140px]">Agente</TableHead>
+                            <TableHead className="text-center min-w-[80px]">Conversas</TableHead>
+                            <TableHead className="text-center min-w-[80px] hidden sm:table-cell">Resolvidas</TableHead>
+                            <TableHead className="text-center min-w-[60px]">Taxa</TableHead>
+                            <TableHead className="w-[100px] hidden md:table-cell">Performance</TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {[...agentRanking].sort((a, b) => b.totalConversations - a.totalConversations).map((agent, index) => (
+                            <TableRow 
+                              key={agent.id}
+                              className={index < 3 ? 'bg-primary/5' : ''}
+                            >
+                              <TableCell className="text-center">
+                                {getPositionDisplay(index + 1)}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <Avatar className="h-7 w-7 sm:h-8 sm:w-8">
+                                    <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                                      {getInitials(agent.name)}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className="min-w-0">
+                                    <p className="font-medium truncate">{agent.name}</p>
+                                    <p className="text-xs text-muted-foreground capitalize hidden sm:block">{agent.role}</p>
+                                  </div>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Badge variant="secondary">{agent.totalConversations}</Badge>
+                              </TableCell>
+                              <TableCell className="text-center hidden sm:table-cell">
+                                <Badge variant="outline" className="text-success">
+                                  {agent.resolvedConversations}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <span className={`font-medium ${agent.resolutionRate >= 80 ? 'text-success' : agent.resolutionRate >= 50 ? 'text-warning' : 'text-destructive'}`}>
+                                  {agent.resolutionRate.toFixed(0)}%
+                                </span>
+                              </TableCell>
+                              <TableCell className="hidden md:table-cell">
+                                <Progress 
+                                  value={(agent.totalConversations / maxMetrics.conversations) * 100} 
+                                  className="h-2"
+                                />
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </ScrollArea>
                 </TabsContent>
               </Tabs>

@@ -33,9 +33,9 @@ export default function AdminFinancePage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* State Toggle (for demo purposes) */}
-          <div className="flex gap-2 mr-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          {/* State Toggle (for demo purposes) - hidden on mobile */}
+          <div className="hidden sm:flex gap-2">
             <button
               onClick={() => setViewState('data')}
               className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
