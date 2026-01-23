@@ -23,12 +23,21 @@ interface AgentData {
 interface AgentPerformanceTableProps {
   data: AgentData[];
   isLoading?: boolean;
+  selectedAgentName?: string | null;
+  onAgentSelect?: (agentName: string | null) => void;
 }
 
 export function AgentPerformanceTable({
   data,
   isLoading = false,
+  selectedAgentName = null,
+  onAgentSelect,
 }: AgentPerformanceTableProps) {
+  const handleRowClick = (agentName: string) => {
+    if (!onAgentSelect) return;
+    // Toggle selection: if already selected, deselect
+    onAgentSelect(selectedAgentName === agentName ? null : agentName);
+  };
   if (isLoading) {
     return (
       <Card>
@@ -67,9 +76,24 @@ export function AgentPerformanceTable({
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">
-          Performance por Agente
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm font-medium text-muted-foreground">
+            Performance por Agente
+          </CardTitle>
+          {selectedAgentName && onAgentSelect && (
+            <button
+              onClick={() => onAgentSelect(null)}
+              className="text-xs text-primary hover:text-primary/80 font-medium transition-colors flex items-center gap-1"
+            >
+              ✕ Limpar filtro
+            </button>
+          )}
+        </div>
+        {selectedAgentName && (
+          <p className="text-xs text-primary mt-1">
+            Clique na linha selecionada para remover o filtro
+          </p>
+        )}
       </CardHeader>
       <CardContent className="p-0">
         <div className="overflow-x-auto">
@@ -91,16 +115,33 @@ export function AgentPerformanceTable({
                   </TableCell>
                 </TableRow>
               ) : (
-                data.map((agent, index) => (
-                  <TableRow key={index} className="hover:bg-primary/5 transition-colors">
+                data.map((agent, index) => {
+                const isSelected = selectedAgentName === agent.agentName;
+                return (
+                  <TableRow 
+                    key={index} 
+                    onClick={() => handleRowClick(agent.agentName)}
+                    className={cn(
+                      "transition-colors cursor-pointer",
+                      isSelected 
+                        ? "bg-primary/20 hover:bg-primary/25 border-l-2 border-l-primary" 
+                        : "hover:bg-primary/5"
+                    )}
+                  >
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <Avatar className="h-8 w-8">
-                          <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                          <AvatarFallback className={cn(
+                            "text-xs",
+                            isSelected ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary"
+                          )}>
                             {getInitials(agent.agentName)}
                           </AvatarFallback>
                         </Avatar>
                         <span className="font-medium">{agent.agentName}</span>
+                        {isSelected && (
+                          <span className="text-xs text-primary font-medium">(Filtrado)</span>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell className="text-center font-medium">
@@ -121,7 +162,8 @@ export function AgentPerformanceTable({
                       </Badge>
                     </TableCell>
                   </TableRow>
-                ))
+                );
+              })
               )}
             </TableBody>
           </Table>
