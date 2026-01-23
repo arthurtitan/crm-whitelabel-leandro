@@ -75,7 +75,7 @@ export function HourlyPeakChart({ data, isLoading = false }: HourlyPeakChartProp
               />
               <Bar
                 dataKey="totalConversas"
-                fill="hsl(199, 89%, 48%)"
+                fill="hsl(var(--primary))"
                 radius={[4, 4, 0, 0]}
                 name="Conversas"
               />

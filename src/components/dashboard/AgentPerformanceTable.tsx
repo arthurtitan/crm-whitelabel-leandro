@@ -75,12 +75,12 @@ export function AgentPerformanceTable({
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Agente</TableHead>
-                <TableHead className="text-center">Assumidos</TableHead>
-                <TableHead className="text-center">Resolvidos</TableHead>
-                <TableHead className="text-center">Tempo Médio</TableHead>
-                <TableHead className="text-center">Taxa Resolução</TableHead>
+              <TableRow className="bg-muted/50 hover:bg-muted/50">
+                <TableHead className="font-semibold">Agente</TableHead>
+                <TableHead className="text-center font-semibold">Assumidos</TableHead>
+                <TableHead className="text-center font-semibold">Resolvidos</TableHead>
+                <TableHead className="text-center font-semibold">Tempo Médio</TableHead>
+                <TableHead className="text-center font-semibold">Taxa Resolução</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -92,7 +92,7 @@ export function AgentPerformanceTable({
                 </TableRow>
               ) : (
                 data.map((agent, index) => (
-                  <TableRow key={index}>
+                  <TableRow key={index} className="hover:bg-primary/5 transition-colors">
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <Avatar className="h-8 w-8">
