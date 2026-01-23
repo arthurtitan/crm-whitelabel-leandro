@@ -243,7 +243,7 @@ export default function AdminSalesPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Vendas</h1>
+          <h1 className="text-3xl font-bold text-gradient-gleps">Vendas</h1>
           <p className="text-muted-foreground">Gerencie vendas e pagamentos</p>
         </div>
         <CreateSaleDialog

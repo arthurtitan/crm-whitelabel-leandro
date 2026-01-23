@@ -220,7 +220,7 @@ export default function AdminLeadsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Leads</h1>
+          <h1 className="text-3xl font-bold text-gradient-gleps">Leads</h1>
           <p className="text-muted-foreground">Gerencie todos os leads da conta</p>
         </div>
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
