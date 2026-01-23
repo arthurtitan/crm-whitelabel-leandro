@@ -10,24 +10,24 @@
 
 @layer base {
   :root {
-    /* Light mode - clean professional with purple undertones */
-    --background: 270 30% 97%;
-    --foreground: 270 50% 10%;
+    /* Light mode - clean white professional */
+    --background: 0 0% 100%;
+    --foreground: 220 15% 20%;
 
     --card: 0 0% 100%;
-    --card-foreground: 270 50% 10%;
+    --card-foreground: 220 15% 20%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 270 50% 10%;
+    --popover-foreground: 220 15% 20%;
 
     --primary: 230 70% 55%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 270 20% 93%;
-    --secondary-foreground: 270 50% 15%;
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 220 15% 20%;
 
-    --muted: 270 15% 91%;
-    --muted-foreground: 270 15% 45%;
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 10% 45%;
 
     --accent: 260 60% 60%;
     --accent-foreground: 0 0% 100%;
@@ -44,8 +44,8 @@
     --info: 230 70% 55%;
     --info-foreground: 0 0% 100%;
 
-    --border: 270 20% 88%;
-    --input: 270 20% 88%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
     --ring: 230 70% 55%;
 
     --radius: 0.5rem;

@@ -228,7 +228,7 @@ export default function SuperAdminLayout({ children }: SidebarLayoutProps) {
       {/* Main Content */}
       <main
         className={cn(
-          'transition-all duration-300 min-h-screen',
+          'transition-all duration-300 min-h-screen bg-white',
           collapsed ? 'lg:pl-[72px]' : 'lg:pl-64',
           'pt-16 lg:pt-0'
         )}
