@@ -26,6 +26,8 @@ interface DashboardFiltersProps {
   onTypeChange?: (type: string) => void;
   onAgentChange?: (agentId: string) => void;
   showAgentFilter?: boolean;
+  showChannelFilter?: boolean;
+  showTypeFilter?: boolean;
 }
 
 export function DashboardFilters({
@@ -34,6 +36,8 @@ export function DashboardFilters({
   onTypeChange,
   onAgentChange,
   showAgentFilter = false,
+  showChannelFilter = true,
+  showTypeFilter = true,
 }: DashboardFiltersProps) {
   const [activePeriod, setActivePeriod] = useState('7d');
   const [channel, setChannel] = useState('all');
@@ -143,46 +147,53 @@ export function DashboardFilters({
         </div>
       </div>
 
-      <div className="h-6 w-px bg-border" />
+      {/* Channel Filter */}
+      {showChannelFilter && (
+        <>
+          <div className="h-6 w-px bg-border" />
+          <div className="flex items-center gap-2">
+            <MessageCircle className="w-4 h-4 text-muted-foreground" />
+            <Select value={channel} onValueChange={handleChannelChange}>
+              <SelectTrigger className="w-[140px] h-8">
+                <SelectValue placeholder="Canal" />
+              </SelectTrigger>
+              <SelectContent className="bg-popover border border-border z-50">
+                <SelectItem value="all">Todos Canais</SelectItem>
+                <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                <SelectItem value="instagram">Instagram</SelectItem>
+                <SelectItem value="webchat">Webchat</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </>
+      )}
 
-      <div className="flex items-center gap-2">
-        <MessageCircle className="w-4 h-4 text-muted-foreground" />
-        <Select value={channel} onValueChange={handleChannelChange}>
-          <SelectTrigger className="w-[140px] h-8">
-            <SelectValue placeholder="Canal" />
-          </SelectTrigger>
-          <SelectContent className="bg-popover border border-border z-50">
-            <SelectItem value="all">Todos Canais</SelectItem>
-            <SelectItem value="whatsapp">WhatsApp</SelectItem>
-            <SelectItem value="instagram">Instagram</SelectItem>
-            <SelectItem value="webchat">Webchat</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <Filter className="w-4 h-4 text-muted-foreground" />
-        <Select value={type} onValueChange={handleTypeChange}>
-          <SelectTrigger className="w-[140px] h-8">
-            <SelectValue placeholder="Tipo" />
-          </SelectTrigger>
-          <SelectContent className="bg-popover border border-border z-50">
-            <SelectItem value="all">Todos</SelectItem>
-            <SelectItem value="ia">
-              <div className="flex items-center gap-2">
-                <Bot className="w-3 h-3" />
-                IA
-              </div>
-            </SelectItem>
-            <SelectItem value="human">
-              <div className="flex items-center gap-2">
-                <User className="w-3 h-3" />
-                Humano
-              </div>
-            </SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      {/* Type Filter (IA/Human) */}
+      {showTypeFilter && (
+        <div className="flex items-center gap-2">
+          <Filter className="w-4 h-4 text-muted-foreground" />
+          <Select value={type} onValueChange={handleTypeChange}>
+            <SelectTrigger className="w-[140px] h-8">
+              <SelectValue placeholder="Tipo" />
+            </SelectTrigger>
+            <SelectContent className="bg-popover border border-border z-50">
+              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="ia">
+                <div className="flex items-center gap-2">
+                  <Bot className="w-3 h-3" />
+                  IA
+                </div>
+              </SelectItem>
+              <SelectItem value="human">
+                <div className="flex items-center gap-2">
+                  <User className="w-3 h-3" />
+                  Humano
+                </div>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       {/* Agent Filter - Only visible for admins when enabled */}
       {showAgentFilter && (
