@@ -342,6 +342,15 @@
   }
 }
 
+@media (min-width: 640px) {
+  .kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .kpi-grid-6 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 @media (min-width: 768px) {
   .kpi-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -359,7 +368,7 @@
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
   .kpi-grid-6 {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
@@ -376,6 +385,23 @@
   .kpi-grid-6 {
     grid-template-columns: repeat(6, minmax(0, 1fr));
   }
+}
+
+/* Utilitários de responsividade adicionais */
+.btn-responsive {
+  @apply w-full sm:w-auto;
+}
+
+.header-responsive {
+  @apply flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between;
+}
+
+.text-responsive {
+  @apply text-sm sm:text-base;
+}
+
+.title-responsive {
+  @apply text-xl sm:text-2xl md:text-3xl font-bold;
 }
 
 @keyframes fadeIn {

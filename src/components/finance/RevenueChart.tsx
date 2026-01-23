@@ -81,8 +81,8 @@ export function RevenueChart({ isLoading = false }: RevenueChartProps) {
               tickLine={false}
               axisLine={false}
               tickFormatter={formatCurrency}
-              tick={{ fontSize: 12, fill: '#64748B' }}
-              width={80}
+              tick={{ fontSize: 10, fill: '#64748B' }}
+              width={55}
             />
             <ChartTooltip
               content={
