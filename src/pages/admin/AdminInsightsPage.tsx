@@ -4,7 +4,7 @@ import { useFinance } from '@/contexts/FinanceContext';
 import { useCalendar } from '@/contexts/CalendarContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DashboardFilters } from '@/components/dashboard';
-import { AgentFilter } from '@/components/dashboard/AgentFilter';
+
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -50,7 +50,7 @@ export default function AdminInsightsPage() {
     from: subDays(new Date(), 30),
     to: new Date(),
   });
-  const [selectedAgent, setSelectedAgent] = useState<string>('all');
+  
 
   // Format currency helper
   const formatCurrency = (value: number) => {
@@ -71,20 +71,14 @@ export default function AdminInsightsPage() {
 
       if (!inDateRange) return false;
 
-      // Role-based filtering
+      // Role-based filtering - Agents see only their own, Admins see all
       if (!isAdmin || user?.role !== 'admin') {
-        // Agents can only see their own sales
         return sale.responsavel_id === user?.id;
-      }
-
-      // Admins can filter by agent
-      if (selectedAgent !== 'all') {
-        return sale.responsavel_id === selectedAgent;
       }
 
       return true;
     });
-  }, [sales, dateRange, isAdmin, user, selectedAgent]);
+  }, [sales, dateRange, isAdmin, user]);
 
   // Filter paid sales for revenue calculations
   const paidSales = useMemo(() => {
@@ -117,18 +111,14 @@ export default function AdminInsightsPage() {
 
       if (!inDateRange) return false;
 
-      // Role-based filtering
+      // Role-based filtering - Agents see only their own, Admins see all
       if (!isAdmin || user?.role !== 'admin') {
         return event.createdBy === user?.id;
       }
 
-      if (selectedAgent !== 'all') {
-        return event.createdBy === selectedAgent;
-      }
-
       return true;
     });
-  }, [events, dateRange, isAdmin, user, selectedAgent]);
+  }, [events, dateRange, isAdmin, user]);
 
   // Best selling product
   const bestSellingProduct = useMemo(() => {
@@ -361,15 +351,12 @@ export default function AdminInsightsPage() {
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Filters - Only time period filter */}
       <div className="flex flex-wrap items-center gap-4">
         <DashboardFilters
           onPeriodChange={handlePeriodChange}
           showAgentFilter={false}
         />
-        {isAdmin && user?.role === 'admin' && (
-          <AgentFilter value={selectedAgent} onChange={setSelectedAgent} />
-        )}
       </div>
 
       {/* Agent Ranking Section - Only visible to Admins */}
