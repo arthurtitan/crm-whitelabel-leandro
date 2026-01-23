@@ -59,9 +59,9 @@ export function IAvsHumanCard({
           Distribuição de atendimentos
         </p>
 
-        <div className="flex items-center gap-6">
+        <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
           {/* Donut Chart */}
-          <div className="relative w-28 h-28 shrink-0">
+          <div className="relative w-24 h-24 sm:w-28 sm:h-28 shrink-0">
             <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
               {/* Background circle */}
               <circle
@@ -115,7 +115,7 @@ export function IAvsHumanCard({
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center transition-all duration-200">
                 <p 
-                  className="text-xl font-bold transition-all duration-200"
+                  className="text-lg sm:text-xl font-bold transition-all duration-200"
                   style={{ color: displayColor }}
                 >
                   {displayValue}%
@@ -125,29 +125,29 @@ export function IAvsHumanCard({
             </div>
           </div>
 
-          {/* Legend - Vertical layout */}
-          <div className="flex flex-col gap-3 flex-1">
+          {/* Legend - Responsive layout */}
+          <div className="flex flex-col gap-2 sm:gap-3 flex-1 w-full min-w-0">
             <div 
               className={cn(
-                "flex items-center gap-3 p-2 rounded-lg transition-all duration-200 cursor-pointer",
+                "flex items-center gap-2 sm:gap-3 p-2 rounded-lg transition-all duration-200 cursor-pointer",
                 hoveredSegment === 'ia' ? 'bg-primary/10 scale-105' : 'hover:bg-muted'
               )}
               onMouseEnter={() => setHoveredSegment('ia')}
               onMouseLeave={() => setHoveredSegment(null)}
             >
               <div className={cn(
-                "p-2 rounded-lg transition-all duration-200",
+                "p-1.5 sm:p-2 rounded-lg transition-all duration-200 shrink-0",
                 hoveredSegment === 'ia' ? "bg-primary/20" : "bg-primary/10"
               )}>
-                <Bot className="w-4 h-4" style={{ color: CHART_BLUE }} />
+                <Bot className="w-3 h-3 sm:w-4 sm:h-4" style={{ color: CHART_BLUE }} />
               </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-foreground">IA</p>
-                <p className="text-xs text-muted-foreground">Atendimento automatizado</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs sm:text-sm font-medium text-foreground">IA</p>
+                <p className="text-[10px] sm:text-xs text-muted-foreground truncate">Atendimento automatizado</p>
               </div>
               <span 
                 className={cn(
-                  "text-lg font-bold transition-all duration-200",
+                  "text-base sm:text-lg font-bold transition-all duration-200 shrink-0",
                   hoveredSegment === 'ia' && 'scale-110'
                 )}
                 style={{ color: CHART_BLUE }}
@@ -158,25 +158,25 @@ export function IAvsHumanCard({
             
             <div 
               className={cn(
-                "flex items-center gap-3 p-2 rounded-lg transition-all duration-200 cursor-pointer",
+                "flex items-center gap-2 sm:gap-3 p-2 rounded-lg transition-all duration-200 cursor-pointer",
                 hoveredSegment === 'humano' ? 'bg-success/10 scale-105' : 'hover:bg-muted'
               )}
               onMouseEnter={() => setHoveredSegment('humano')}
               onMouseLeave={() => setHoveredSegment(null)}
             >
               <div className={cn(
-                "p-2 rounded-lg transition-all duration-200",
+                "p-1.5 sm:p-2 rounded-lg transition-all duration-200 shrink-0",
                 hoveredSegment === 'humano' ? "bg-success/20" : "bg-success/10"
               )}>
-                <User className="w-4 h-4" style={{ color: CHART_GREEN }} />
+                <User className="w-3 h-3 sm:w-4 sm:h-4" style={{ color: CHART_GREEN }} />
               </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-foreground">Humano</p>
-                <p className="text-xs text-muted-foreground">Atendimento por agentes</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs sm:text-sm font-medium text-foreground">Humano</p>
+                <p className="text-[10px] sm:text-xs text-muted-foreground truncate">Atendimento por agentes</p>
               </div>
               <span 
                 className={cn(
-                  "text-lg font-bold transition-all duration-200",
+                  "text-base sm:text-lg font-bold transition-all duration-200 shrink-0",
                   hoveredSegment === 'humano' && 'scale-110'
                 )}
                 style={{ color: CHART_GREEN }}
