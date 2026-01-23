@@ -356,6 +356,8 @@ export default function AdminInsightsPage() {
         <DashboardFilters
           onPeriodChange={handlePeriodChange}
           showAgentFilter={false}
+          showChannelFilter={false}
+          showTypeFilter={false}
         />
       </div>
 
