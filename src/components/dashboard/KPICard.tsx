@@ -31,8 +31,8 @@ export function KPICard({
 }: KPICardProps) {
   if (isLoading) {
     return (
-      <Card className={cn('card-hover', className)}>
-        <CardContent className="p-4 space-y-3">
+      <Card className={cn(className)}>
+        <CardContent className="space-y-3">
           <div className="flex items-start justify-between">
             <div className="space-y-2 flex-1">
               <Skeleton className="h-3 w-24" />
@@ -47,14 +47,18 @@ export function KPICard({
   }
 
   return (
-    <Card className={cn('card-hover', className)}>
-      <CardContent className="p-4">
+    <Card className={cn(className)}>
+      <CardContent>
         <div className="flex items-start justify-between">
           <div className="space-y-1">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            {/* Label - uppercase, muted, tracking */}
+            <p className="text-xs font-medium uppercase tracking-[0.04em] text-muted-foreground">
               {title}
             </p>
-            <p className="text-2xl font-bold">{value}</p>
+            {/* KPI Number - 28px, semibold */}
+            <p className="text-[28px] font-semibold text-foreground leading-tight">
+              {value}
+            </p>
             {subtitle && (
               <p className="text-xs text-muted-foreground">{subtitle}</p>
             )}
@@ -69,6 +73,7 @@ export function KPICard({
               </p>
             )}
           </div>
+          {/* Icon - muted or primary */}
           <div className={cn('p-2.5 rounded-lg', iconBgColor)}>
             <Icon className={cn('w-5 h-5', iconColor)} />
           </div>

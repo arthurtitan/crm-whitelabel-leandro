@@ -363,7 +363,7 @@ export default function SuperAdminUsersPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gradient-gleps-light">Usuários</h1>
+          <h1 className="text-3xl font-bold text-foreground">Usuários</h1>
           <p className="text-muted-foreground">Gerencie todos os usuários do sistema</p>
         </div>
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
