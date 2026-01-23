@@ -363,7 +363,7 @@ export default function AdminDashboard() {
         onChannelChange={setChannel}
         onTypeChange={setType}
         onAgentChange={setSelectedAgent}
-        showAgentFilter={isAdmin && user?.role === 'admin'}
+        showAgentFilter={false}
       />
 
       {isEmpty ? (
