@@ -22,6 +22,8 @@ export default {
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
+          hover: "hsl(var(--primary-hover))",
+          soft: "hsl(var(--primary-soft))",
         },
         secondary: {
           DEFAULT: "hsl(var(--secondary))",
@@ -30,14 +32,17 @@ export default {
         destructive: {
           DEFAULT: "hsl(var(--destructive))",
           foreground: "hsl(var(--destructive-foreground))",
+          soft: "hsl(var(--destructive-soft))",
         },
         success: {
           DEFAULT: "hsl(var(--success))",
           foreground: "hsl(var(--success-foreground))",
+          soft: "hsl(var(--success-soft))",
         },
         warning: {
           DEFAULT: "hsl(var(--warning))",
           foreground: "hsl(var(--warning-foreground))",
+          soft: "hsl(var(--warning-soft))",
         },
         info: {
           DEFAULT: "hsl(var(--info))",
@@ -89,6 +94,13 @@ export default {
           pending: "hsl(var(--status-pending))",
           paid: "hsl(var(--status-paid))",
           refunded: "hsl(var(--status-refunded))",
+        },
+        chart: {
+          1: "hsl(var(--chart-1))",
+          2: "hsl(var(--chart-2))",
+          3: "hsl(var(--chart-3))",
+          4: "hsl(var(--chart-4))",
+          grid: "hsl(var(--chart-grid))",
         },
       },
       borderRadius: {
@@ -144,6 +156,8 @@ export default {
         shimmer: "shimmer 2s infinite",
       },
       boxShadow: {
+        card: "0 4px 12px rgba(15, 23, 42, 0.06)",
+        "card-hover": "0 8px 24px rgba(15, 23, 42, 0.1)",
         glow: "0 0 20px hsl(var(--primary) / 0.3)",
         "glow-lg": "0 0 40px hsl(var(--primary) / 0.4)",
       },

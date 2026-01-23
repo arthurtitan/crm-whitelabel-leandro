@@ -4,9 +4,8 @@ import {
   ChartConfig,
   ChartContainer,
   ChartTooltip,
-  ChartTooltipContent,
 } from '@/components/ui/chart';
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend } from 'recharts';
+import { PieChart, Pie, Cell } from 'recharts';
 import { useFinance } from '@/contexts/FinanceContext';
 import { CreditCard } from 'lucide-react';
 import { PaymentMethod } from '@/types/crm';
@@ -15,14 +14,15 @@ interface PaymentMethodChartProps {
   isLoading?: boolean;
 }
 
+// Chart colors from design system - fixed palette
 const COLORS: Record<PaymentMethod | 'none', string> = {
-  pix: 'hsl(var(--success))',
-  debito: 'hsl(220 70% 50%)',
-  credito: 'hsl(var(--primary))',
-  boleto: 'hsl(var(--warning))',
-  dinheiro: 'hsl(142 71% 45%)',
-  convenio: 'hsl(280 65% 60%)',
-  none: 'hsl(var(--muted-foreground))',
+  pix: '#16A34A',       // chart-2 green
+  debito: '#2563EB',    // chart-1 blue
+  credito: '#3B82F6',   // blue variant
+  boleto: '#F59E0B',    // chart-3 yellow
+  dinheiro: '#22C55E',  // green variant
+  convenio: '#8B5CF6',  // purple
+  none: '#94A3B8',      // muted
 };
 
 const LABELS: Record<PaymentMethod | 'none', string> = {
@@ -83,7 +83,7 @@ export function PaymentMethodChart({ isLoading = false }: PaymentMethodChartProp
         <CardHeader className="pb-2">
           <div className="flex items-center gap-2">
             <CreditCard className="w-5 h-5 text-primary" />
-            <CardTitle className="text-base font-semibold">
+            <CardTitle className="text-base font-semibold text-foreground">
               Distribuição por Método de Pagamento
             </CardTitle>
           </div>
@@ -102,7 +102,7 @@ export function PaymentMethodChart({ isLoading = false }: PaymentMethodChartProp
       <CardHeader className="pb-2">
         <div className="flex items-center gap-2">
           <CreditCard className="w-5 h-5 text-primary" />
-          <CardTitle className="text-base font-semibold">
+          <CardTitle className="text-base font-semibold text-foreground">
             Distribuição por Método de Pagamento
           </CardTitle>
         </div>
@@ -125,7 +125,7 @@ export function PaymentMethodChart({ isLoading = false }: PaymentMethodChartProp
                 <Cell
                   key={`cell-${index}`}
                   fill={COLORS[entry.method]}
-                  stroke="hsl(var(--background))"
+                  stroke="#FFFFFF"
                   strokeWidth={2}
                 />
               ))}
@@ -136,8 +136,8 @@ export function PaymentMethodChart({ isLoading = false }: PaymentMethodChartProp
                 const data = payload[0].payload;
                 const percentage = total > 0 ? ((data.value / total) * 100).toFixed(1) : 0;
                 return (
-                  <div className="bg-popover border border-border rounded-lg p-3 shadow-lg">
-                    <p className="font-medium">{data.name}</p>
+                  <div className="bg-card border border-border rounded-lg p-3 shadow-card">
+                    <p className="font-medium text-foreground">{data.name}</p>
                     <p className="text-sm text-muted-foreground">
                       {formatCurrency(data.value)} ({percentage}%)
                     </p>
@@ -161,7 +161,7 @@ export function PaymentMethodChart({ isLoading = false }: PaymentMethodChartProp
                   className="w-3 h-3 rounded-full"
                   style={{ backgroundColor: COLORS[item.method] }}
                 />
-                <span className="text-sm">
+                <span className="text-sm text-foreground">
                   {item.name} ({percentage}%)
                 </span>
               </div>

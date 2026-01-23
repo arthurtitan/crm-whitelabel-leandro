@@ -343,7 +343,7 @@ export default function AdminInsightsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gradient-gleps-light">Insights</h1>
+          <h1 className="text-3xl font-bold text-foreground">Insights</h1>
           <p className="text-muted-foreground">
             Análises e métricas de performance
             {!isAdmin && ' (seus dados)'}

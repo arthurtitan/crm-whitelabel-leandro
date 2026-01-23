@@ -3,93 +3,111 @@
 @tailwind utilities;
 
 /* 
-  GLEPS.AI DESIGN SYSTEM
-  Professional dark theme with deep purple and royal blue accents
-  Premium enterprise SaaS aesthetic
+  GLEPS.AI DESIGN SYSTEM - SaaS Moderno
+  Clean, professional light theme with hierarchy clarity
+  Based on official HEX palette specification
 */
 
 @layer base {
   :root {
-    /* Light mode - clean white professional */
-    --background: 0 0% 100%;
-    --foreground: 220 25% 15%;
+    /* Background & Structure - SaaS Moderno */
+    --background: 210 40% 98%;        /* #F8FAFC */
+    --foreground: 222 47% 11%;        /* #0F172A */
 
-    --card: 0 0% 100%;
-    --card-foreground: 220 25% 15%;
+    --card: 0 0% 100%;                /* #FFFFFF */
+    --card-foreground: 222 47% 11%;   /* #0F172A */
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 220 25% 15%;
+    --popover: 0 0% 100%;             /* #FFFFFF */
+    --popover-foreground: 222 47% 11%;
 
-    --primary: 230 70% 55%;
+    /* Typography tokens */
+    --text-primary: 222 47% 11%;      /* #0F172A - títulos e números */
+    --text-secondary: 215 16% 35%;    /* #475569 - descrições */
+    --text-muted: 215 16% 62%;        /* #94A3B8 - labels, subtítulos */
+
+    /* Primary - Blue actions */
+    --primary: 217 91% 60%;           /* #2563EB */
     --primary-foreground: 0 0% 100%;
+    --primary-hover: 221 83% 53%;     /* #1D4ED8 */
+    --primary-soft: 214 95% 93%;      /* #DBEAFE */
 
-    --secondary: 220 20% 96%;
-    --secondary-foreground: 220 25% 25%;
+    /* Secondary */
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
 
-    --muted: 220 15% 95%;
-    --muted-foreground: 220 15% 40%;
+    /* Muted */
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;  /* #64748B */
 
-    --accent: 260 60% 55%;
+    /* Accent - usar primary para consistência */
+    --accent: 217 91% 60%;
     --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 84% 55%;
+    /* Status Colors - SaaS palette */
+    --destructive: 0 72% 51%;         /* #DC2626 */
     --destructive-foreground: 0 0% 100%;
+    --destructive-soft: 0 93% 94%;    /* #FEE2E2 */
 
-    --success: 142 71% 40%;
+    --success: 142 71% 45%;           /* #16A34A */
     --success-foreground: 0 0% 100%;
+    --success-soft: 142 77% 93%;      /* #DCFCE7 */
 
-    --warning: 38 92% 45%;
+    --warning: 32 95% 44%;            /* #D97706 */
     --warning-foreground: 0 0% 100%;
+    --warning-soft: 48 96% 89%;       /* #FEF3C7 */
 
-    --info: 230 70% 50%;
+    --info: 217 91% 60%;
     --info-foreground: 0 0% 100%;
 
-    --border: 220 20% 88%;
-    --input: 220 20% 88%;
-    --ring: 230 70% 55%;
+    /* Borders & Input */
+    --border: 214 32% 91%;            /* #E2E8F0 */
+    --input: 214 32% 91%;
+    --ring: 217 91% 60%;
 
-    --radius: 0.5rem;
+    /* Radius - 12px */
+    --radius: 0.75rem;
 
-    /* Sidebar - Dark purple (preserved) */
+    /* Chart Colors - fixed order */
+    --chart-1: 217 91% 60%;           /* #2563EB - azul */
+    --chart-2: 142 71% 45%;           /* #16A34A - verde */
+    --chart-3: 38 92% 50%;            /* #F59E0B - amarelo */
+    --chart-4: 0 72% 51%;             /* #DC2626 - vermelho */
+    --chart-grid: 220 13% 91%;        /* #E5E7EB */
+
+    /* Sidebar - Dark purple (preserved from original) */
     --sidebar-background: 270 60% 8%;
     --sidebar-foreground: 270 20% 90%;
-    --sidebar-primary: 230 70% 55%;
+    --sidebar-primary: 217 91% 60%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 270 50% 15%;
     --sidebar-accent-foreground: 270 20% 90%;
     --sidebar-border: 270 50% 15%;
-    --sidebar-ring: 230 70% 55%;
+    --sidebar-ring: 217 91% 60%;
     --sidebar-muted: 270 20% 50%;
 
-    /* Custom Gleps tokens */
-    --kanban-new: 230 70% 55%;
+    /* Kanban tokens */
+    --kanban-new: 217 91% 60%;
     --kanban-contact: 260 60% 55%;
-    --kanban-interested: 38 92% 45%;
-    --kanban-qualified: 142 71% 40%;
+    --kanban-interested: 38 92% 50%;
+    --kanban-qualified: 142 71% 45%;
     --kanban-converted: 280 67% 50%;
 
-    /* Role colors - enhanced for light bg */
-    --role-super-admin: 230 70% 45%;
+    /* Role colors */
+    --role-super-admin: 217 91% 50%;
     --role-admin: 260 60% 50%;
-    --role-agent: 270 50% 40%;
+    --role-agent: 270 50% 45%;
 
-    /* Status colors - enhanced for light bg */
-    --status-active: 142 71% 38%;
-    --status-paused: 38 92% 42%;
-    --status-cancelled: 0 84% 50%;
-    --status-pending: 38 92% 42%;
-    --status-paid: 142 71% 38%;
-    --status-refunded: 280 67% 45%;
-
-    /* Gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(230 70% 55%) 0%, hsl(260 60% 55%) 100%);
-    --gradient-success: linear-gradient(135deg, hsl(142 71% 40%) 0%, hsl(152 76% 32%) 100%);
-    --gradient-brand: linear-gradient(135deg, hsl(230 70% 50%) 0%, hsl(270 60% 45%) 100%);
-    --gradient-gleps: linear-gradient(180deg, hsl(230 70% 50%) 0%, hsl(260 60% 50%) 50%, hsl(270 50% 40%) 100%);
+    /* Status colors */
+    --status-active: 142 71% 45%;
+    --status-paused: 32 95% 44%;
+    --status-cancelled: 0 72% 51%;
+    --status-pending: 32 95% 44%;
+    --status-paid: 142 71% 45%;
+    --status-refunded: 280 67% 50%;
   }
 
   .dark {
-    /* Dark mode - Deep purple enterprise */
+    /* Dark mode - Deep purple enterprise (for login, sidebar) */
     --background: 270 80% 6%;
     --foreground: 270 20% 95%;
 
@@ -99,7 +117,7 @@
     --popover: 270 60% 10%;
     --popover-foreground: 270 20% 95%;
 
-    --primary: 230 70% 55%;
+    --primary: 217 91% 60%;
     --primary-foreground: 0 0% 100%;
 
     --secondary: 270 50% 18%;
@@ -114,28 +132,28 @@
     --destructive: 0 63% 35%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: 142 71% 40%;
+    --success: 142 71% 45%;
     --success-foreground: 0 0% 100%;
 
-    --warning: 38 92% 45%;
+    --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
 
-    --info: 230 70% 50%;
+    --info: 217 91% 60%;
     --info-foreground: 0 0% 100%;
 
     --border: 270 40% 18%;
     --input: 270 40% 18%;
-    --ring: 230 70% 55%;
+    --ring: 217 91% 60%;
 
     /* Sidebar - Deeper purple */
     --sidebar-background: 270 80% 4%;
     --sidebar-foreground: 270 20% 85%;
-    --sidebar-primary: 230 70% 55%;
+    --sidebar-primary: 217 91% 60%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 270 50% 12%;
     --sidebar-accent-foreground: 270 20% 85%;
     --sidebar-border: 270 50% 12%;
-    --sidebar-ring: 230 70% 55%;
+    --sidebar-ring: 217 91% 60%;
     --sidebar-muted: 270 20% 50%;
   }
 }
@@ -152,7 +170,7 @@
 }
 
 @layer components {
-  /* Glassmorphism effects - Gleps style (for dark areas: login, sidebar) */
+  /* Glassmorphism effects - for dark areas only (login, sidebar) */
   .glass {
     @apply backdrop-blur-md border border-border/40;
     background: linear-gradient(
@@ -171,26 +189,24 @@
     );
   }
 
-  /* Light theme card style - for white background pages */
-  .glass-light {
-    @apply bg-white border border-border rounded-xl;
-    box-shadow: 0 1px 3px hsl(220 20% 20% / 0.06), 
-                0 4px 12px hsl(220 20% 20% / 0.04);
+  /* SaaS Card Shadow - standard for all cards */
+  .shadow-card {
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
   }
 
-  .glass-light:hover {
-    box-shadow: 0 2px 8px hsl(220 20% 20% / 0.08), 
-                0 8px 24px hsl(220 20% 20% / 0.06);
+  /* KPI Typography */
+  .kpi-number {
+    font-size: 28px;
+    font-weight: 600;
+    color: hsl(var(--text-primary));
   }
 
-  /* Card variants - updated for light theme */
-  .card-hover {
-    @apply transition-all duration-200 hover:-translate-y-0.5;
-    &:hover {
-      border-color: hsl(230 70% 55% / 0.3);
-      box-shadow: 0 4px 16px hsl(230 70% 55% / 0.1), 
-                  0 8px 24px hsl(220 20% 20% / 0.08);
-    }
+  .kpi-label {
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: hsl(var(--text-muted));
   }
 
   /* Kanban stage colors */
@@ -219,7 +235,7 @@
     border-left-color: hsl(var(--kanban-converted));
   }
 
-  /* Role badges - Gleps palette */
+  /* Role badges */
   .badge-super-admin {
     @apply text-xs font-medium px-2 py-0.5 rounded-full;
     background: hsl(var(--role-super-admin) / 0.15);
@@ -255,56 +271,6 @@
     @apply text-xs font-medium px-2 py-0.5 rounded-full;
     background: hsl(var(--status-cancelled) / 0.15);
     color: hsl(var(--status-cancelled));
-  }
-
-  /* Gradient text - Gleps brand */
-  .text-gradient {
-    @apply bg-clip-text text-transparent;
-    background-image: var(--gradient-brand);
-  }
-
-  /* For dark backgrounds (login, sidebar) */
-  .text-gradient-gleps {
-    @apply bg-clip-text text-transparent;
-    background-image: linear-gradient(
-      135deg,
-      hsl(0 0% 100%) 0%,
-      hsl(230 70% 65%) 50%,
-      hsl(260 60% 60%) 100%
-    );
-  }
-
-  /* For light/white backgrounds - vibrant royal blue to lilac */
-  .text-gradient-gleps-light {
-    @apply bg-clip-text text-transparent font-bold;
-    background-image: linear-gradient(
-      135deg,
-      hsl(220 85% 50%) 0%,
-      hsl(235 75% 58%) 50%,
-      hsl(255 65% 60%) 100%
-    );
-  }
-
-  /* Gradient backgrounds */
-  .bg-gradient-primary {
-    background-image: var(--gradient-primary);
-  }
-
-  .bg-gradient-brand {
-    background-image: var(--gradient-brand);
-  }
-
-  .bg-gradient-gleps {
-    background-image: var(--gradient-gleps);
-  }
-
-  /* Glow effects */
-  .glow-primary {
-    box-shadow: 0 0 20px hsl(230 70% 55% / 0.4);
-  }
-
-  .glow-accent {
-    box-shadow: 0 0 15px hsl(260 60% 60% / 0.3);
   }
 
   /* Scrollbar styling */
@@ -366,24 +332,10 @@
   }
 }
 
-/* KPI card pulse animation - Gleps accent */
-@keyframes kpiPulse {
-  0%, 100% {
-    box-shadow: 0 0 0 0 hsl(230 70% 55% / 0.2);
-  }
-  50% {
-    box-shadow: 0 0 0 8px hsl(230 70% 55% / 0);
-  }
-}
-
-.kpi-pulse {
-  animation: kpiPulse 2s infinite;
-}
-
-/* Logo glow animation */
+/* Logo glow animation - for dark sidebar only */
 @keyframes logoGlow {
   0%, 100% {
-    filter: drop-shadow(0 0 8px hsl(230 70% 55% / 0.4));
+    filter: drop-shadow(0 0 8px hsl(217 91% 60% / 0.4));
   }
   50% {
     filter: drop-shadow(0 0 16px hsl(260 60% 60% / 0.6));

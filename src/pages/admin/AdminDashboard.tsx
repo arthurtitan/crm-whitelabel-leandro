@@ -316,7 +316,7 @@ export default function AdminDashboard() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gradient-gleps-light">Dashboard de Atendimento</h1>
+          <h1 className="text-2xl font-bold text-foreground">Dashboard de Atendimento</h1>
           <p className="text-sm text-muted-foreground">
             Métricas operacionais e estratégicas do atendimento
           </p>

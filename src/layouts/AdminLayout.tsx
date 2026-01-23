@@ -244,13 +244,14 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         </div>
       </aside>
 
-      {/* Main Content */}
+      {/* Main Content - SaaS background #F8FAFC */}
       <main
         className={cn(
-          'transition-all duration-300 min-h-screen bg-white',
+          'transition-all duration-300 min-h-screen',
           collapsed ? 'lg:pl-[72px]' : 'lg:pl-64',
           'pt-16 lg:pt-0'
         )}
+        style={{ backgroundColor: '#F8FAFC' }}
       >
         {isImpersonating && (
           <div className="bg-warning/10 border-b border-warning/30 px-4 py-2">

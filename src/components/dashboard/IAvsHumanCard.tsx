@@ -10,6 +10,10 @@ interface IAvsHumanCardProps {
   isLoading?: boolean;
 }
 
+// Chart colors from design system
+const CHART_BLUE = '#2563EB';  // chart-1 - IA
+const CHART_GREEN = '#16A34A'; // chart-2 - Humano
+
 export function IAvsHumanCard({
   percentualIA,
   percentualHumano,
@@ -19,7 +23,7 @@ export function IAvsHumanCard({
 
   if (isLoading) {
     return (
-      <Card className="card-hover">
+      <Card>
         <CardHeader className="pb-2">
           <Skeleton className="h-5 w-32" />
         </CardHeader>
@@ -41,9 +45,10 @@ export function IAvsHumanCard({
     : percentualIA;
   
   const displayLabel = hoveredSegment === 'humano' ? 'Humano' : 'IA';
+  const displayColor = hoveredSegment === 'humano' ? CHART_GREEN : CHART_BLUE;
 
   return (
-    <Card className="card-hover h-full">
+    <Card className="h-full">
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-medium text-muted-foreground">
           IA vs Humano
@@ -64,16 +69,16 @@ export function IAvsHumanCard({
                 cy="50"
                 r="40"
                 fill="none"
-                stroke="hsl(var(--muted))"
+                stroke="#E5E7EB"
                 strokeWidth="14"
               />
-              {/* IA segment */}
+              {/* IA segment - Blue */}
               <circle
                 cx="50"
                 cy="50"
                 r="40"
                 fill="none"
-                stroke="hsl(var(--primary))"
+                stroke={CHART_BLUE}
                 strokeWidth={hoveredSegment === 'ia' ? 18 : 14}
                 strokeDasharray={`${(percentualIA / 100) * 251.2} 251.2`}
                 className={cn(
@@ -81,18 +86,18 @@ export function IAvsHumanCard({
                   hoveredSegment === 'ia' && "drop-shadow-lg"
                 )}
                 style={{
-                  filter: hoveredSegment === 'ia' ? 'brightness(1.2)' : 'none',
+                  filter: hoveredSegment === 'ia' ? 'brightness(1.1)' : 'none',
                 }}
                 onMouseEnter={() => setHoveredSegment('ia')}
                 onMouseLeave={() => setHoveredSegment(null)}
               />
-              {/* Human segment */}
+              {/* Human segment - Green */}
               <circle
                 cx="50"
                 cy="50"
                 r="40"
                 fill="none"
-                stroke="hsl(var(--success))"
+                stroke={CHART_GREEN}
                 strokeWidth={hoveredSegment === 'humano' ? 18 : 14}
                 strokeDasharray={`${(percentualHumano / 100) * 251.2} 251.2`}
                 strokeDashoffset={`-${(percentualIA / 100) * 251.2}`}
@@ -101,7 +106,7 @@ export function IAvsHumanCard({
                   hoveredSegment === 'humano' && "drop-shadow-lg"
                 )}
                 style={{
-                  filter: hoveredSegment === 'humano' ? 'brightness(1.2)' : 'none',
+                  filter: hoveredSegment === 'humano' ? 'brightness(1.1)' : 'none',
                 }}
                 onMouseEnter={() => setHoveredSegment('humano')}
                 onMouseLeave={() => setHoveredSegment(null)}
@@ -109,10 +114,10 @@ export function IAvsHumanCard({
             </svg>
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center transition-all duration-200">
-                <p className={cn(
-                  "text-xl font-bold transition-all duration-200",
-                  hoveredSegment === 'humano' ? 'text-success' : 'text-primary'
-                )}>
+                <p 
+                  className="text-xl font-bold transition-all duration-200"
+                  style={{ color: displayColor }}
+                >
                   {displayValue}%
                 </p>
                 <p className="text-[10px] text-muted-foreground">{displayLabel}</p>
@@ -125,25 +130,28 @@ export function IAvsHumanCard({
             <div 
               className={cn(
                 "flex items-center gap-3 p-2 rounded-lg transition-all duration-200 cursor-pointer",
-                hoveredSegment === 'ia' ? 'bg-primary/10 scale-105' : 'hover:bg-muted/50'
+                hoveredSegment === 'ia' ? 'bg-primary/10 scale-105' : 'hover:bg-muted'
               )}
               onMouseEnter={() => setHoveredSegment('ia')}
               onMouseLeave={() => setHoveredSegment(null)}
             >
               <div className={cn(
-                "p-2 rounded-lg bg-primary/10 transition-all duration-200",
-                hoveredSegment === 'ia' && "bg-primary/20"
+                "p-2 rounded-lg transition-all duration-200",
+                hoveredSegment === 'ia' ? "bg-primary/20" : "bg-primary/10"
               )}>
-                <Bot className="w-4 h-4 text-primary" />
+                <Bot className="w-4 h-4" style={{ color: CHART_BLUE }} />
               </div>
               <div className="flex-1">
-                <p className="text-sm font-medium">IA</p>
+                <p className="text-sm font-medium text-foreground">IA</p>
                 <p className="text-xs text-muted-foreground">Atendimento automatizado</p>
               </div>
-              <span className={cn(
-                "text-lg font-bold transition-all duration-200",
-                hoveredSegment === 'ia' ? 'text-primary scale-110' : ''
-              )}>
+              <span 
+                className={cn(
+                  "text-lg font-bold transition-all duration-200",
+                  hoveredSegment === 'ia' && 'scale-110'
+                )}
+                style={{ color: CHART_BLUE }}
+              >
                 {percentualIA}%
               </span>
             </div>
@@ -151,25 +159,28 @@ export function IAvsHumanCard({
             <div 
               className={cn(
                 "flex items-center gap-3 p-2 rounded-lg transition-all duration-200 cursor-pointer",
-                hoveredSegment === 'humano' ? 'bg-success/10 scale-105' : 'hover:bg-muted/50'
+                hoveredSegment === 'humano' ? 'bg-success/10 scale-105' : 'hover:bg-muted'
               )}
               onMouseEnter={() => setHoveredSegment('humano')}
               onMouseLeave={() => setHoveredSegment(null)}
             >
               <div className={cn(
-                "p-2 rounded-lg bg-success/10 transition-all duration-200",
-                hoveredSegment === 'humano' && "bg-success/20"
+                "p-2 rounded-lg transition-all duration-200",
+                hoveredSegment === 'humano' ? "bg-success/20" : "bg-success/10"
               )}>
-                <User className="w-4 h-4 text-success" />
+                <User className="w-4 h-4" style={{ color: CHART_GREEN }} />
               </div>
               <div className="flex-1">
-                <p className="text-sm font-medium">Humano</p>
+                <p className="text-sm font-medium text-foreground">Humano</p>
                 <p className="text-xs text-muted-foreground">Atendimento por agentes</p>
               </div>
-              <span className={cn(
-                "text-lg font-bold transition-all duration-200",
-                hoveredSegment === 'humano' ? 'text-success scale-110' : ''
-              )}>
+              <span 
+                className={cn(
+                  "text-lg font-bold transition-all duration-200",
+                  hoveredSegment === 'humano' && 'scale-110'
+                )}
+                style={{ color: CHART_GREEN }}
+              >
                 {percentualHumano}%
               </span>
             </div>

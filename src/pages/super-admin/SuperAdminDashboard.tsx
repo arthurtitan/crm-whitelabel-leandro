@@ -73,7 +73,7 @@ export default function SuperAdminDashboard() {
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-gradient-gleps-light">Dashboard Global</h1>
+        <h1 className="text-3xl font-bold text-foreground">Dashboard Global</h1>
         <p className="text-muted-foreground">
           Visão geral de todas as contas, usuários e consumo de recursos do servidor
         </p>
