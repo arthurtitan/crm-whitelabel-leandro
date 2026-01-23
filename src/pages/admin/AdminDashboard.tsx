@@ -8,9 +8,11 @@ import {
   ArrowRightLeft,
   CalendarCheck,
   CalendarX,
+  X,
 } from 'lucide-react';
 import { subDays, isWithinInterval, parseISO } from 'date-fns';
 import { DateRange } from 'react-day-picker';
+import { Button } from '@/components/ui/button';
 
 // Dashboard Components
 import { DashboardFilters } from '@/components/dashboard/DashboardFilters';
@@ -110,6 +112,104 @@ const mockDashboardData = {
   },
 };
 
+// Mock data by agent for filtered views
+const mockAgentDashboardData: Record<string, typeof mockDashboardData.kpis & { 
+  backlog: typeof mockDashboardData.backlog;
+  qualidade: typeof mockDashboardData.qualidade;
+  picoPorHora: typeof mockDashboardData.picoPorHora;
+}> = {
+  'Ana Silva': {
+    totalLeads: 245,
+    conversasAtivas: 12,
+    percentualIA: 45,
+    percentualHumano: 55,
+    tempoMedioPrimeiraResposta: '1m 45s',
+    tempoMedioResolucao: '15m 20s',
+    taxaTransbordo: '8.2%',
+    backlog: { ate15min: 8, de15a60min: 3, acima60min: 1 },
+    qualidade: { conversasSemResposta: 2, taxaAtendimentoVenda: '22.5%' },
+    picoPorHora: [
+      { hora: 8, totalConversas: 5 }, { hora: 9, totalConversas: 12 }, { hora: 10, totalConversas: 18 },
+      { hora: 11, totalConversas: 22 }, { hora: 12, totalConversas: 15 }, { hora: 13, totalConversas: 10 },
+      { hora: 14, totalConversas: 20 }, { hora: 15, totalConversas: 25 }, { hora: 16, totalConversas: 28 },
+      { hora: 17, totalConversas: 18 }, { hora: 18, totalConversas: 12 }, { hora: 19, totalConversas: 8 },
+      { hora: 20, totalConversas: 5 },
+    ],
+  },
+  'Carlos Santos': {
+    totalLeads: 198,
+    conversasAtivas: 8,
+    percentualIA: 52,
+    percentualHumano: 48,
+    tempoMedioPrimeiraResposta: '2m 12s',
+    tempoMedioResolucao: '22m 10s',
+    taxaTransbordo: '15.3%',
+    backlog: { ate15min: 5, de15a60min: 4, acima60min: 2 },
+    qualidade: { conversasSemResposta: 3, taxaAtendimentoVenda: '18.2%' },
+    picoPorHora: [
+      { hora: 8, totalConversas: 3 }, { hora: 9, totalConversas: 8 }, { hora: 10, totalConversas: 12 },
+      { hora: 11, totalConversas: 15 }, { hora: 12, totalConversas: 10 }, { hora: 13, totalConversas: 8 },
+      { hora: 14, totalConversas: 14 }, { hora: 15, totalConversas: 16 }, { hora: 16, totalConversas: 18 },
+      { hora: 17, totalConversas: 14 }, { hora: 18, totalConversas: 10 }, { hora: 19, totalConversas: 6 },
+      { hora: 20, totalConversas: 4 },
+    ],
+  },
+  'Maria Oliveira': {
+    totalLeads: 312,
+    conversasAtivas: 15,
+    percentualIA: 72,
+    percentualHumano: 28,
+    tempoMedioPrimeiraResposta: '1m 32s',
+    tempoMedioResolucao: '14m 45s',
+    taxaTransbordo: '6.8%',
+    backlog: { ate15min: 10, de15a60min: 2, acima60min: 1 },
+    qualidade: { conversasSemResposta: 1, taxaAtendimentoVenda: '24.8%' },
+    picoPorHora: [
+      { hora: 8, totalConversas: 6 }, { hora: 9, totalConversas: 14 }, { hora: 10, totalConversas: 22 },
+      { hora: 11, totalConversas: 26 }, { hora: 12, totalConversas: 18 }, { hora: 13, totalConversas: 14 },
+      { hora: 14, totalConversas: 24 }, { hora: 15, totalConversas: 28 }, { hora: 16, totalConversas: 30 },
+      { hora: 17, totalConversas: 22 }, { hora: 18, totalConversas: 16 }, { hora: 19, totalConversas: 10 },
+      { hora: 20, totalConversas: 6 },
+    ],
+  },
+  'Pedro Costa': {
+    totalLeads: 156,
+    conversasAtivas: 5,
+    percentualIA: 38,
+    percentualHumano: 62,
+    tempoMedioPrimeiraResposta: '3m 05s',
+    tempoMedioResolucao: '28m 30s',
+    taxaTransbordo: '22.1%',
+    backlog: { ate15min: 3, de15a60min: 2, acima60min: 2 },
+    qualidade: { conversasSemResposta: 2, taxaAtendimentoVenda: '12.3%' },
+    picoPorHora: [
+      { hora: 8, totalConversas: 2 }, { hora: 9, totalConversas: 5 }, { hora: 10, totalConversas: 8 },
+      { hora: 11, totalConversas: 10 }, { hora: 12, totalConversas: 7 }, { hora: 13, totalConversas: 5 },
+      { hora: 14, totalConversas: 9 }, { hora: 15, totalConversas: 11 }, { hora: 16, totalConversas: 12 },
+      { hora: 17, totalConversas: 9 }, { hora: 18, totalConversas: 6 }, { hora: 19, totalConversas: 4 },
+      { hora: 20, totalConversas: 2 },
+    ],
+  },
+  'Julia Ferreira': {
+    totalLeads: 337,
+    conversasAtivas: 18,
+    percentualIA: 78,
+    percentualHumano: 22,
+    tempoMedioPrimeiraResposta: '1m 58s',
+    tempoMedioResolucao: '16m 20s',
+    taxaTransbordo: '9.5%',
+    backlog: { ate15min: 12, de15a60min: 3, acima60min: 1 },
+    qualidade: { conversasSemResposta: 0, taxaAtendimentoVenda: '21.2%' },
+    picoPorHora: [
+      { hora: 8, totalConversas: 7 }, { hora: 9, totalConversas: 16 }, { hora: 10, totalConversas: 24 },
+      { hora: 11, totalConversas: 28 }, { hora: 12, totalConversas: 20 }, { hora: 13, totalConversas: 16 },
+      { hora: 14, totalConversas: 26 }, { hora: 15, totalConversas: 30 }, { hora: 16, totalConversas: 32 },
+      { hora: 17, totalConversas: 24 }, { hora: 18, totalConversas: 18 }, { hora: 19, totalConversas: 11 },
+      { hora: 20, totalConversas: 7 },
+    ],
+  },
+};
+
 type ViewState = 'loading' | 'empty' | 'data';
 
 export default function AdminDashboard() {
@@ -126,6 +226,7 @@ export default function AdminDashboard() {
   const [channel, setChannel] = useState('all');
   const [type, setType] = useState('all');
   const [selectedAgent, setSelectedAgent] = useState('all');
+  const [selectedAgentFromTable, setSelectedAgentFromTable] = useState<string | null>(null);
 
   // Handle period change from filters
   const handlePeriodChange = (newPeriod: string, range?: DateRange) => {
@@ -157,8 +258,14 @@ export default function AdminDashboard() {
     // If agent, show only their own appointments
     if (!isAdmin) {
       filteredEvents = periodEvents.filter(event => event.createdBy === user?.id);
+    } else if (selectedAgentFromTable) {
+      // If agent selected from table - match by agent name to user name for mock
+      filteredEvents = periodEvents.filter(event => {
+        // In a real scenario, you'd match by user ID linked to Chatwoot agent
+        return event.createdBy === selectedAgentFromTable;
+      });
     } else if (selectedAgent !== 'all') {
-      // If admin with agent filter applied
+      // If admin with agent filter applied from dropdown
       filteredEvents = periodEvents.filter(event => event.createdBy === selectedAgent);
     }
     
@@ -166,7 +273,26 @@ export default function AdminDashboard() {
     const cancelled = filteredEvents.filter(event => event.status === 'cancelled').length;
     
     return { totalAppointments: total, cancelledAppointments: cancelled };
-  }, [events, isAdmin, user?.id, selectedAgent, dateRange]);
+  }, [events, isAdmin, user?.id, selectedAgent, selectedAgentFromTable, dateRange]);
+
+  // Get displayed KPIs based on selected agent from table
+  const displayedData = useMemo(() => {
+    if (selectedAgentFromTable && mockAgentDashboardData[selectedAgentFromTable]) {
+      const agentData = mockAgentDashboardData[selectedAgentFromTable];
+      return {
+        kpis: agentData,
+        picoPorHora: agentData.picoPorHora,
+        backlog: agentData.backlog,
+        qualidade: agentData.qualidade,
+      };
+    }
+    return {
+      kpis: mockDashboardData.kpis,
+      picoPorHora: mockDashboardData.picoPorHora,
+      backlog: mockDashboardData.backlog,
+      qualidade: mockDashboardData.qualidade,
+    };
+  }, [selectedAgentFromTable]);
 
   // Simulate different states for demonstration
   const handleStateChange = (state: ViewState) => {
@@ -176,6 +302,14 @@ export default function AdminDashboard() {
   const data = mockDashboardData;
   const isLoading = viewState === 'loading';
   const isEmpty = viewState === 'empty';
+
+  // Helper for subtitle context
+  const getAgentContextSubtitle = (defaultText: string) => {
+    if (selectedAgentFromTable) {
+      return `Dados de ${selectedAgentFromTable}`;
+    }
+    return defaultText;
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -239,12 +373,29 @@ export default function AdminDashboard() {
         />
       ) : (
         <>
+          {/* Agent Filter Active Banner */}
+          {selectedAgentFromTable && (
+            <div className="flex items-center justify-between p-3 rounded-lg bg-primary/10 border border-primary/20">
+              <span className="text-sm">
+                Visualizando dados de <strong>{selectedAgentFromTable}</strong>
+              </span>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setSelectedAgentFromTable(null)}
+                className="h-7 text-xs"
+              >
+                <X className="w-3 h-3 mr-1" /> Limpar filtro
+              </Button>
+            </div>
+          )}
+
           {/* KPI Cards - Row 1 */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             <KPICard
               title="Total de Leads"
-              subtitle="Contatos únicos que tiveram conversa"
-              value={data.kpis.totalLeads}
+              subtitle={getAgentContextSubtitle('Contatos únicos que tiveram conversa')}
+              value={displayedData.kpis.totalLeads}
               icon={Users}
               iconColor="text-primary"
               iconBgColor="bg-primary/10"
@@ -252,8 +403,8 @@ export default function AdminDashboard() {
             />
             <KPICard
               title="Conversas Ativas"
-              subtitle="Atendimentos em andamento"
-              value={data.kpis.conversasAtivas}
+              subtitle={getAgentContextSubtitle('Atendimentos em andamento')}
+              value={displayedData.kpis.conversasAtivas}
               icon={MessageSquare}
               iconColor="text-info"
               iconBgColor="bg-info/10"
@@ -261,7 +412,9 @@ export default function AdminDashboard() {
             />
             <KPICard
               title="Agendamentos"
-              subtitle={isAdmin ? (selectedAgent !== 'all' ? 'Do agente selecionado' : 'Visão geral da clínica') : 'Seus agendamentos'}
+              subtitle={selectedAgentFromTable 
+                ? `Dados de ${selectedAgentFromTable}` 
+                : (isAdmin ? (selectedAgent !== 'all' ? 'Do agente selecionado' : 'Visão geral da clínica') : 'Seus agendamentos')}
               value={totalAppointments}
               icon={CalendarCheck}
               iconColor="text-success"
@@ -270,7 +423,9 @@ export default function AdminDashboard() {
             />
             <KPICard
               title="Desmarcados"
-              subtitle={isAdmin ? (selectedAgent !== 'all' ? 'Do agente selecionado' : 'Visão geral da clínica') : 'Seus cancelamentos'}
+              subtitle={selectedAgentFromTable 
+                ? `Dados de ${selectedAgentFromTable}` 
+                : (isAdmin ? (selectedAgent !== 'all' ? 'Do agente selecionado' : 'Visão geral da clínica') : 'Seus cancelamentos')}
               value={cancelledAppointments}
               icon={CalendarX}
               iconColor="text-destructive"
@@ -279,8 +434,8 @@ export default function AdminDashboard() {
             />
             <KPICard
               title="Taxa de Transbordo"
-              subtitle="IA → Humano"
-              value={data.kpis.taxaTransbordo}
+              subtitle={getAgentContextSubtitle('IA → Humano')}
+              value={displayedData.kpis.taxaTransbordo}
               icon={ArrowRightLeft}
               iconColor="text-warning"
               iconBgColor="bg-warning/10"
@@ -293,8 +448,8 @@ export default function AdminDashboard() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <KPICard
                 title="Tempo Médio Primeira Resposta"
-                subtitle="Primeira resposta após mensagem do lead"
-                value={data.kpis.tempoMedioPrimeiraResposta}
+                subtitle={getAgentContextSubtitle('Primeira resposta após mensagem do lead')}
+                value={displayedData.kpis.tempoMedioPrimeiraResposta}
                 icon={Clock}
                 iconColor="text-primary"
                 iconBgColor="bg-primary/10"
@@ -302,8 +457,8 @@ export default function AdminDashboard() {
               />
               <KPICard
                 title="Tempo Médio de Resolução"
-                subtitle="Tempo médio até finalizar atendimento"
-                value={data.kpis.tempoMedioResolucao}
+                subtitle={getAgentContextSubtitle('Tempo médio até finalizar atendimento')}
+                value={displayedData.kpis.tempoMedioResolucao}
                 icon={Clock}
                 iconColor="text-success"
                 iconBgColor="bg-success/10"
@@ -311,23 +466,28 @@ export default function AdminDashboard() {
               />
             </div>
             <IAvsHumanCard
-              percentualIA={data.kpis.percentualIA}
-              percentualHumano={data.kpis.percentualHumano}
+              percentualIA={displayedData.kpis.percentualIA}
+              percentualHumano={displayedData.kpis.percentualHumano}
               isLoading={isLoading}
             />
           </div>
 
           {/* Charts Section */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <HourlyPeakChart data={data.picoPorHora} isLoading={isLoading} />
-            <BacklogCard data={data.backlog} isLoading={isLoading} />
+            <HourlyPeakChart data={displayedData.picoPorHora} isLoading={isLoading} />
+            <BacklogCard data={displayedData.backlog} isLoading={isLoading} />
           </div>
 
           {/* Agent Performance Table */}
-          <AgentPerformanceTable data={data.agentes} isLoading={isLoading} />
+          <AgentPerformanceTable 
+            data={data.agentes} 
+            isLoading={isLoading}
+            selectedAgentName={selectedAgentFromTable}
+            onAgentSelect={setSelectedAgentFromTable}
+          />
 
           {/* Quality & Conversion Cards */}
-          <QualityCards data={data.qualidade} isLoading={isLoading} />
+          <QualityCards data={displayedData.qualidade} isLoading={isLoading} />
         </>
       )}
     </div>
