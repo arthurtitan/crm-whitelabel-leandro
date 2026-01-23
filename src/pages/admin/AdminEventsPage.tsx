@@ -138,7 +138,7 @@ export default function AdminEventsPage() {
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-gradient-gleps">Eventos</h1>
+        <h1 className="text-3xl font-bold text-gradient-gleps-light">Eventos</h1>
         <p className="text-muted-foreground">
           Registro de atividades dos usuários • Últimos 30 dias
         </p>

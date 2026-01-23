@@ -168,7 +168,7 @@ export default function SuperAdminAccountDetailPage() {
                 <Building2 className="w-6 h-6 text-primary" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gradient-gleps">Conta + {account.nome}</h1>
+                <h1 className="text-2xl font-bold text-gradient-gleps-light">Conta + {account.nome}</h1>
                 <div className="flex items-center gap-2 mt-1">
                   <code className="text-xs bg-muted px-2 py-1 rounded font-mono">
                     ID: {numericId}
