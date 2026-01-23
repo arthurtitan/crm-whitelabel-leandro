@@ -12,45 +12,45 @@
   :root {
     /* Light mode - clean white professional */
     --background: 0 0% 100%;
-    --foreground: 220 15% 20%;
+    --foreground: 220 25% 15%;
 
     --card: 0 0% 100%;
-    --card-foreground: 220 15% 20%;
+    --card-foreground: 220 25% 15%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 220 15% 20%;
+    --popover-foreground: 220 25% 15%;
 
     --primary: 230 70% 55%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 14% 96%;
-    --secondary-foreground: 220 15% 20%;
+    --secondary: 220 20% 96%;
+    --secondary-foreground: 220 25% 25%;
 
-    --muted: 220 14% 96%;
-    --muted-foreground: 220 10% 45%;
+    --muted: 220 15% 95%;
+    --muted-foreground: 220 15% 40%;
 
-    --accent: 260 60% 60%;
+    --accent: 260 60% 55%;
     --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 84% 60%;
+    --destructive: 0 84% 55%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: 142 71% 45%;
+    --success: 142 71% 40%;
     --success-foreground: 0 0% 100%;
 
-    --warning: 38 92% 50%;
+    --warning: 38 92% 45%;
     --warning-foreground: 0 0% 100%;
 
-    --info: 230 70% 55%;
+    --info: 230 70% 50%;
     --info-foreground: 0 0% 100%;
 
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
+    --border: 220 20% 88%;
+    --input: 220 20% 88%;
     --ring: 230 70% 55%;
 
     --radius: 0.5rem;
 
-    /* Sidebar - Dark purple */
+    /* Sidebar - Dark purple (preserved) */
     --sidebar-background: 270 60% 8%;
     --sidebar-foreground: 270 20% 90%;
     --sidebar-primary: 230 70% 55%;
@@ -63,29 +63,29 @@
 
     /* Custom Gleps tokens */
     --kanban-new: 230 70% 55%;
-    --kanban-contact: 260 60% 60%;
-    --kanban-interested: 38 92% 50%;
-    --kanban-qualified: 142 71% 45%;
-    --kanban-converted: 280 67% 55%;
+    --kanban-contact: 260 60% 55%;
+    --kanban-interested: 38 92% 45%;
+    --kanban-qualified: 142 71% 40%;
+    --kanban-converted: 280 67% 50%;
 
-    /* Role colors */
-    --role-super-admin: 230 70% 55%;
-    --role-admin: 260 60% 60%;
-    --role-agent: 270 50% 45%;
+    /* Role colors - enhanced for light bg */
+    --role-super-admin: 230 70% 45%;
+    --role-admin: 260 60% 50%;
+    --role-agent: 270 50% 40%;
 
-    /* Status colors */
-    --status-active: 142 71% 45%;
-    --status-paused: 38 92% 50%;
-    --status-cancelled: 0 84% 60%;
-    --status-pending: 38 92% 50%;
-    --status-paid: 142 71% 45%;
-    --status-refunded: 280 67% 55%;
+    /* Status colors - enhanced for light bg */
+    --status-active: 142 71% 38%;
+    --status-paused: 38 92% 42%;
+    --status-cancelled: 0 84% 50%;
+    --status-pending: 38 92% 42%;
+    --status-paid: 142 71% 38%;
+    --status-refunded: 280 67% 45%;
 
     /* Gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(230 70% 55%) 0%, hsl(260 60% 60%) 100%);
-    --gradient-success: linear-gradient(135deg, hsl(142 71% 45%) 0%, hsl(152 76% 36%) 100%);
-    --gradient-brand: linear-gradient(135deg, hsl(230 70% 55%) 0%, hsl(270 60% 50%) 100%);
-    --gradient-gleps: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(230 70% 60%) 50%, hsl(270 50% 45%) 100%);
+    --gradient-primary: linear-gradient(135deg, hsl(230 70% 55%) 0%, hsl(260 60% 55%) 100%);
+    --gradient-success: linear-gradient(135deg, hsl(142 71% 40%) 0%, hsl(152 76% 32%) 100%);
+    --gradient-brand: linear-gradient(135deg, hsl(230 70% 50%) 0%, hsl(270 60% 45%) 100%);
+    --gradient-gleps: linear-gradient(180deg, hsl(230 70% 50%) 0%, hsl(260 60% 50%) 50%, hsl(270 50% 40%) 100%);
   }
 
   .dark {
@@ -152,7 +152,7 @@
 }
 
 @layer components {
-  /* Glassmorphism effects - Gleps style */
+  /* Glassmorphism effects - Gleps style (for dark areas: login, sidebar) */
   .glass {
     @apply backdrop-blur-md border border-border/40;
     background: linear-gradient(
@@ -171,12 +171,25 @@
     );
   }
 
-  /* Card variants */
+  /* Light theme card style - for white background pages */
+  .glass-light {
+    @apply bg-white border border-border rounded-xl;
+    box-shadow: 0 1px 3px hsl(220 20% 20% / 0.06), 
+                0 4px 12px hsl(220 20% 20% / 0.04);
+  }
+
+  .glass-light:hover {
+    box-shadow: 0 2px 8px hsl(220 20% 20% / 0.08), 
+                0 8px 24px hsl(220 20% 20% / 0.06);
+  }
+
+  /* Card variants - updated for light theme */
   .card-hover {
-    @apply transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5;
+    @apply transition-all duration-200 hover:-translate-y-0.5;
     &:hover {
-      border-color: hsl(230 70% 55% / 0.4);
-      box-shadow: 0 4px 20px hsl(270 60% 20% / 0.25);
+      border-color: hsl(230 70% 55% / 0.3);
+      box-shadow: 0 4px 16px hsl(230 70% 55% / 0.1), 
+                  0 8px 24px hsl(220 20% 20% / 0.08);
     }
   }
 
@@ -250,6 +263,7 @@
     background-image: var(--gradient-brand);
   }
 
+  /* For dark backgrounds (login, sidebar) */
   .text-gradient-gleps {
     @apply bg-clip-text text-transparent;
     background-image: linear-gradient(
@@ -257,6 +271,17 @@
       hsl(0 0% 100%) 0%,
       hsl(230 70% 65%) 50%,
       hsl(260 60% 60%) 100%
+    );
+  }
+
+  /* For light/white backgrounds - enhanced saturation */
+  .text-gradient-gleps-light {
+    @apply bg-clip-text text-transparent font-bold;
+    background-image: linear-gradient(
+      135deg,
+      hsl(230 80% 45%) 0%,
+      hsl(260 70% 50%) 50%,
+      hsl(280 60% 45%) 100%
     );
   }
 

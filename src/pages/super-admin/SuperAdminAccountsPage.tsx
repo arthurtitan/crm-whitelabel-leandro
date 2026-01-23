@@ -319,7 +319,7 @@ export default function SuperAdminAccountsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gradient-gleps">Contas</h1>
+          <h1 className="text-3xl font-bold text-gradient-gleps-light">Contas</h1>
           <p className="text-muted-foreground">Gerencie todas as contas do sistema</p>
         </div>
         <Dialog open={isCreateOpen} onOpenChange={(open) => {

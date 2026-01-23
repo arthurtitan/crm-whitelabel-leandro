@@ -45,7 +45,7 @@ export default function AdminAgendaPage() {
   return (
     <div className="space-y-6 animate-fade-in h-[calc(100vh-12rem)]">
       <div className="flex flex-col items-center justify-center text-center">
-        <h1 className="text-2xl font-bold text-gradient-gleps">Agenda</h1>
+        <h1 className="text-2xl font-bold text-gradient-gleps-light">Agenda</h1>
         <p className="text-muted-foreground">
           {isConnected ? 'Sincronizado com Google Calendar' : 'Gerencie seus agendamentos'}
         </p>
