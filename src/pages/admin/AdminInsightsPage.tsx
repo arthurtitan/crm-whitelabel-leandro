@@ -7,6 +7,11 @@ import { DashboardFilters } from '@/components/dashboard';
 import { AgentFilter } from '@/components/dashboard/AgentFilter';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Progress } from '@/components/ui/progress';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { mockUsers, mockConversations } from '@/data/mockData';
 import {
   TrendingUp,
   TrendingDown,
@@ -18,6 +23,10 @@ import {
   ShoppingCart,
   ArrowRight,
   Star,
+  Trophy,
+  Medal,
+  MessageSquare,
+  Target,
 } from 'lucide-react';
 import {
   startOfDay,
@@ -232,6 +241,76 @@ export default function AdminInsightsPage() {
     };
   }, [filteredLeads, filteredAppointments, paidSales]);
 
+  // Agent Ranking for comparative analysis
+  const agentRanking = useMemo(() => {
+    if (!user?.account_id) return [];
+
+    // Get all agents and admins from the current account
+    const agents = mockUsers.filter(u => 
+      u.account_id === user.account_id && 
+      (u.role === 'agent' || u.role === 'admin')
+    );
+
+    return agents.map(agent => {
+      // Sales metrics for this agent in the period
+      const agentSales = paidSales.filter(s => s.responsavel_id === agent.id);
+      const totalSales = agentSales.length;
+      const totalRevenue = agentSales.reduce((sum, s) => sum + s.valor, 0);
+      const avgTicket = totalSales > 0 ? totalRevenue / totalSales : 0;
+
+      // Conversation metrics for this agent
+      const agentConversations = mockConversations.filter(c => 
+        c.assignee_id === agent.id && c.assignee_type === 'user'
+      );
+      const totalConversations = agentConversations.length;
+      const resolvedConversations = agentConversations.filter(c => c.status === 'resolved').length;
+      const resolutionRate = totalConversations > 0 
+        ? ((resolvedConversations / totalConversations) * 100)
+        : 0;
+
+      // Appointment metrics for this agent
+      const agentAppointments = filteredAppointments.filter(e => e.createdBy === agent.id);
+      const totalAppointments = agentAppointments.length;
+
+      return {
+        id: agent.id,
+        name: agent.nome,
+        role: agent.role,
+        totalSales,
+        totalRevenue,
+        avgTicket,
+        totalConversations,
+        resolvedConversations,
+        resolutionRate,
+        totalAppointments,
+      };
+    }).sort((a, b) => b.totalRevenue - a.totalRevenue);
+  }, [paidSales, filteredAppointments, user, mockConversations]);
+
+  // Top performers for highlight cards
+  const topPerformers = useMemo(() => {
+    if (agentRanking.length === 0) return null;
+
+    const byRevenue = [...agentRanking].sort((a, b) => b.totalRevenue - a.totalRevenue);
+    const byConversations = [...agentRanking].sort((a, b) => b.totalConversations - a.totalConversations);
+    const byTicket = [...agentRanking].filter(a => a.totalSales > 0).sort((a, b) => b.avgTicket - a.avgTicket);
+
+    return {
+      topSeller: byRevenue[0],
+      topAttendant: byConversations[0],
+      topTicket: byTicket[0] || null,
+    };
+  }, [agentRanking]);
+
+  // Get max values for progress bars
+  const maxMetrics = useMemo(() => {
+    if (agentRanking.length === 0) return { revenue: 1, conversations: 1 };
+    return {
+      revenue: Math.max(...agentRanking.map(a => a.totalRevenue), 1),
+      conversations: Math.max(...agentRanking.map(a => a.totalConversations), 1),
+    };
+  }, [agentRanking]);
+
   // Payment method labels
   const paymentMethodLabels: Record<string, string> = {
     pix: 'PIX',
@@ -254,6 +333,19 @@ export default function AdminInsightsPage() {
         setDateRange({ from: subDays(today, 30), to: today });
       }
     }
+  };
+
+  // Helper to get position medal/number
+  const getPositionDisplay = (position: number) => {
+    if (position === 1) return <span className="text-xl">🥇</span>;
+    if (position === 2) return <span className="text-xl">🥈</span>;
+    if (position === 3) return <span className="text-xl">🥉</span>;
+    return <span className="text-sm font-bold text-muted-foreground">{position}º</span>;
+  };
+
+  // Get initials for avatar
+  const getInitials = (name: string) => {
+    return name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
   };
 
   return (
@@ -279,6 +371,230 @@ export default function AdminInsightsPage() {
           <AgentFilter value={selectedAgent} onChange={setSelectedAgent} />
         )}
       </div>
+
+      {/* Agent Ranking Section - Only visible to Admins */}
+      {isAdmin && user?.role === 'admin' && agentRanking.length > 0 && (
+        <>
+          {/* Top Performers Highlight Cards */}
+          {topPerformers && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Top Seller */}
+              <Card className="border-amber-500/30 bg-gradient-to-br from-amber-500/5 to-transparent">
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 rounded-full bg-amber-500/10">
+                      <Trophy className="w-6 h-6 text-amber-500" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide">Top Vendedor</p>
+                      <p className="font-bold text-lg truncate">{topPerformers.topSeller.name}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Badge variant="secondary" className="text-xs">{topPerformers.topSeller.totalSales} vendas</Badge>
+                        <span className="text-sm text-success font-medium">
+                          {formatCurrency(topPerformers.topSeller.totalRevenue)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Top Attendant */}
+              <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-transparent">
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 rounded-full bg-primary/10">
+                      <MessageSquare className="w-6 h-6 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide">Top Atendente</p>
+                      <p className="font-bold text-lg truncate">{topPerformers.topAttendant.name}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Badge variant="secondary" className="text-xs">{topPerformers.topAttendant.totalConversations} conversas</Badge>
+                        <span className="text-sm text-muted-foreground">
+                          {topPerformers.topAttendant.resolutionRate.toFixed(0)}% resolvidas
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Highest Ticket */}
+              {topPerformers.topTicket && (
+                <Card className="border-success/30 bg-gradient-to-br from-success/5 to-transparent">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center gap-4">
+                      <div className="p-3 rounded-full bg-success/10">
+                        <Target className="w-6 h-6 text-success" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-muted-foreground uppercase tracking-wide">Maior Ticket Médio</p>
+                        <p className="font-bold text-lg truncate">{topPerformers.topTicket.name}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-sm text-success font-bold">
+                            {formatCurrency(topPerformers.topTicket.avgTicket)}
+                          </span>
+                          <span className="text-xs text-muted-foreground">por venda</span>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+
+          {/* Full Ranking Table with Tabs */}
+          <Card>
+            <CardHeader className="pb-4">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-primary/10">
+                  <Medal className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <CardTitle className="text-base">Ranking de Performance</CardTitle>
+                  <p className="text-xs text-muted-foreground">Comparativo entre agentes no período selecionado</p>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Tabs defaultValue="sales" className="w-full">
+                <TabsList className="grid w-full grid-cols-2 mb-4">
+                  <TabsTrigger value="sales" className="gap-2">
+                    <ShoppingCart className="w-4 h-4" />
+                    Por Vendas
+                  </TabsTrigger>
+                  <TabsTrigger value="conversations" className="gap-2">
+                    <MessageSquare className="w-4 h-4" />
+                    Por Atendimentos
+                  </TabsTrigger>
+                </TabsList>
+
+                {/* Sales Ranking Tab */}
+                <TabsContent value="sales">
+                  <ScrollArea className="h-[350px]">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-16">Pos.</TableHead>
+                          <TableHead>Agente</TableHead>
+                          <TableHead className="text-center">Vendas</TableHead>
+                          <TableHead className="text-right">Faturamento</TableHead>
+                          <TableHead className="text-right">Ticket Médio</TableHead>
+                          <TableHead className="w-[120px]">Performance</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {[...agentRanking].sort((a, b) => b.totalRevenue - a.totalRevenue).map((agent, index) => (
+                          <TableRow 
+                            key={agent.id}
+                            className={index < 3 ? 'bg-primary/5' : ''}
+                          >
+                            <TableCell className="text-center">
+                              {getPositionDisplay(index + 1)}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-3">
+                                <Avatar className="h-8 w-8">
+                                  <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                                    {getInitials(agent.name)}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <p className="font-medium">{agent.name}</p>
+                                  <p className="text-xs text-muted-foreground capitalize">{agent.role}</p>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Badge variant="secondary">{agent.totalSales}</Badge>
+                            </TableCell>
+                            <TableCell className="text-right font-semibold text-success">
+                              {formatCurrency(agent.totalRevenue)}
+                            </TableCell>
+                            <TableCell className="text-right text-muted-foreground">
+                              {formatCurrency(agent.avgTicket)}
+                            </TableCell>
+                            <TableCell>
+                              <Progress 
+                                value={(agent.totalRevenue / maxMetrics.revenue) * 100} 
+                                className="h-2"
+                              />
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+                </TabsContent>
+
+                {/* Conversations Ranking Tab */}
+                <TabsContent value="conversations">
+                  <ScrollArea className="h-[350px]">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-16">Pos.</TableHead>
+                          <TableHead>Agente</TableHead>
+                          <TableHead className="text-center">Conversas</TableHead>
+                          <TableHead className="text-center">Resolvidas</TableHead>
+                          <TableHead className="text-center">Taxa</TableHead>
+                          <TableHead className="w-[120px]">Performance</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {[...agentRanking].sort((a, b) => b.totalConversations - a.totalConversations).map((agent, index) => (
+                          <TableRow 
+                            key={agent.id}
+                            className={index < 3 ? 'bg-primary/5' : ''}
+                          >
+                            <TableCell className="text-center">
+                              {getPositionDisplay(index + 1)}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-3">
+                                <Avatar className="h-8 w-8">
+                                  <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                                    {getInitials(agent.name)}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <p className="font-medium">{agent.name}</p>
+                                  <p className="text-xs text-muted-foreground capitalize">{agent.role}</p>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Badge variant="secondary">{agent.totalConversations}</Badge>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Badge variant="outline" className="text-success">
+                                {agent.resolvedConversations}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <span className={`font-medium ${agent.resolutionRate >= 80 ? 'text-success' : agent.resolutionRate >= 50 ? 'text-warning' : 'text-destructive'}`}>
+                                {agent.resolutionRate.toFixed(0)}%
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              <Progress 
+                                value={(agent.totalConversations / maxMetrics.conversations) * 100} 
+                                className="h-2"
+                              />
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+                </TabsContent>
+              </Tabs>
+            </CardContent>
+          </Card>
+        </>
+      )}
 
       {/* Product Insights */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
