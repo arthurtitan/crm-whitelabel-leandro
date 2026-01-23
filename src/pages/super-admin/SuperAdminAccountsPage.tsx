@@ -626,16 +626,17 @@ export default function SuperAdminAccountsPage() {
       {/* Table */}
       <Card>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>ID</TableHead>
-                <TableHead>Nome</TableHead>
-                <TableHead>Total de Usuários</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
+          <div className="overflow-x-auto">
+            <Table className="min-w-[600px]">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="min-w-[60px]">ID</TableHead>
+                  <TableHead className="min-w-[150px]">Nome</TableHead>
+                  <TableHead className="min-w-[100px] hidden sm:table-cell">Total de Usuários</TableHead>
+                  <TableHead className="min-w-[90px]">Status</TableHead>
+                  <TableHead className="text-right min-w-[80px]">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
             <TableBody>
               {filteredAccounts.map((account) => (
                 <TableRow key={account.id}>
@@ -652,7 +653,7 @@ export default function SuperAdminAccountsPage() {
                       <span className="font-medium">{account.nome}</span>
                     </div>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden sm:table-cell">
                     <div className="flex items-center gap-1.5">
                       <Users className="w-4 h-4 text-muted-foreground" />
                       <span>{getUserCount(account.id)}</span>
@@ -721,6 +722,7 @@ export default function SuperAdminAccountsPage() {
               ))}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 

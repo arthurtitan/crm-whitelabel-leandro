@@ -618,17 +618,18 @@ export default function SuperAdminUsersPage() {
       {/* Table */}
       <Card>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Usuário</TableHead>
-                <TableHead>Papel</TableHead>
-                <TableHead>Conta</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Último Login</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
+          <div className="overflow-x-auto">
+            <Table className="min-w-[700px]">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="min-w-[180px]">Usuário</TableHead>
+                  <TableHead className="min-w-[90px]">Papel</TableHead>
+                  <TableHead className="min-w-[120px] hidden md:table-cell">Conta</TableHead>
+                  <TableHead className="min-w-[80px]">Status</TableHead>
+                  <TableHead className="min-w-[100px] hidden sm:table-cell">Último Login</TableHead>
+                  <TableHead className="text-right min-w-[80px]">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
             <TableBody>
               {filteredUsers.map((user) => (
                 <TableRow key={user.id}>
@@ -654,7 +655,7 @@ export default function SuperAdminUsersPage() {
                     </div>
                   </TableCell>
                   <TableCell>{getRoleBadge(user.role)}</TableCell>
-                  <TableCell className="text-muted-foreground">
+                  <TableCell className="text-muted-foreground hidden md:table-cell">
                     {getAccountName(user.account_id)}
                   </TableCell>
                   <TableCell>
@@ -674,7 +675,7 @@ export default function SuperAdminUsersPage() {
                         : 'Inativo'}
                     </span>
                   </TableCell>
-                  <TableCell className="text-muted-foreground">
+                  <TableCell className="text-muted-foreground hidden sm:table-cell">
                     {user.last_login_at
                       ? format(new Date(user.last_login_at), "dd/MM/yyyy 'às' HH:mm", {
                           locale: ptBR,
@@ -716,6 +717,7 @@ export default function SuperAdminUsersPage() {
               ))}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 

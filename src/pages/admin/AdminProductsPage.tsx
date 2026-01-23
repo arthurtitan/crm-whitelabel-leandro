@@ -149,13 +149,13 @@ export default function AdminProductsPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <Table>
+              <Table className="min-w-[600px]">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Nome</TableHead>
-                    <TableHead className="text-right">Valor Padrão</TableHead>
-                    <TableHead>Meios de Pagamento</TableHead>
-                    <TableHead className="text-center">Status</TableHead>
+                    <TableHead className="min-w-[150px]">Nome</TableHead>
+                    <TableHead className="text-right min-w-[100px]">Valor Padrão</TableHead>
+                    <TableHead className="min-w-[180px] hidden sm:table-cell">Meios de Pagamento</TableHead>
+                    <TableHead className="text-center min-w-[80px]">Status</TableHead>
                     <TableHead className="w-[50px]"></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -166,7 +166,7 @@ export default function AdminProductsPage() {
                       <TableCell className="text-right">
                         {formatCurrency(product.valor_padrao)}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden sm:table-cell">
                         <div className="flex flex-wrap gap-1">
                           {product.metodos_pagamento.map((method) => (
                             <Badge
