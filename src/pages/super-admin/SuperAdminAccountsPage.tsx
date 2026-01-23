@@ -315,19 +315,19 @@ export default function SuperAdminAccountsPage() {
   const currentAgent = selectedAgents[currentAgentIndex];
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="page-container">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="page-header">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Contas</h1>
-          <p className="text-muted-foreground">Gerencie todas as contas do sistema</p>
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground">Contas</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground">Gerencie todas as contas do sistema</p>
         </div>
         <Dialog open={isCreateOpen} onOpenChange={(open) => {
           if (!open) handleCancelCreate();
           else setIsCreateOpen(true);
         }}>
           <DialogTrigger asChild>
-            <Button className="bg-gradient-primary hover:opacity-90 gap-2">
+            <Button className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2">
               <Plus className="w-4 h-4" />
               Nova Conta
             </Button>

@@ -147,7 +147,7 @@ export function CreateProductDialog() {
           Novo Produto
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Novo Produto</DialogTitle>
           <DialogDescription>
@@ -302,11 +302,11 @@ export function CreateProductDialog() {
           </div>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={handleClose}>
+        <DialogFooter className="flex-col sm:flex-row gap-2">
+          <Button variant="outline" onClick={handleClose} className="w-full sm:w-auto">
             Cancelar
           </Button>
-          <Button onClick={handleSubmit} disabled={!isFormValid}>
+          <Button onClick={handleSubmit} disabled={!isFormValid} className="w-full sm:w-auto">
             Salvar Produto
           </Button>
         </DialogFooter>

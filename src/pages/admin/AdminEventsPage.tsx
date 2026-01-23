@@ -135,11 +135,11 @@ export default function AdminEventsPage() {
   ];
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="page-container">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-foreground">Eventos</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground">Eventos</h1>
+        <p className="text-xs sm:text-sm text-muted-foreground">
           Registro de atividades dos usuários • Últimos 30 dias
         </p>
       </div>
@@ -175,7 +175,7 @@ export default function AdminEventsPage() {
       </Card>
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="kpi-grid">
         <Card>
           <CardContent className="p-4 flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-success/10 flex items-center justify-center">

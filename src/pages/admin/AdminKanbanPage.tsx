@@ -160,14 +160,14 @@ export default function AdminKanbanPage() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in h-[calc(100vh-8rem)]">
+    <div className="page-container h-[calc(100vh-8rem)]">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="page-header">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Kanban</h1>
-          <p className="text-muted-foreground">Gerencie seus leads no funil • Sincronizado com Chatwoot</p>
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground">Kanban</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground">Gerencie seus leads no funil • Sincronizado com Chatwoot</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
           <CreateStageDialog
             trigger={
               <Button variant="outline" size="sm" className="gap-2">
@@ -188,8 +188,8 @@ export default function AdminKanbanPage() {
         </div>
       </div>
 
-      {/* Kanban Board */}
-      <div className="flex gap-4 overflow-x-auto pb-4 h-[calc(100%-6rem)]">
+      {/* Kanban Board - Horizontal scroll with snap */}
+      <div className="flex gap-4 overflow-x-auto pb-4 h-[calc(100%-6rem)] snap-x snap-mandatory -mx-4 px-4 sm:mx-0 sm:px-0">
         {stageTags.map((stage, index) => {
           const stageLeads = getLeadsByStage(stage.id);
           const isFirst = index === 0;
@@ -198,7 +198,7 @@ export default function AdminKanbanPage() {
           return (
             <div
               key={stage.id}
-              className="flex-shrink-0 w-80"
+              className="flex-shrink-0 w-72 sm:w-80 snap-start"
               onDragOver={handleDragOver}
               onDrop={() => handleDrop(stage.id)}
             >

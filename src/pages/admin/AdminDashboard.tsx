@@ -312,11 +312,11 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="page-container">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Dashboard de Atendimento</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground">Dashboard de Atendimento</h1>
           <p className="text-sm text-muted-foreground">
             Métricas operacionais e estratégicas do atendimento
           </p>
@@ -391,7 +391,7 @@ export default function AdminDashboard() {
           )}
 
           {/* KPI Cards - Row 1 */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="kpi-grid-6">
             <KPICard
               title="Total de Leads"
               subtitle={getAgentContextSubtitle('Contatos únicos que tiveram conversa')}
@@ -444,7 +444,7 @@ export default function AdminDashboard() {
           </div>
 
           {/* KPI Cards - Row 2 (Time metrics + IA vs Human) */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="chart-grid">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <KPICard
                 title="Tempo Médio Primeira Resposta"
