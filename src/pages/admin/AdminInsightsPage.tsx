@@ -521,12 +521,12 @@ export default function AdminInsightsPage() {
       )}
 
       {/* Product Insights */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Best Selling Product */}
-        <Card>
+        <Card className="min-w-0">
           <CardHeader className="pb-2">
             <div className="flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-success/10">
+              <div className="p-2 rounded-lg bg-success/10 flex-shrink-0">
                 <TrendingUp className="w-5 h-5 text-success" />
               </div>
               <CardTitle className="text-base">Produto Mais Vendido</CardTitle>
@@ -553,13 +553,13 @@ export default function AdminInsightsPage() {
         </Card>
 
         {/* Worst Selling Product */}
-        <Card>
+        <Card className="min-w-0">
           <CardHeader className="pb-2">
             <div className="flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-warning/10">
+              <div className="p-2 rounded-lg bg-warning/10 flex-shrink-0">
                 <TrendingDown className="w-5 h-5 text-warning" />
               </div>
-              <CardTitle className="text-base">Produto Menos Vendido</CardTitle>
+              <CardTitle className="text-base truncate">Produto Menos Vendido</CardTitle>
             </div>
           </CardHeader>
           <CardContent>
@@ -584,15 +584,15 @@ export default function AdminInsightsPage() {
       </div>
 
       {/* Day Insights */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Best Selling Day */}
-        <Card>
+        <Card className="min-w-0">
           <CardHeader className="pb-2">
             <div className="flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-primary/10">
+              <div className="p-2 rounded-lg bg-primary/10 flex-shrink-0">
                 <Star className="w-5 h-5 text-primary" />
               </div>
-              <CardTitle className="text-base">Melhor Dia de Vendas</CardTitle>
+              <CardTitle className="text-base truncate">Melhor Dia de Vendas</CardTitle>
             </div>
           </CardHeader>
           <CardContent>
@@ -618,13 +618,13 @@ export default function AdminInsightsPage() {
         </Card>
 
         {/* Worst Selling Day */}
-        <Card>
+        <Card className="min-w-0">
           <CardHeader className="pb-2">
             <div className="flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-muted">
+              <div className="p-2 rounded-lg bg-muted flex-shrink-0">
                 <Calendar className="w-5 h-5 text-muted-foreground" />
               </div>
-              <CardTitle className="text-base">Dia com Menor Faturamento</CardTitle>
+              <CardTitle className="text-base truncate">Dia com Menor Faturamento</CardTitle>
             </div>
           </CardHeader>
           <CardContent>
@@ -719,14 +719,14 @@ export default function AdminInsightsPage() {
           </p>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col lg:flex-row items-stretch gap-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch">
             {/* Leads */}
-            <div className="flex-1 flex items-center gap-2">
+            <div className="flex-1 flex flex-col sm:flex-row lg:flex-row items-stretch gap-2">
               <div className="flex-1">
-                <div className="p-6 rounded-lg bg-primary/10 text-center">
-                  <Users className="w-8 h-8 text-primary mx-auto mb-2" />
-                  <p className="text-3xl font-bold">{funnelData.totalLeads}</p>
-                  <p className="text-sm text-muted-foreground mt-1">Leads Totais</p>
+                <div className="p-4 sm:p-6 rounded-lg bg-primary/10 text-center h-full flex flex-col justify-center">
+                  <Users className="w-6 h-6 sm:w-8 sm:h-8 text-primary mx-auto mb-2" />
+                  <p className="text-2xl sm:text-3xl font-bold">{funnelData.totalLeads}</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground mt-1">Leads Totais</p>
                 </div>
               </div>
               <div className="hidden lg:flex flex-col items-center justify-center px-2">
@@ -738,12 +738,12 @@ export default function AdminInsightsPage() {
             </div>
 
             {/* Appointments */}
-            <div className="flex-1 flex items-center gap-2">
+            <div className="flex-1 flex flex-col sm:flex-row lg:flex-row items-stretch gap-2">
               <div className="flex-1">
-                <div className="p-6 rounded-lg bg-warning/10 text-center">
-                  <CalendarCheck className="w-8 h-8 text-warning mx-auto mb-2" />
-                  <p className="text-3xl font-bold">{funnelData.scheduledAppointments}</p>
-                  <p className="text-sm text-muted-foreground mt-1">Agendamentos</p>
+                <div className="p-4 sm:p-6 rounded-lg bg-warning/10 text-center h-full flex flex-col justify-center">
+                  <CalendarCheck className="w-6 h-6 sm:w-8 sm:h-8 text-warning mx-auto mb-2" />
+                  <p className="text-2xl sm:text-3xl font-bold">{funnelData.scheduledAppointments}</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground mt-1">Agendamentos</p>
                 </div>
               </div>
               <div className="hidden lg:flex flex-col items-center justify-center px-2">
@@ -756,24 +756,24 @@ export default function AdminInsightsPage() {
 
             {/* Sales */}
             <div className="flex-1">
-              <div className="p-6 rounded-lg bg-success/10 text-center">
-                <ShoppingCart className="w-8 h-8 text-success mx-auto mb-2" />
-                <p className="text-3xl font-bold">{funnelData.completedSales}</p>
-                <p className="text-sm text-muted-foreground mt-1">Vendas Realizadas</p>
+              <div className="p-4 sm:p-6 rounded-lg bg-success/10 text-center h-full flex flex-col justify-center">
+                <ShoppingCart className="w-6 h-6 sm:w-8 sm:h-8 text-success mx-auto mb-2" />
+                <p className="text-2xl sm:text-3xl font-bold">{funnelData.completedSales}</p>
+                <p className="text-xs sm:text-sm text-muted-foreground mt-1">Vendas Realizadas</p>
               </div>
             </div>
           </div>
 
           {/* Conversion Rate Summary */}
-          <div className="mt-6 p-4 rounded-lg bg-muted/30 flex items-center justify-center gap-6">
+          <div className="mt-4 sm:mt-6 p-3 sm:p-4 rounded-lg bg-muted/30 flex items-center justify-center gap-6">
             <div className="text-center">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">
+              <p className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wide">
                 Taxa de Conversão Total
               </p>
-              <p className="text-2xl font-bold text-primary">
+              <p className="text-xl sm:text-2xl font-bold text-primary">
                 {funnelData.leadToSale}%
               </p>
-              <p className="text-xs text-muted-foreground">Lead → Venda</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Lead → Venda</p>
             </div>
           </div>
         </CardContent>

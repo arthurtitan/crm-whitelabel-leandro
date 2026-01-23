@@ -155,54 +155,56 @@ export default function SuperAdminAccountDetailPage() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="page-container">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-        <div className="flex items-start gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/super-admin/accounts')}>
+      <div className="flex flex-col gap-4">
+        <div className="flex items-start gap-3 sm:gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate('/super-admin/accounts')} className="flex-shrink-0">
             <ArrowLeft className="w-5 h-5" />
           </Button>
-          <div>
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                <Building2 className="w-6 h-6 text-primary" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-foreground">Conta + {account.nome}</h1>
-                <div className="flex items-center gap-2 mt-1">
-                  <code className="text-xs bg-muted px-2 py-1 rounded font-mono">
-                    ID: {numericId}
-                  </code>
-                  {getStatusBadge(account.status)}
-                </div>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 min-w-0">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+              <Building2 className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-foreground truncate">Conta + {account.nome}</h1>
+              <div className="flex flex-wrap items-center gap-2 mt-1">
+                <code className="text-xs bg-muted px-2 py-1 rounded font-mono">
+                  ID: {numericId}
+                </code>
+                {getStatusBadge(account.status)}
               </div>
             </div>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button 
             variant={account.status === 'active' ? 'outline' : 'default'}
             onClick={handleToggleStatus}
+            className="flex-1 sm:flex-initial"
+            size="sm"
           >
             {account.status === 'active' ? (
               <>
                 <Pause className="w-4 h-4 mr-2" />
-                Pausar Conta
+                <span className="hidden xs:inline">Pausar</span>
+                <span className="xs:hidden">Pausar</span>
               </>
             ) : (
               <>
                 <Play className="w-4 h-4 mr-2" />
-                Ativar Conta
+                <span className="hidden xs:inline">Ativar</span>
+                <span className="xs:hidden">Ativar</span>
               </>
             )}
           </Button>
-          <Button variant="outline" onClick={handleOpenControl}>
-            <Settings className="w-4 h-4 mr-2" />
-            Controle de Conta
+          <Button variant="outline" onClick={handleOpenControl} className="flex-1 sm:flex-initial" size="sm">
+            <Settings className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Controle</span>
           </Button>
-          <Button variant="destructive" onClick={() => setIsDeleteOpen(true)}>
-            <Trash2 className="w-4 h-4 mr-2" />
-            Excluir
+          <Button variant="destructive" onClick={() => setIsDeleteOpen(true)} className="flex-1 sm:flex-initial" size="sm">
+            <Trash2 className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Excluir</span>
           </Button>
         </div>
       </div>

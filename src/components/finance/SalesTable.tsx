@@ -165,16 +165,16 @@ export function SalesTable({ isLoading = false }: SalesTableProps) {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border">
-            <Table>
+          <div className="rounded-md border overflow-x-auto">
+            <Table className="min-w-[600px]">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead>Valor</TableHead>
-                  <TableHead>Pagamento</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Data</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
+                  <TableHead className="min-w-[120px]">Cliente</TableHead>
+                  <TableHead className="min-w-[80px]">Valor</TableHead>
+                  <TableHead className="min-w-[90px] hidden sm:table-cell">Pagamento</TableHead>
+                  <TableHead className="min-w-[80px]">Status</TableHead>
+                  <TableHead className="min-w-[100px] hidden md:table-cell">Data</TableHead>
+                  <TableHead className="text-right min-w-[60px]">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -189,13 +189,13 @@ export function SalesTable({ isLoading = false }: SalesTableProps) {
                     const contact = getContactById(sale.contact_id);
                     return (
                       <TableRow key={sale.id}>
-                        <TableCell className="font-medium">
+                        <TableCell className="font-medium truncate max-w-[150px]">
                           {contact?.nome || 'Cliente não encontrado'}
                         </TableCell>
-                        <TableCell>{formatCurrency(sale.valor)}</TableCell>
-                        <TableCell>{getPaymentMethodBadge(sale.metodo_pagamento)}</TableCell>
+                        <TableCell className="whitespace-nowrap">{formatCurrency(sale.valor)}</TableCell>
+                        <TableCell className="hidden sm:table-cell">{getPaymentMethodBadge(sale.metodo_pagamento)}</TableCell>
                         <TableCell>{getStatusBadge(sale.status)}</TableCell>
-                        <TableCell>
+                        <TableCell className="hidden md:table-cell whitespace-nowrap">
                           {format(new Date(sale.created_at), 'dd/MM/yyyy HH:mm', {
                             locale: ptBR,
                           })}

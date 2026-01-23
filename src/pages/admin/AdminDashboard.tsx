@@ -454,6 +454,7 @@ export default function AdminDashboard() {
                 iconColor="text-primary"
                 iconBgColor="bg-primary/10"
                 isLoading={isLoading}
+                className="min-w-0"
               />
               <KPICard
                 title="Tempo Médio de Resolução"

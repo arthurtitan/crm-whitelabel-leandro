@@ -70,27 +70,29 @@ export default function SuperAdminDashboard() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="page-container">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">Dashboard Global</h1>
-        <p className="text-muted-foreground">
-          Visão geral de todas as contas, usuários e consumo de recursos do servidor
-        </p>
+      <div className="page-header">
+        <div>
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground">Dashboard Global</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground">
+            Visão geral de todas as contas, usuários e recursos do servidor
+          </p>
+        </div>
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="kpi-grid">
         {kpiCards.map((kpi) => (
-          <Card key={kpi.title} className="card-hover">
-            <CardContent className="p-6">
-              <div className="flex items-start justify-between">
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-muted-foreground">{kpi.title}</p>
-                  <p className="text-3xl font-bold">{kpi.value}</p>
+          <Card key={kpi.title} className="card-hover min-w-0">
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-start justify-between gap-2">
+                <div className="space-y-1 sm:space-y-2 min-w-0">
+                  <p className="text-xs sm:text-sm font-medium text-muted-foreground truncate">{kpi.title}</p>
+                  <p className="text-xl sm:text-2xl md:text-3xl font-bold">{kpi.value}</p>
                 </div>
-                <div className={`p-3 rounded-xl ${kpi.bgColor}`}>
-                  <kpi.icon className={`w-5 h-5 ${kpi.color}`} />
+                <div className={`p-2 sm:p-3 rounded-xl flex-shrink-0 ${kpi.bgColor}`}>
+                  <kpi.icon className={`w-4 h-4 sm:w-5 sm:h-5 ${kpi.color}`} />
                 </div>
               </div>
             </CardContent>

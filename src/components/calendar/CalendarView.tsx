@@ -290,9 +290,9 @@ export function CalendarView({ onNewEvent }: CalendarViewProps) {
         {/* Day View */}
         {viewMode === 'day' && (
           <div className="min-h-[600px]">
-            <div className="grid grid-cols-2">
+            <div className="flex">
               {/* Time Labels */}
-              <div className="col-span-1 border-r max-w-[60px]">
+              <div className="flex-shrink-0 w-14 border-r">
                 {hours.map(hour => (
                   <div key={hour} className="h-[60px] text-xs text-muted-foreground text-right pr-2">
                     {`${hour.toString().padStart(2, '0')}:00`}
@@ -301,7 +301,7 @@ export function CalendarView({ onNewEvent }: CalendarViewProps) {
               </div>
 
               {/* Events */}
-              <div className="relative flex-1">
+              <div className="relative flex-1 min-w-0">
                 {hours.map(hour => (
                   <div key={hour} className="h-[60px] border-b border-dashed" />
                 ))}
@@ -312,7 +312,7 @@ export function CalendarView({ onNewEvent }: CalendarViewProps) {
                     <div
                       key={event.id}
                       className={cn(
-                        'absolute left-2 right-2 px-2 py-1 text-sm rounded border-l-4 cursor-pointer',
+                        'absolute left-2 right-2 px-2 py-1 text-sm rounded border-l-4 cursor-pointer overflow-hidden',
                         getEventColor(event)
                       )}
                       style={{
@@ -321,8 +321,8 @@ export function CalendarView({ onNewEvent }: CalendarViewProps) {
                       }}
                       onClick={() => selectEvent(event)}
                     >
-                      <div className="font-medium">{event.title}</div>
-                      <div className="opacity-75">
+                      <div className="font-medium truncate">{event.title}</div>
+                      <div className="opacity-75 truncate">
                         {format(parseISO(event.start), 'HH:mm')} - {format(parseISO(event.end), 'HH:mm')}
                       </div>
                     </div>
