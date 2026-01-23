@@ -56,7 +56,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+    <div className="dark min-h-screen flex items-center justify-center bg-background p-4">
       {/* Background gradient effect */}
       <div className="fixed inset-0 bg-gradient-to-br from-background via-background to-primary/5 pointer-events-none" />
       <div className="fixed top-1/4 -left-1/4 w-1/2 h-1/2 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
@@ -72,7 +72,7 @@ export default function LoginPage() {
               className="w-20 h-20 object-contain logo-glow"
             />
           </div>
-          <h1 className="text-3xl font-bold text-gradient-gleps">Painel Gleps</h1>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-purple-400 bg-clip-text text-transparent">Painel Gleps</h1>
           <p className="text-muted-foreground">
             Powered by <span className="text-primary font-medium">Gleps.AI</span>
           </p>
