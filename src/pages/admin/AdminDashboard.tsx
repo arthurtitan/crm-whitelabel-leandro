@@ -322,8 +322,8 @@ export default function AdminDashboard() {
           </p>
         </div>
 
-        {/* State Toggle (for demo purposes) */}
-        <div className="flex gap-2">
+        {/* State Toggle (for demo purposes) - hidden on mobile */}
+        <div className="hidden sm:flex gap-2">
           <button
             onClick={() => handleStateChange('data')}
             className={`px-3 py-1.5 text-xs rounded-md transition-colors ${

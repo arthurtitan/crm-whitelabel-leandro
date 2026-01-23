@@ -151,78 +151,81 @@ export function CalendarView({ onNewEvent }: CalendarViewProps) {
       <CardContent className="flex-1 overflow-auto p-0">
         {/* Week View */}
         {viewMode === 'week' && (
-          <div className="min-h-[600px]">
-            {/* Header */}
-            <div className="grid grid-cols-8 border-b sticky top-0 bg-background z-10">
-              <div className="p-2 text-center text-xs text-muted-foreground border-r" />
-              {weekDays.map(day => (
-                <div
-                  key={day.toISOString()}
-                  className={cn(
-                    'p-2 text-center border-r last:border-r-0',
-                    isToday(day) && 'bg-primary/5'
-                  )}
-                >
-                  <div className="text-xs text-muted-foreground">
-                    {format(day, 'EEE', { locale: ptBR })}
-                  </div>
-                  <div className={cn(
-                    'text-lg font-semibold',
-                    isToday(day) && 'text-primary'
-                  )}>
-                    {format(day, 'd')}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Time Grid */}
-            <div className="grid grid-cols-8">
-              {/* Time Labels */}
-              <div className="border-r">
-                {hours.map(hour => (
-                  <div key={hour} className="h-[60px] text-xs text-muted-foreground text-right pr-2 pt-0">
-                    {`${hour.toString().padStart(2, '0')}:00`}
+          <div className="overflow-x-auto">
+            <div className="min-w-[700px] min-h-[600px]">
+              {/* Header */}
+              <div className="grid grid-cols-8 border-b sticky top-0 bg-background z-10">
+                <div className="p-2 text-center text-xs text-muted-foreground border-r min-w-[50px]" />
+                {weekDays.map(day => (
+                  <div
+                    key={day.toISOString()}
+                    className={cn(
+                      'p-2 text-center border-r last:border-r-0 min-w-[80px]',
+                      isToday(day) && 'bg-primary/5'
+                    )}
+                  >
+                    <div className="text-xs text-muted-foreground">
+                      {format(day, 'EEE', { locale: ptBR })}
+                    </div>
+                    <div className={cn(
+                      'text-lg font-semibold',
+                      isToday(day) && 'text-primary'
+                    )}>
+                      {format(day, 'd')}
+                    </div>
                   </div>
                 ))}
               </div>
 
-              {/* Days */}
-              {weekDays.map(day => (
-                <div key={day.toISOString()} className="relative border-r last:border-r-0">
-                  {/* Hour Lines */}
+              {/* Time Grid */}
+              <div className="grid grid-cols-8">
+                {/* Time Labels */}
+                <div className="border-r min-w-[50px]">
                   {hours.map(hour => (
-                    <div key={hour} className="h-[60px] border-b border-dashed" />
+                    <div key={hour} className="h-[60px] text-xs text-muted-foreground text-right pr-2 pt-0">
+                      {`${hour.toString().padStart(2, '0')}:00`}
+                    </div>
                   ))}
-
-                  {/* Events */}
-                  {getEventsForDay(day).map(event => {
-                    const pos = getEventPosition(event);
-                    return (
-                      <div
-                        key={event.id}
-                        className={cn(
-                          'absolute left-1 right-1 px-1 py-0.5 text-xs rounded border-l-2 cursor-pointer overflow-hidden',
-                          getEventColor(event)
-                        )}
-                        style={{
-                          top: pos.top,
-                          height: pos.height,
-                          minHeight: 24,
-                        }}
-                        onClick={() => selectEvent(event)}
-                      >
-                        <div className="font-medium truncate">{event.title}</div>
-                        {pos.height > 40 && (
-                          <div className="truncate opacity-75">
-                            {format(parseISO(event.start), 'HH:mm')}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
                 </div>
-              ))}
+
+                {/* Days */}
+                {weekDays.map(day => (
+                  <div key={day.toISOString()} className="relative border-r last:border-r-0 min-w-[80px]">
+                    {/* Hour Lines */}
+                    {hours.map(hour => (
+                      <div key={hour} className="h-[60px] border-b border-dashed" />
+                    ))}
+
+                    {/* Events */}
+                    {getEventsForDay(day).map(event => {
+                      const pos = getEventPosition(event);
+                      return (
+                        <div
+                          key={event.id}
+                          className={cn(
+                            'absolute left-1 right-1 px-1 py-0.5 text-xs rounded border-l-2 cursor-pointer overflow-hidden',
+                            getEventColor(event)
+                          )}
+                          style={{
+                            top: pos.top,
+                            height: pos.height,
+                            minHeight: 24,
+                          }}
+                          onClick={() => selectEvent(event)}
+                          title={event.title}
+                        >
+                          <div className="font-medium truncate">{event.title}</div>
+                          {pos.height > 40 && (
+                            <div className="truncate opacity-75">
+                              {format(parseISO(event.start), 'HH:mm')}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -332,7 +335,7 @@ export function CalendarView({ onNewEvent }: CalendarViewProps) {
       </CardContent>
 
       {/* Legend */}
-      <div className="flex items-center gap-4 p-4 border-t text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-3 sm:gap-4 p-3 sm:p-4 border-t text-xs text-muted-foreground">
         <div className="flex items-center gap-1">
           <div className="w-3 h-3 rounded bg-blue-500/50" />
           <span>Google Calendar</span>
