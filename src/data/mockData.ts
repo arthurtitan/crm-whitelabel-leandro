@@ -254,27 +254,162 @@ export const mockSales: Sale[] = [
 
 // ============= EVENTS =============
 // Logs focados em ações relevantes de autenticação (excluindo SuperAdmin)
-export const mockEvents: CRMEvent[] = [
-  // Admin login - Clínica Vida Plena
-  { id: 'evt-2', account_id: 'acc-1', event_type: 'auth.login.success', actor_type: 'user', actor_id: 'user-admin-1', entity_type: 'user', entity_id: 'user-admin-1', channel: null, payload: { ip: '192.168.1.2', browser: 'Safari 17.0', os: 'macOS Sonoma', device: 'MacBook Pro' }, created_at: '2025-01-19T07:30:00Z' },
-  { id: 'evt-3', account_id: 'acc-1', event_type: 'auth.logout', actor_type: 'user', actor_id: 'user-admin-1', entity_type: 'user', entity_id: 'user-admin-1', channel: null, payload: { session_duration_minutes: 240 }, created_at: '2025-01-19T11:30:00Z' },
-  // Agent 1 - Ana
-  { id: 'evt-4', account_id: 'acc-1', event_type: 'auth.login.success', actor_type: 'user', actor_id: 'user-agent-1', entity_type: 'user', entity_id: 'user-agent-1', channel: null, payload: { ip: '192.168.1.50', browser: 'Chrome 121.0', os: 'Windows 11', device: 'Desktop' }, created_at: '2025-01-19T08:00:00Z' },
-  { id: 'evt-5', account_id: 'acc-1', event_type: 'auth.logout', actor_type: 'user', actor_id: 'user-agent-1', entity_type: 'user', entity_id: 'user-agent-1', channel: null, payload: { session_duration_minutes: 480 }, created_at: '2025-01-19T16:00:00Z' },
-  // Agent 2 - Pedro
-  { id: 'evt-6', account_id: 'acc-1', event_type: 'auth.login.success', actor_type: 'user', actor_id: 'user-agent-2', entity_type: 'user', entity_id: 'user-agent-2', channel: null, payload: { ip: '192.168.1.51', browser: 'Firefox 122.0', os: 'Ubuntu 22.04', device: 'Desktop' }, created_at: '2025-01-19T09:15:00Z' },
-  { id: 'evt-7', account_id: 'acc-1', event_type: 'auth.login.failed', actor_type: 'user', actor_id: 'user-agent-2', entity_type: 'user', entity_id: 'user-agent-2', channel: null, payload: { ip: '192.168.1.51', browser: 'Firefox 122.0', os: 'Ubuntu 22.04', reason: 'Senha incorreta' }, created_at: '2025-01-19T09:14:30Z' },
-  // Account 2 - TechSolutions (Admin)
-  { id: 'evt-8', account_id: 'acc-2', event_type: 'auth.login.success', actor_type: 'user', actor_id: 'user-admin-2', entity_type: 'user', entity_id: 'user-admin-2', channel: null, payload: { ip: '10.0.0.25', browser: 'Edge 121.0', os: 'Windows 11', device: 'Surface Pro' }, created_at: '2025-01-19T08:45:00Z' },
-  // Account 2 - TechSolutions (Agent - Lucas)
-  { id: 'evt-9', account_id: 'acc-2', event_type: 'auth.login.success', actor_type: 'user', actor_id: 'user-agent-3', entity_type: 'user', entity_id: 'user-agent-3', channel: null, payload: { ip: '10.0.0.30', browser: 'Chrome 121.0', os: 'macOS Ventura', device: 'iMac' }, created_at: '2025-01-19T09:00:00Z' },
-  { id: 'evt-10', account_id: 'acc-2', event_type: 'auth.logout', actor_type: 'user', actor_id: 'user-agent-3', entity_type: 'user', entity_id: 'user-agent-3', channel: null, payload: { session_duration_minutes: 360 }, created_at: '2025-01-19T15:00:00Z' },
-  // Histórico anterior
-  { id: 'evt-11', account_id: 'acc-1', event_type: 'auth.login.success', actor_type: 'user', actor_id: 'user-agent-1', entity_type: 'user', entity_id: 'user-agent-1', channel: null, payload: { ip: '192.168.1.50', browser: 'Chrome 121.0', os: 'Windows 11', device: 'Desktop' }, created_at: '2025-01-18T08:00:00Z' },
-  { id: 'evt-12', account_id: 'acc-1', event_type: 'auth.logout', actor_type: 'user', actor_id: 'user-agent-1', entity_type: 'user', entity_id: 'user-agent-1', channel: null, payload: { session_duration_minutes: 510 }, created_at: '2025-01-18T16:30:00Z' },
-  { id: 'evt-13', account_id: 'acc-1', event_type: 'auth.login.success', actor_type: 'user', actor_id: 'user-admin-1', entity_type: 'user', entity_id: 'user-admin-1', channel: null, payload: { ip: '192.168.1.2', browser: 'Safari 17.0', os: 'macOS Sonoma', device: 'MacBook Pro' }, created_at: '2025-01-18T07:00:00Z' },
-  { id: 'evt-14', account_id: 'acc-1', event_type: 'auth.logout', actor_type: 'user', actor_id: 'user-admin-1', entity_type: 'user', entity_id: 'user-admin-1', channel: null, payload: { session_duration_minutes: 600 }, created_at: '2025-01-18T17:00:00Z' },
-];
+// Helper para gerar eventos de autenticação
+function generateAuthEvents(): CRMEvent[] {
+  const events: CRMEvent[] = [];
+  const baseDate = new Date('2025-01-24');
+  
+  // Usuários da conta acc-1 para gerar eventos
+  const acc1Users = [
+    { id: 'user-admin-1', browser: 'Safari 17.0', os: 'macOS Sonoma', device: 'MacBook Pro' },
+    { id: 'user-agent-1', browser: 'Chrome 121.0', os: 'Windows 11', device: 'Desktop' },
+    { id: 'user-agent-2', browser: 'Firefox 122.0', os: 'Ubuntu 22.04', device: 'Desktop' },
+  ];
+  
+  // Gerar eventos para os últimos 30 dias
+  for (let dayOffset = 0; dayOffset < 30; dayOffset++) {
+    const eventDate = new Date(baseDate);
+    eventDate.setDate(eventDate.getDate() - dayOffset);
+    
+    acc1Users.forEach((user, userIndex) => {
+      // Simular dias de trabalho (seg-sex)
+      const dayOfWeek = eventDate.getDay();
+      if (dayOfWeek === 0 || dayOfWeek === 6) return; // Pular finais de semana
+      
+      // Login de manhã (hora varia por usuário)
+      const loginHour = 7 + userIndex;
+      const loginDate = new Date(eventDate);
+      loginDate.setHours(loginHour, Math.floor(Math.random() * 30), 0);
+      
+      // Duração da sessão (em minutos)
+      const sessionDuration = 360 + Math.floor(Math.random() * 180); // 6-9 horas
+      
+      const logoutDate = new Date(loginDate);
+      logoutDate.setMinutes(logoutDate.getMinutes() + sessionDuration);
+      
+      // Login success
+      events.push({
+        id: `evt-gen-${dayOffset}-${userIndex}-login`,
+        account_id: 'acc-1',
+        event_type: 'auth.login.success',
+        actor_type: 'user',
+        actor_id: user.id,
+        entity_type: 'user',
+        entity_id: user.id,
+        channel: null,
+        payload: {
+          ip: `192.168.1.${50 + userIndex}`,
+          browser: user.browser,
+          os: user.os,
+          device: user.device,
+        },
+        created_at: loginDate.toISOString(),
+      });
+      
+      // Logout
+      events.push({
+        id: `evt-gen-${dayOffset}-${userIndex}-logout`,
+        account_id: 'acc-1',
+        event_type: 'auth.logout',
+        actor_type: 'user',
+        actor_id: user.id,
+        entity_type: 'user',
+        entity_id: user.id,
+        channel: null,
+        payload: {
+          session_duration_minutes: sessionDuration,
+        },
+        created_at: logoutDate.toISOString(),
+      });
+      
+      // Adicionar algumas falhas de login ocasionais (apenas para agent-2)
+      if (user.id === 'user-agent-2' && dayOffset % 5 === 0) {
+        const failedLoginDate = new Date(loginDate);
+        failedLoginDate.setMinutes(failedLoginDate.getMinutes() - 2);
+        
+        events.push({
+          id: `evt-gen-${dayOffset}-${userIndex}-failed`,
+          account_id: 'acc-1',
+          event_type: 'auth.login.failed',
+          actor_type: 'user',
+          actor_id: user.id,
+          entity_type: 'user',
+          entity_id: user.id,
+          channel: null,
+          payload: {
+            ip: `192.168.1.${50 + userIndex}`,
+            browser: user.browser,
+            os: user.os,
+            reason: 'Senha incorreta',
+          },
+          created_at: failedLoginDate.toISOString(),
+        });
+      }
+    });
+  }
+  
+  // Eventos para acc-2 (menos eventos)
+  const acc2Users = [
+    { id: 'user-admin-2', browser: 'Edge 121.0', os: 'Windows 11', device: 'Surface Pro' },
+    { id: 'user-agent-3', browser: 'Chrome 121.0', os: 'macOS Ventura', device: 'iMac' },
+  ];
+  
+  for (let dayOffset = 0; dayOffset < 15; dayOffset++) {
+    const eventDate = new Date(baseDate);
+    eventDate.setDate(eventDate.getDate() - dayOffset);
+    
+    acc2Users.forEach((user, userIndex) => {
+      const dayOfWeek = eventDate.getDay();
+      if (dayOfWeek === 0 || dayOfWeek === 6) return;
+      
+      const loginHour = 8 + userIndex;
+      const loginDate = new Date(eventDate);
+      loginDate.setHours(loginHour, Math.floor(Math.random() * 30), 0);
+      
+      const sessionDuration = 300 + Math.floor(Math.random() * 120);
+      
+      const logoutDate = new Date(loginDate);
+      logoutDate.setMinutes(logoutDate.getMinutes() + sessionDuration);
+      
+      events.push({
+        id: `evt-acc2-${dayOffset}-${userIndex}-login`,
+        account_id: 'acc-2',
+        event_type: 'auth.login.success',
+        actor_type: 'user',
+        actor_id: user.id,
+        entity_type: 'user',
+        entity_id: user.id,
+        channel: null,
+        payload: {
+          ip: `10.0.0.${25 + userIndex}`,
+          browser: user.browser,
+          os: user.os,
+          device: user.device,
+        },
+        created_at: loginDate.toISOString(),
+      });
+      
+      events.push({
+        id: `evt-acc2-${dayOffset}-${userIndex}-logout`,
+        account_id: 'acc-2',
+        event_type: 'auth.logout',
+        actor_type: 'user',
+        actor_id: user.id,
+        entity_type: 'user',
+        entity_id: user.id,
+        channel: null,
+        payload: {
+          session_duration_minutes: sessionDuration,
+        },
+        created_at: logoutDate.toISOString(),
+      });
+    });
+  }
+  
+  return events;
+}
+
+export const mockEvents: CRMEvent[] = generateAuthEvents();
 
 // ============= TAGS (CHATWOOT ↔ KANBAN) =============
 // Tags de Etapa = Etapas do Kanban (são a MESMA coisa)
