@@ -7,7 +7,7 @@ import {
   Clock,
   ArrowRightLeft,
   CalendarCheck,
-  CalendarX,
+  Bot,
   X,
 } from 'lucide-react';
 import { subDays, isWithinInterval, parseISO } from 'date-fns';
@@ -241,7 +241,7 @@ export default function AdminDashboard() {
   };
 
   // Calculate appointments counts based on role, selected agent, and period
-  const { totalAppointments, cancelledAppointments } = useMemo(() => {
+  const totalAppointments = useMemo(() => {
     const start = dateRange?.from || subDays(new Date(), 7);
     const end = dateRange?.to || new Date();
     
@@ -259,20 +259,12 @@ export default function AdminDashboard() {
     if (!isAdmin) {
       filteredEvents = periodEvents.filter(event => event.createdBy === user?.id);
     } else if (selectedAgentFromTable) {
-      // If agent selected from table - match by agent name to user name for mock
-      filteredEvents = periodEvents.filter(event => {
-        // In a real scenario, you'd match by user ID linked to Chatwoot agent
-        return event.createdBy === selectedAgentFromTable;
-      });
+      filteredEvents = periodEvents.filter(event => event.createdBy === selectedAgentFromTable);
     } else if (selectedAgent !== 'all') {
-      // If admin with agent filter applied from dropdown
       filteredEvents = periodEvents.filter(event => event.createdBy === selectedAgent);
     }
     
-    const total = filteredEvents.length;
-    const cancelled = filteredEvents.filter(event => event.status === 'cancelled').length;
-    
-    return { totalAppointments: total, cancelledAppointments: cancelled };
+    return filteredEvents.length;
   }, [events, isAdmin, user?.id, selectedAgent, selectedAgentFromTable, dateRange]);
 
   // Get displayed KPIs based on selected agent from table
@@ -293,6 +285,13 @@ export default function AdminDashboard() {
       qualidade: mockDashboardData.qualidade,
     };
   }, [selectedAgentFromTable]);
+
+  // Calculate AI service count based on percentage and total leads
+  const aiServiceCount = useMemo(() => {
+    const totalLeads = displayedData.kpis.totalLeads;
+    const percentualIA = displayedData.kpis.percentualIA;
+    return Math.round((totalLeads * percentualIA) / 100);
+  }, [displayedData.kpis.totalLeads, displayedData.kpis.percentualIA]);
 
   // Simulate different states for demonstration
   const handleStateChange = (state: ViewState) => {
@@ -422,14 +421,12 @@ export default function AdminDashboard() {
               isLoading={isLoading}
             />
             <KPICard
-              title="Desmarcados"
-              subtitle={selectedAgentFromTable 
-                ? `Dados de ${selectedAgentFromTable}` 
-                : (isAdmin ? (selectedAgent !== 'all' ? 'Do agente selecionado' : 'Visão geral da clínica') : 'Seus cancelamentos')}
-              value={cancelledAppointments}
-              icon={CalendarX}
-              iconColor="text-destructive"
-              iconBgColor="bg-destructive/10"
+              title="Atendimentos IA"
+              subtitle={getAgentContextSubtitle('Conversas gerenciadas pela IA')}
+              value={aiServiceCount}
+              icon={Bot}
+              iconColor="text-info"
+              iconBgColor="bg-info/10"
               isLoading={isLoading}
             />
             <KPICard
