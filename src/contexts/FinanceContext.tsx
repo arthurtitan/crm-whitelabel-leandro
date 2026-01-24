@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useMemo, ReactNode, useCallback } from 'react';
 import { Sale, SaleItem, Contact, LeadFunnelState, SaleStatus, PaymentMethod, Product, ContactOrigin, LeadNote } from '@/types/crm';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTagContext } from '@/contexts/TagContext';
 import { 
   mockSales, 
   mockContacts, 
@@ -124,6 +125,13 @@ interface FinanceProviderProps {
 
 export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
   const { user } = useAuth();
+  let tagContext: ReturnType<typeof useTagContext> | null = null;
+  try {
+    tagContext = useTagContext();
+  } catch {
+    // TagContext may not be available in all contexts
+  }
+  
   const [sales, setSales] = useState<Sale[]>(
     mockSales.filter((s) => s.account_id === accountId)
   );
@@ -525,14 +533,23 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
       ...data,
     }));
 
-    // Funnel conversion
-    const convertedStageIds = mockFunnelStages
-      .filter((s) => s.ordem >= 4) // Qualificado ou Convertido
-      .map((s) => s.id);
+    // Funnel conversion - use finalStageIds from TagContext if available
+    let convertedStageIds: string[];
+    if (tagContext?.finalStageIds && tagContext.finalStageIds.length > 0) {
+      convertedStageIds = tagContext.finalStageIds;
+    } else {
+      // Fallback to default behavior
+      convertedStageIds = mockFunnelStages
+        .filter((s) => s.ordem >= 4)
+        .map((s) => s.id);
+    }
     
-    const leadsConvertidos = leadFunnelStates.filter((lfs) =>
-      lfs.funnel_stage_id && convertedStageIds.includes(lfs.funnel_stage_id)
-    ).length;
+    // Match leads that have a stage tag that is in finalStageIds
+    const leadsConvertidos = tagContext?.leadTags 
+      ? tagContext.leadTags.filter((lt) => convertedStageIds.includes(lt.tag_id)).length
+      : leadFunnelStates.filter((lfs) =>
+          lfs.funnel_stage_id && convertedStageIds.includes(lfs.funnel_stage_id)
+        ).length;
 
     // Revenue by day (last 7 days)
     const today = new Date();
@@ -579,7 +596,7 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
       vendasPagasCount: paidSales.length,
       faturamentoPorDia,
     };
-  }, [sales, leadFunnelStates]);
+  }, [sales, leadFunnelStates, tagContext?.finalStageIds, tagContext?.leadTags]);
 
   const value: FinanceContextType = {
     sales,

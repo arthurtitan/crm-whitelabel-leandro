@@ -43,6 +43,7 @@ interface TagContextType {
   operationalTags: Tag[]; // Apenas tags operacionais
   leadTags: LeadTag[];
   tagHistory: TagHistory[];
+  finalStageIds: string[]; // IDs das etapas consideradas finais para o funil
 
   // Queries
   getTagById: (tagId: string) => Tag | undefined;
@@ -52,6 +53,7 @@ interface TagContextType {
   getLeadOperationalTags: (contactId: string) => Tag[];
   getContactTagHistory: (contactId: string) => TagHistory[];
   hasTag: (contactId: string, tagId: string) => boolean;
+  isFinalStage: (stageId: string) => boolean;
 
   // Actions
   addTag: (data: AddTagData) => { success: boolean; error?: string };
@@ -63,6 +65,7 @@ interface TagContextType {
   // Stage Management (Kanban columns)
   moveStageTag: (tagId: string, direction: 'left' | 'right') => { success: boolean; error?: string };
   deleteStageTag: (tagId: string) => { success: boolean; error?: string };
+  toggleFinalStage: (stageId: string) => void;
   
   // Chatwoot sync simulation
   simulateChatwootTagApplied: (contactId: string, tagSlug: string) => void;
@@ -94,6 +97,13 @@ export const TagProvider: React.FC<TagProviderProps> = ({ children, accountId })
   );
   const [leadTags, setLeadTags] = useState<LeadTag[]>(mockLeadTags);
   const [tagHistory, setTagHistory] = useState<TagHistory[]>(mockTagHistory);
+  
+  // Final stages for funnel conversion - default to last 2 stages by order
+  const [finalStageIds, setFinalStageIds] = useState<string[]>(() => {
+    const accountTags = mockTags.filter((t) => t.account_id === accountId && t.ativo && t.type === 'stage');
+    const sortedByOrder = [...accountTags].sort((a, b) => b.ordem - a.ordem);
+    return sortedByOrder.slice(0, 2).map((t) => t.id);
+  });
 
   // ============= DERIVED STATE =============
   
@@ -146,6 +156,19 @@ export const TagProvider: React.FC<TagProviderProps> = ({ children, accountId })
   const hasTag = useCallback((contactId: string, tagId: string): boolean => {
     return leadTags.some((lt) => lt.contact_id === contactId && lt.tag_id === tagId);
   }, [leadTags]);
+
+  const isFinalStage = useCallback((stageId: string): boolean => {
+    return finalStageIds.includes(stageId);
+  }, [finalStageIds]);
+
+  const toggleFinalStage = useCallback((stageId: string) => {
+    setFinalStageIds((prev) => {
+      if (prev.includes(stageId)) {
+        return prev.filter((id) => id !== stageId);
+      }
+      return [...prev, stageId];
+    });
+  }, []);
 
   // ============= ACTIONS =============
 
@@ -468,6 +491,7 @@ export const TagProvider: React.FC<TagProviderProps> = ({ children, accountId })
     operationalTags,
     leadTags,
     tagHistory,
+    finalStageIds,
     getTagById,
     getTagBySlug,
     getLeadTags,
@@ -475,6 +499,7 @@ export const TagProvider: React.FC<TagProviderProps> = ({ children, accountId })
     getLeadOperationalTags,
     getContactTagHistory,
     hasTag,
+    isFinalStage,
     addTag,
     removeTag,
     toggleOperationalTag,
@@ -482,6 +507,7 @@ export const TagProvider: React.FC<TagProviderProps> = ({ children, accountId })
     createStageTag,
     moveStageTag,
     deleteStageTag,
+    toggleFinalStage,
     simulateChatwootTagApplied,
   }), [
     tags,
@@ -489,6 +515,7 @@ export const TagProvider: React.FC<TagProviderProps> = ({ children, accountId })
     operationalTags,
     leadTags,
     tagHistory,
+    finalStageIds,
     getTagById,
     getTagBySlug,
     getLeadTags,
@@ -496,6 +523,7 @@ export const TagProvider: React.FC<TagProviderProps> = ({ children, accountId })
     getLeadOperationalTags,
     getContactTagHistory,
     hasTag,
+    isFinalStage,
     addTag,
     removeTag,
     toggleOperationalTag,
@@ -503,6 +531,7 @@ export const TagProvider: React.FC<TagProviderProps> = ({ children, accountId })
     createStageTag,
     moveStageTag,
     deleteStageTag,
+    toggleFinalStage,
     simulateChatwootTagApplied,
   ]);
 
