@@ -15,7 +15,7 @@ interface FunnelConversionChartProps {
 export function FunnelConversionChart({ isLoading = false }: FunnelConversionChartProps) {
   const { kpis } = useFinance();
   const { stageTags, finalStageIds, toggleFinalStage } = useTagContext();
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [activePopover, setActivePopover] = useState<number | null>(null);
 
   if (isLoading) {
     return (
@@ -32,28 +32,34 @@ export function FunnelConversionChart({ isLoading = false }: FunnelConversionCha
 
   const steps = [
     {
+      id: 0,
       label: 'Leads Convertidos',
       value: kpis.leadsConvertidos,
       icon: Users,
       color: 'text-primary',
       bgColor: 'bg-primary/10',
       description: 'Leads em etapas finais do funil',
+      configurable: true,
     },
     {
+      id: 1,
       label: 'Vendas Criadas',
       value: kpis.vendasCriadas,
       icon: ShoppingCart,
       color: 'text-warning',
       bgColor: 'bg-warning/10',
       description: 'Vendas registradas no sistema',
+      configurable: false,
     },
     {
+      id: 2,
       label: 'Vendas Pagas',
       value: kpis.vendasPagasCount,
       icon: CheckCircle,
       color: 'text-success',
       bgColor: 'bg-success/10',
       description: 'Vendas confirmadas e pagas',
+      configurable: false,
     },
   ];
 
@@ -65,50 +71,11 @@ export function FunnelConversionChart({ isLoading = false }: FunnelConversionCha
   return (
     <Card>
       <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="text-base font-semibold">Conversão Financeira do Funil</CardTitle>
-            <p className="text-xs text-muted-foreground">
-              Jornada do lead até a venda paga
-            </p>
-          </div>
-          <Popover open={settingsOpen} onOpenChange={setSettingsOpen}>
-            <PopoverTrigger asChild>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="h-7 w-7 text-muted-foreground hover:text-foreground"
-              >
-                <Settings2 className="h-4 w-4" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-64">
-              <div className="space-y-3">
-                <p className="text-sm font-medium">Etapas finais do funil</p>
-                <p className="text-xs text-muted-foreground">
-                  Selecione quais etapas contam como conversão
-                </p>
-                <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {stageTags.map((stage) => (
-                    <label 
-                      key={stage.id} 
-                      className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 p-1.5 rounded-md transition-colors"
-                    >
-                      <Checkbox
-                        checked={finalStageIds.includes(stage.id)}
-                        onCheckedChange={() => toggleFinalStage(stage.id)}
-                      />
-                      <div 
-                        className="w-2.5 h-2.5 rounded-full flex-shrink-0" 
-                        style={{ backgroundColor: stage.color }} 
-                      />
-                      <span className="text-sm truncate">{stage.name}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            </PopoverContent>
-          </Popover>
+        <div>
+          <CardTitle className="text-base font-semibold">Conversão Financeira do Funil</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Jornada do lead até a venda paga
+          </p>
         </div>
       </CardHeader>
       <CardContent>
@@ -116,7 +83,49 @@ export function FunnelConversionChart({ isLoading = false }: FunnelConversionCha
           {steps.map((step, index) => (
             <div key={step.label} className="flex-1 flex items-center gap-2">
               <div className="flex-1">
-                <div className={`p-4 rounded-lg ${step.bgColor} text-center`}>
+                <div className={`p-4 rounded-lg ${step.bgColor} text-center relative group`}>
+                  {step.configurable && (
+                    <Popover 
+                      open={activePopover === step.id} 
+                      onOpenChange={(open) => setActivePopover(open ? step.id : null)}
+                    >
+                      <PopoverTrigger asChild>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
+                        >
+                          <Settings2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent align="end" className="w-64">
+                        <div className="space-y-3">
+                          <p className="text-sm font-medium">Etapas que contam como "{step.label}"</p>
+                          <p className="text-xs text-muted-foreground">
+                            Selecione quais etapas do Kanban são consideradas conversão
+                          </p>
+                          <div className="space-y-2 max-h-48 overflow-y-auto">
+                            {stageTags.map((stage) => (
+                              <label 
+                                key={stage.id} 
+                                className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 p-1.5 rounded-md transition-colors"
+                              >
+                                <Checkbox
+                                  checked={finalStageIds.includes(stage.id)}
+                                  onCheckedChange={() => toggleFinalStage(stage.id)}
+                                />
+                                <div 
+                                  className="w-2.5 h-2.5 rounded-full flex-shrink-0" 
+                                  style={{ backgroundColor: stage.color }} 
+                                />
+                                <span className="text-sm truncate">{stage.name}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  )}
                   <step.icon className={`w-6 h-6 ${step.color} mx-auto mb-2`} />
                   <p className="text-2xl font-bold">{step.value}</p>
                   <p className="text-xs text-muted-foreground mt-1">{step.label}</p>

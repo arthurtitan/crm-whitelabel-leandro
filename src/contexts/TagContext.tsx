@@ -36,6 +36,13 @@ interface CreateStageTagData {
   source: 'kanban' | 'chatwoot' | 'system';
 }
 
+// Configuração de etapas para cada parte do funil
+interface FunnelStageConfig {
+  leadsConvertidos: string[];  // Etapas que contam como "leads convertidos"
+  vendasCriadas: string[];     // Etapas que contam como "vendas criadas" (derivado de vendas, não usado aqui)
+  vendasPagas: string[];       // Etapas que contam como "vendas pagas" (derivado de vendas, não usado aqui)
+}
+
 interface TagContextType {
   // State
   tags: Tag[];
@@ -43,7 +50,8 @@ interface TagContextType {
   operationalTags: Tag[]; // Apenas tags operacionais
   leadTags: LeadTag[];
   tagHistory: TagHistory[];
-  finalStageIds: string[]; // IDs das etapas consideradas finais para o funil
+  finalStageIds: string[]; // IDs das etapas consideradas finais para o funil (leadsConvertidos)
+  funnelStageConfig: FunnelStageConfig;
 
   // Queries
   getTagById: (tagId: string) => Tag | undefined;
@@ -66,6 +74,7 @@ interface TagContextType {
   moveStageTag: (tagId: string, direction: 'left' | 'right') => { success: boolean; error?: string };
   deleteStageTag: (tagId: string) => { success: boolean; error?: string };
   toggleFinalStage: (stageId: string) => void;
+  updateFunnelStageConfig: (config: Partial<FunnelStageConfig>) => void;
   
   // Chatwoot sync simulation
   simulateChatwootTagApplied: (contactId: string, tagSlug: string) => void;
@@ -99,11 +108,19 @@ export const TagProvider: React.FC<TagProviderProps> = ({ children, accountId })
   const [tagHistory, setTagHistory] = useState<TagHistory[]>(mockTagHistory);
   
   // Final stages for funnel conversion - default to last 2 stages by order
-  const [finalStageIds, setFinalStageIds] = useState<string[]>(() => {
+  const [funnelStageConfig, setFunnelStageConfig] = useState<FunnelStageConfig>(() => {
     const accountTags = mockTags.filter((t) => t.account_id === accountId && t.ativo && t.type === 'stage');
     const sortedByOrder = [...accountTags].sort((a, b) => b.ordem - a.ordem);
-    return sortedByOrder.slice(0, 2).map((t) => t.id);
+    const defaultFinalStages = sortedByOrder.slice(0, 2).map((t) => t.id);
+    return {
+      leadsConvertidos: defaultFinalStages,
+      vendasCriadas: [], // Não usado - calculado a partir de vendas
+      vendasPagas: [],   // Não usado - calculado a partir de vendas
+    };
   });
+  
+  // Backwards compatibility alias
+  const finalStageIds = funnelStageConfig.leadsConvertidos;
 
   // ============= DERIVED STATE =============
   
@@ -162,12 +179,17 @@ export const TagProvider: React.FC<TagProviderProps> = ({ children, accountId })
   }, [finalStageIds]);
 
   const toggleFinalStage = useCallback((stageId: string) => {
-    setFinalStageIds((prev) => {
-      if (prev.includes(stageId)) {
-        return prev.filter((id) => id !== stageId);
+    setFunnelStageConfig((prev) => {
+      const currentIds = prev.leadsConvertidos;
+      if (currentIds.includes(stageId)) {
+        return { ...prev, leadsConvertidos: currentIds.filter((id) => id !== stageId) };
       }
-      return [...prev, stageId];
+      return { ...prev, leadsConvertidos: [...currentIds, stageId] };
     });
+  }, []);
+
+  const updateFunnelStageConfig = useCallback((config: Partial<FunnelStageConfig>) => {
+    setFunnelStageConfig((prev) => ({ ...prev, ...config }));
   }, []);
 
   // ============= ACTIONS =============
@@ -492,6 +514,7 @@ export const TagProvider: React.FC<TagProviderProps> = ({ children, accountId })
     leadTags,
     tagHistory,
     finalStageIds,
+    funnelStageConfig,
     getTagById,
     getTagBySlug,
     getLeadTags,
@@ -508,6 +531,7 @@ export const TagProvider: React.FC<TagProviderProps> = ({ children, accountId })
     moveStageTag,
     deleteStageTag,
     toggleFinalStage,
+    updateFunnelStageConfig,
     simulateChatwootTagApplied,
   }), [
     tags,
@@ -516,6 +540,7 @@ export const TagProvider: React.FC<TagProviderProps> = ({ children, accountId })
     leadTags,
     tagHistory,
     finalStageIds,
+    funnelStageConfig,
     getTagById,
     getTagBySlug,
     getLeadTags,
@@ -532,6 +557,7 @@ export const TagProvider: React.FC<TagProviderProps> = ({ children, accountId })
     moveStageTag,
     deleteStageTag,
     toggleFinalStage,
+    updateFunnelStageConfig,
     simulateChatwootTagApplied,
   ]);
 
