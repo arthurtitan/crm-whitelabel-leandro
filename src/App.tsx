@@ -38,19 +38,20 @@ import AdminInsightsPage from "./pages/admin/AdminInsightsPage";
 const queryClient = new QueryClient();
 
 // Wrapper component to provide contexts with accountId from AuthContext
+// TagProvider must be outside FinanceProvider because FinanceContext uses TagContext
 function AdminFinanceWrapper({ children }: { children: React.ReactNode }) {
   const { account } = useAuth();
   const accountId = account?.id || 'acc-1';
   return (
-    <FinanceProvider accountId={accountId}>
-      <ProductProvider accountId={accountId}>
-        <TagProvider accountId={accountId}>
+    <TagProvider accountId={accountId}>
+      <FinanceProvider accountId={accountId}>
+        <ProductProvider accountId={accountId}>
           <CalendarProvider accountId={accountId}>
             {children}
           </CalendarProvider>
-        </TagProvider>
-      </ProductProvider>
-    </FinanceProvider>
+        </ProductProvider>
+      </FinanceProvider>
+    </TagProvider>
   );
 }
 
