@@ -72,15 +72,6 @@ export function FinanceKPICards({ isLoading = false }: FinanceKPICardsProps) {
         isLoading={isLoading}
       />
       <KPICard
-        title="Canceladas"
-        subtitle={formatCurrency(kpis.vendasCanceladas.valor)}
-        value={kpis.vendasCanceladas.count}
-        icon={XCircle}
-        iconColor="text-destructive"
-        iconBgColor="bg-destructive/10"
-        isLoading={isLoading}
-      />
-      <KPICard
         title="Estornadas"
         subtitle={formatCurrency(kpis.vendasEstornadas.valor)}
         value={kpis.vendasEstornadas.count}
