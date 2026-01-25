@@ -27,8 +27,8 @@ export function FinanceKPICards({ isLoading = false }: FinanceKPICardsProps) {
   return (
     <div className="kpi-grid-finance">
       <KPICard
-        title="Faturamento Bruto"
-        subtitle="Vendas pagas no período"
+        title="Faturamento"
+        subtitle="Vendas pagas"
         value={formatCurrency(kpis.faturamentoBruto)}
         icon={DollarSign}
         iconColor="text-success"
@@ -37,7 +37,7 @@ export function FinanceKPICards({ isLoading = false }: FinanceKPICardsProps) {
       />
       <KPICard
         title="Ticket Médio"
-        subtitle="Valor médio por venda"
+        subtitle="Média/venda"
         value={formatCurrency(kpis.ticketMedio)}
         icon={TrendingUp}
         iconColor="text-primary"
@@ -45,8 +45,8 @@ export function FinanceKPICards({ isLoading = false }: FinanceKPICardsProps) {
         isLoading={isLoading}
       />
       <KPICard
-        title="Total de Vendas"
-        subtitle="Pagas + Pendentes"
+        title="Total Vendas"
+        subtitle="Pagas + Pend."
         value={kpis.totalVendas}
         icon={ShoppingCart}
         iconColor="text-info"
@@ -54,7 +54,7 @@ export function FinanceKPICards({ isLoading = false }: FinanceKPICardsProps) {
         isLoading={isLoading}
       />
       <KPICard
-        title="Vendas Pagas"
+        title="Pagas"
         subtitle={formatCurrency(kpis.vendasPagas.valor)}
         value={kpis.vendasPagas.count}
         icon={CheckCircle}
@@ -63,7 +63,7 @@ export function FinanceKPICards({ isLoading = false }: FinanceKPICardsProps) {
         isLoading={isLoading}
       />
       <KPICard
-        title="Vendas Pendentes"
+        title="Pendentes"
         subtitle={formatCurrency(kpis.vendasPendentes.valor)}
         value={kpis.vendasPendentes.count}
         icon={Clock}
@@ -72,7 +72,7 @@ export function FinanceKPICards({ isLoading = false }: FinanceKPICardsProps) {
         isLoading={isLoading}
       />
       <KPICard
-        title="Vendas Canceladas"
+        title="Canceladas"
         subtitle={formatCurrency(kpis.vendasCanceladas.valor)}
         value={kpis.vendasCanceladas.count}
         icon={XCircle}
@@ -81,7 +81,7 @@ export function FinanceKPICards({ isLoading = false }: FinanceKPICardsProps) {
         isLoading={isLoading}
       />
       <KPICard
-        title="Vendas Estornadas"
+        title="Estornadas"
         subtitle={formatCurrency(kpis.vendasEstornadas.valor)}
         value={kpis.vendasEstornadas.count}
         icon={RotateCcw}
