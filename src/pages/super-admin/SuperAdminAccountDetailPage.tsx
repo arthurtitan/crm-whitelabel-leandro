@@ -414,12 +414,12 @@ export default function SuperAdminAccountDetailPage() {
 
       {/* Control Dialog */}
       <Dialog open={isControlOpen} onOpenChange={setIsControlOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>Controle de Conta</DialogTitle>
             <DialogDescription>Atualize os dados da conta</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
+          <div className="space-y-4 py-4 overflow-y-auto flex-1 px-1">
             <div className="space-y-2">
               <Label htmlFor="edit-nome">Nome da Conta</Label>
               <Input

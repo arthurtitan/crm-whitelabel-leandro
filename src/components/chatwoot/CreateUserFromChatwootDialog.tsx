@@ -127,8 +127,8 @@ export function CreateUserFromChatwootDialog({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <div className="flex items-center justify-between">
             <DialogTitle className="flex items-center gap-2">
               <UserIcon className="w-5 h-5" />
@@ -144,9 +144,9 @@ export function CreateUserFromChatwootDialog({
         </DialogHeader>
 
         {/* Progress */}
-        <Progress value={progress} className="h-2" />
+        <Progress value={progress} className="h-2 flex-shrink-0" />
 
-        <div className="space-y-4 py-2">
+        <div className="space-y-4 py-2 overflow-y-auto flex-1 px-1">
           {/* Dados do Chatwoot (readonly) */}
           <div className="p-3 rounded-lg bg-muted/50 space-y-2">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -154,7 +154,7 @@ export function CreateUserFromChatwootDialog({
                 Dados do Chatwoot
               </Badge>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label className="text-xs text-muted-foreground">Nome</Label>
                 <p className="font-medium">{agent.name}</p>
@@ -173,7 +173,7 @@ export function CreateUserFromChatwootDialog({
           </div>
 
           {/* Senha */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="password" className="flex items-center gap-1">
                 <Lock className="w-3 h-3" />
@@ -229,7 +229,7 @@ export function CreateUserFromChatwootDialog({
                 <span className="text-xs text-muted-foreground uppercase tracking-wider">
                   Páginas
                 </span>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 xs:grid-cols-2 gap-2">
                   {PAGE_PERMISSIONS.map((perm) => {
                     const Icon = perm.icon;
                     const isChecked = permissions.includes(perm.key);
@@ -264,7 +264,7 @@ export function CreateUserFromChatwootDialog({
                 <span className="text-xs text-muted-foreground uppercase tracking-wider">
                   Ações Especiais
                 </span>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 xs:grid-cols-2 gap-2">
                   {ACTION_PERMISSIONS.map((perm) => {
                     const Icon = perm.icon;
                     const isChecked = permissions.includes(perm.key);
@@ -291,7 +291,7 @@ export function CreateUserFromChatwootDialog({
           )}
         </div>
 
-        <DialogFooter className="gap-2">
+        <DialogFooter className="flex-shrink-0 flex-col sm:flex-row gap-2">
           <Button variant="ghost" onClick={onSkip}>
             Pular este agente
           </Button>

@@ -332,8 +332,8 @@ export default function SuperAdminAccountsPage() {
               Nova Conta
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+            <DialogHeader className="flex-shrink-0">
               <DialogTitle>
                 {creationStep === 'form' && 'Criar Nova Conta'}
                 {creationStep === 'agents' && 'Importar Agentes do Chatwoot'}
@@ -347,7 +347,7 @@ export default function SuperAdminAccountsPage() {
             {/* Step 1: Account Form */}
             {creationStep === 'form' && (
               <>
-                <div className="space-y-4 py-4">
+                <div className="space-y-4 py-4 overflow-y-auto flex-1 px-1">
                   {/* Nome */}
                   <div className="space-y-2">
                     <Label htmlFor="nome">Nome</Label>
@@ -728,13 +728,13 @@ export default function SuperAdminAccountsPage() {
 
       {/* Edit Dialog */}
       <Dialog open={!!editingAccount} onOpenChange={() => setEditingAccount(null)}>
-        <DialogContent>
-          <DialogHeader>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>Editar Conta</DialogTitle>
             <DialogDescription>Atualize os dados da conta</DialogDescription>
           </DialogHeader>
           {editingAccount && (
-            <div className="space-y-4 py-4">
+            <div className="space-y-4 py-4 overflow-y-auto flex-1 px-1">
               <div className="space-y-2">
                 <Label htmlFor="edit-nome">Nome da Conta</Label>
                 <Input
@@ -763,7 +763,7 @@ export default function SuperAdminAccountsPage() {
               </div>
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="flex-shrink-0 flex-col sm:flex-row gap-2">
             <Button variant="outline" onClick={() => setEditingAccount(null)}>
               Cancelar
             </Button>
@@ -774,14 +774,14 @@ export default function SuperAdminAccountsPage() {
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={!!deleteAccount} onOpenChange={() => setDeleteAccount(null)}>
-        <DialogContent>
-          <DialogHeader>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle className="text-destructive">Excluir Conta</DialogTitle>
             <DialogDescription>
               Esta ação é irreversível. Digite sua senha de Super Admin para confirmar.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 py-4 overflow-y-auto flex-1 px-1">
             <p className="text-sm text-muted-foreground">
               Você está prestes a excluir a conta:{' '}
               <strong className="text-foreground">{deleteAccount?.nome}</strong>
@@ -797,7 +797,7 @@ export default function SuperAdminAccountsPage() {
               />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex-shrink-0 flex-col sm:flex-row gap-2">
             <Button variant="outline" onClick={() => setDeleteAccount(null)}>
               Cancelar
             </Button>
