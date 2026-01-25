@@ -1,13 +1,13 @@
 import { useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { mockEvents, mockUsers } from '@/data/mockData';
-import { CRMEvent, EventType } from '@/types/crm';
+import { CRMEvent, EventType, User } from '@/types/crm';
 import { KPICard } from '@/components/dashboard/KPICard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import {
@@ -27,7 +27,7 @@ import {
 } from '@/components/ui/table';
 import {
   Search,
-  User,
+  User as UserIcon,
   Clock,
   Filter,
   LogIn,
@@ -41,9 +41,13 @@ import {
   Medal,
   Award,
   BarChart3,
+  Users,
+  UserCheck,
+  UserX,
 } from 'lucide-react';
-import { format, subDays, isAfter, startOfMonth, endOfMonth } from 'date-fns';
+import { format, subDays, isAfter, differenceInMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
 
 interface UserPerformance {
   userId: string;
@@ -56,6 +60,15 @@ interface UserPerformance {
   totalSessionMinutes: number;
   avgSessionMinutes: number;
   daysWorked: number;
+}
+
+interface UserOnlineStatus {
+  user: User;
+  isOnline: boolean;
+  lastEventType: EventType | null;
+  lastEventTime: Date | null;
+  sessionStartTime: Date | null;
+  currentSessionMinutes: number;
 }
 
 export default function AdminEventsPage() {
@@ -84,7 +97,7 @@ export default function AdminEventsPage() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
-  const [activeTab, setActiveTab] = useState<string>('timeline');
+  const [activeTab, setActiveTab] = useState<string>('ponto');
 
   const filteredEvents = accountEvents.filter((event) => {
     const user = mockUsers.find((u) => u.id === event.actor_id);
@@ -102,6 +115,61 @@ export default function AdminEventsPage() {
   const sortedEvents = [...filteredEvents].sort(
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
+
+  // Calcular status online/offline de cada usuário
+  const userOnlineStatuses = useMemo((): UserOnlineStatus[] => {
+    const accountUsers = mockUsers.filter(
+      (u) => u.account_id === accountId && u.role !== 'super_admin' && u.status === 'active'
+    );
+
+    return accountUsers.map((user) => {
+      // Encontrar eventos do usuário ordenados por data (mais recente primeiro)
+      const userEvents = accountEvents
+        .filter((e) => e.actor_id === user.id)
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+      const lastEvent = userEvents[0];
+      const lastEventType = lastEvent?.event_type as EventType | null;
+      const lastEventTime = lastEvent ? new Date(lastEvent.created_at) : null;
+
+      // Determinar se está online: último evento é login.success sem logout posterior
+      const isOnline = lastEventType === 'auth.login.success';
+
+      // Se estiver online, calcular tempo de sessão atual
+      let sessionStartTime: Date | null = null;
+      let currentSessionMinutes = 0;
+
+      if (isOnline && lastEventTime) {
+        sessionStartTime = lastEventTime;
+        currentSessionMinutes = differenceInMinutes(new Date(), lastEventTime);
+      }
+
+      return {
+        user,
+        isOnline,
+        lastEventType,
+        lastEventTime,
+        sessionStartTime,
+        currentSessionMinutes,
+      };
+    }).sort((a, b) => {
+      // Online primeiro, depois por tempo de sessão
+      if (a.isOnline && !b.isOnline) return -1;
+      if (!a.isOnline && b.isOnline) return 1;
+      if (a.isOnline && b.isOnline) {
+        return b.currentSessionMinutes - a.currentSessionMinutes;
+      }
+      // Offline: ordenar por último acesso (mais recente primeiro)
+      if (a.lastEventTime && b.lastEventTime) {
+        return b.lastEventTime.getTime() - a.lastEventTime.getTime();
+      }
+      return 0;
+    });
+  }, [accountEvents, accountId]);
+
+  const onlineCount = userOnlineStatuses.filter((u) => u.isOnline).length;
+  const offlineCount = userOnlineStatuses.filter((u) => !u.isOnline).length;
+  const totalUsers = userOnlineStatuses.length;
 
   // Calcular performance por funcionário
   const userPerformance = useMemo((): UserPerformance[] => {
@@ -178,7 +246,7 @@ export default function AdminEventsPage() {
       case 'auth.logout':
         return <LogOut className="w-4 h-4 text-warning" />;
       default:
-        return <User className="w-4 h-4" />;
+        return <UserIcon className="w-4 h-4" />;
     }
   };
 
@@ -222,7 +290,19 @@ export default function AdminEventsPage() {
   const formatDuration = (minutes: number) => {
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;
-    return `${hours}h ${mins}min`;
+    if (hours > 0) {
+      return `${hours}h ${mins}min`;
+    }
+    return `${mins}min`;
+  };
+
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map((n) => n[0])
+      .slice(0, 2)
+      .join('')
+      .toUpperCase();
   };
 
   const eventTypeOptions = [
@@ -240,41 +320,45 @@ export default function AdminEventsPage() {
       <div>
         <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground">Eventos</h1>
         <p className="text-xs sm:text-sm text-muted-foreground">
-          Registro de atividades dos usuários • Últimos 30 dias
+          Controle de ponto e registro de atividades • Últimos 30 dias
         </p>
       </div>
 
       {/* Summary Stats */}
       <div className="kpi-grid">
         <KPICard
-          title="Logins"
-          subtitle="Acessos bem-sucedidos"
-          value={sortedEvents.filter((e) => e.event_type === 'auth.login.success').length}
-          icon={LogIn}
+          title="Usuários Online"
+          subtitle="Sessões ativas agora"
+          value={onlineCount}
+          icon={UserCheck}
           iconColor="text-success"
           iconBgColor="bg-success/10"
         />
         <KPICard
-          title="Logouts"
-          subtitle="Sessões encerradas"
-          value={sortedEvents.filter((e) => e.event_type === 'auth.logout').length}
-          icon={LogOut}
-          iconColor="text-warning"
-          iconBgColor="bg-warning/10"
+          title="Usuários Offline"
+          subtitle="Sem sessão ativa"
+          value={offlineCount}
+          icon={UserX}
+          iconColor="text-muted-foreground"
+          iconBgColor="bg-muted"
         />
         <KPICard
-          title="Falhas"
-          subtitle="Tentativas com erro"
-          value={sortedEvents.filter((e) => e.event_type === 'auth.login.failed').length}
-          icon={XCircle}
-          iconColor="text-destructive"
-          iconBgColor="bg-destructive/10"
+          title="Total de Funcionários"
+          subtitle="Usuários ativos da conta"
+          value={totalUsers}
+          icon={Users}
+          iconColor="text-primary"
+          iconBgColor="bg-primary/10"
         />
       </div>
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList>
+          <TabsTrigger value="ponto" className="gap-2">
+            <Users className="w-4 h-4" />
+            Controle de Ponto
+          </TabsTrigger>
           <TabsTrigger value="timeline" className="gap-2">
             <Clock className="w-4 h-4" />
             Timeline
@@ -284,6 +368,140 @@ export default function AdminEventsPage() {
             Relatório Mensal
           </TabsTrigger>
         </TabsList>
+
+        {/* Controle de Ponto Tab */}
+        <TabsContent value="ponto" className="space-y-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Users className="w-5 h-5 text-primary" />
+                Status dos Funcionários
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Visão em tempo real de quem está online no sistema
+              </p>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="h-[500px] pr-4">
+                <div className="space-y-3">
+                  {userOnlineStatuses.map((status) => (
+                    <div
+                      key={status.user.id}
+                      className={cn(
+                        "p-4 rounded-lg border transition-all",
+                        status.isOnline 
+                          ? "bg-success/5 border-success/20" 
+                          : "bg-card border-border"
+                      )}
+                    >
+                      <div className="flex items-center gap-4">
+                        {/* Avatar com indicador de status */}
+                        <div className="relative">
+                          <Avatar className="h-12 w-12">
+                            <AvatarFallback className={cn(
+                              "text-sm font-medium",
+                              status.isOnline 
+                                ? "bg-success/20 text-success" 
+                                : "bg-muted text-muted-foreground"
+                            )}>
+                              {getInitials(status.user.nome)}
+                            </AvatarFallback>
+                          </Avatar>
+                          {/* Bolinha de status */}
+                          <div 
+                            className={cn(
+                              "absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border-2 border-background",
+                              status.isOnline ? "bg-success" : "bg-muted-foreground/50"
+                            )}
+                          />
+                        </div>
+
+                        {/* Info do usuário */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-medium text-foreground truncate">
+                              {status.user.nome}
+                            </p>
+                            {getRoleBadge(status.user.role)}
+                            <Badge 
+                              variant={status.isOnline ? "success" : "secondary"}
+                              className="text-xs"
+                            >
+                              {status.isOnline ? 'Online' : 'Offline'}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground truncate">
+                            {status.user.email}
+                          </p>
+                        </div>
+
+                        {/* Tempo e último acesso */}
+                        <div className="text-right hidden sm:block">
+                          {status.isOnline ? (
+                            <div>
+                              <p className="text-sm font-medium text-success flex items-center gap-1.5 justify-end">
+                                <Timer className="w-4 h-4" />
+                                {formatDuration(status.currentSessionMinutes)}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                Sessão ativa
+                              </p>
+                            </div>
+                          ) : (
+                            <div>
+                              {status.lastEventTime ? (
+                                <>
+                                  <p className="text-sm text-muted-foreground">
+                                    {format(status.lastEventTime, "dd/MM 'às' HH:mm", { locale: ptBR })}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    Último acesso
+                                  </p>
+                                </>
+                              ) : (
+                                <p className="text-sm text-muted-foreground">
+                                  Sem atividade recente
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Mobile: Info adicional */}
+                      <div className="sm:hidden mt-3 pt-3 border-t border-border/50">
+                        {status.isOnline ? (
+                          <div className="flex items-center gap-2 text-sm text-success">
+                            <Timer className="w-4 h-4" />
+                            <span>Sessão ativa há {formatDuration(status.currentSessionMinutes)}</span>
+                          </div>
+                        ) : (
+                          <div className="text-sm text-muted-foreground">
+                            {status.lastEventTime ? (
+                              <span>Último acesso: {format(status.lastEventTime, "dd/MM 'às' HH:mm", { locale: ptBR })}</span>
+                            ) : (
+                              <span>Sem atividade recente</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+
+                  {userOnlineStatuses.length === 0 && (
+                    <div className="p-12 text-center text-muted-foreground">
+                      <Users className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                      <p>Nenhum funcionário encontrado</p>
+                      <p className="text-sm mt-1">
+                        Os funcionários da conta aparecerão aqui
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         {/* Timeline Tab */}
         <TabsContent value="timeline" className="space-y-4">
