@@ -373,12 +373,12 @@ export default function SuperAdminUsersPage() {
               Novo Usuário
             </Button>
           </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+            <DialogHeader className="flex-shrink-0">
               <DialogTitle>Criar Novo Usuário</DialogTitle>
               <DialogDescription>Adicione um novo usuário ao sistema</DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
+            <div className="space-y-4 py-4 overflow-y-auto flex-1 px-1">
               <div className="space-y-2">
                 <Label htmlFor="nome">Nome <span className="text-destructive">*</span></Label>
                 <Input
@@ -398,7 +398,7 @@ export default function SuperAdminUsersPage() {
                   placeholder="email@exemplo.com"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="role">Papel <span className="text-destructive">*</span></Label>
                   <Select
@@ -452,7 +452,7 @@ export default function SuperAdminUsersPage() {
                   {/* Page permissions */}
                   <div className="space-y-2">
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Páginas</p>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 xs:grid-cols-2 gap-2">
                       {agentPermissionAreas.map((area) => (
                         <div 
                           key={area.id} 
@@ -485,7 +485,7 @@ export default function SuperAdminUsersPage() {
                   {/* Action permissions */}
                   <div className="space-y-2 pt-2 border-t">
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Ações Especiais</p>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 xs:grid-cols-2 gap-2">
                       {agentActionPermissions.map((action) => (
                         <div 
                           key={action.id} 
@@ -575,7 +575,7 @@ export default function SuperAdminUsersPage() {
                 </div>
               </div>
             </div>
-            <DialogFooter>
+            <DialogFooter className="flex-shrink-0 flex-col sm:flex-row gap-2">
               <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
                 Cancelar
               </Button>
@@ -723,13 +723,13 @@ export default function SuperAdminUsersPage() {
 
       {/* Edit Dialog */}
       <Dialog open={!!editingUser} onOpenChange={() => setEditingUser(null)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>Editar Usuário</DialogTitle>
             <DialogDescription>Atualize os dados do usuário</DialogDescription>
           </DialogHeader>
           {editingUser && (
-            <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
+            <div className="space-y-4 py-4 overflow-y-auto flex-1 px-1">
               <div className="space-y-2">
                 <Label htmlFor="edit-nome">Nome <span className="text-destructive">*</span></Label>
                 <Input
@@ -749,7 +749,7 @@ export default function SuperAdminUsersPage() {
                   placeholder="email@exemplo.com"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="edit-role">Papel <span className="text-destructive">*</span></Label>
                   <Select
@@ -824,7 +824,7 @@ export default function SuperAdminUsersPage() {
                   {/* Page permissions */}
                   <div className="space-y-2">
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Páginas</p>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 xs:grid-cols-2 gap-2">
                       {agentPermissionAreas.map((area) => (
                         <div 
                           key={area.id} 
@@ -857,7 +857,7 @@ export default function SuperAdminUsersPage() {
                   {/* Action permissions */}
                   <div className="space-y-2 pt-2 border-t">
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Ações Especiais</p>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 xs:grid-cols-2 gap-2">
                       {agentActionPermissions.map((action) => (
                         <div 
                           key={action.id} 
@@ -948,7 +948,7 @@ export default function SuperAdminUsersPage() {
               </div>
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="flex-shrink-0 flex-col sm:flex-row gap-2">
             <Button variant="outline" onClick={() => setEditingUser(null)}>
               Cancelar
             </Button>
@@ -961,7 +961,7 @@ export default function SuperAdminUsersPage() {
 
       {/* Delete Confirmation Dialog with Password */}
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="max-w-md">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2 text-destructive">
               <Shield className="w-5 h-5" />
@@ -1008,7 +1008,7 @@ export default function SuperAdminUsersPage() {
             </div>
           </div>
           
-          <AlertDialogFooter>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
             <AlertDialogCancel 
               onClick={() => {
                 setDeletePassword('');
