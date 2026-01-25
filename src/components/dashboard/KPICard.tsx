@@ -51,8 +51,8 @@ export function KPICard({
       <CardContent className="p-4 sm:p-5">
         <div className="flex items-start justify-between gap-2">
           <div className="space-y-1 min-w-0 flex-1">
-            {/* Label - uppercase, muted, tracking */}
-            <p className="text-[10px] sm:text-xs font-medium uppercase tracking-[0.04em] text-muted-foreground truncate">
+            {/* Label - uppercase, muted, tracking - sem truncate para texto completo */}
+            <p className="text-[10px] sm:text-xs font-medium uppercase tracking-[0.04em] text-muted-foreground leading-tight">
               {title}
             </p>
             {/* KPI Number - responsive size */}
@@ -60,7 +60,7 @@ export function KPICard({
               {value}
             </p>
             {subtitle && (
-              <p className="text-[10px] sm:text-xs text-muted-foreground line-clamp-2">{subtitle}</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground line-clamp-2 break-words">{subtitle}</p>
             )}
             {trend && (
               <p
