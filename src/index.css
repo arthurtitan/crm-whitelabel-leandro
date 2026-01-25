@@ -510,11 +510,15 @@
   }
 }
 
+/* Dashboard com 5 KPIs: 5 colunas a partir de 900px */
+@media (min-width: 900px) {
+  .kpi-grid-6 {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
 @media (min-width: 1024px) {
   .kpi-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-  .kpi-grid-6 {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
   .kpi-grid-finance {
@@ -524,9 +528,6 @@
 
 @media (min-width: 1280px) {
   .kpi-grid {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-  }
-  .kpi-grid-6 {
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 }

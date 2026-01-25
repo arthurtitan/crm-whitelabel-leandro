@@ -47,7 +47,7 @@ export function KPICard({
   }
 
   return (
-    <Card className={cn('min-w-0 w-full h-full', className)}>
+    <Card className={cn('min-w-0 w-full h-full min-h-[100px] sm:min-h-[110px]', className)}>
       <CardContent className="p-3 sm:p-4 h-full">
         <div className="flex items-start justify-between gap-2 h-full">
           <div className="space-y-0.5 sm:space-y-1 min-w-0 flex-1">
@@ -55,12 +55,12 @@ export function KPICard({
             <p className="text-[9px] sm:text-[10px] md:text-xs font-medium uppercase tracking-[0.04em] text-muted-foreground leading-tight">
               {title}
             </p>
-            {/* KPI Number - responsive size */}
-            <p className="text-lg sm:text-xl md:text-2xl font-semibold text-foreground leading-tight break-words">
+            {/* KPI Number - responsive size, never wrap */}
+            <p className="text-lg sm:text-xl md:text-2xl font-semibold text-foreground leading-tight whitespace-nowrap">
               {value}
             </p>
             {subtitle && (
-              <p className="text-[9px] sm:text-[10px] md:text-xs text-muted-foreground leading-snug break-words">{subtitle}</p>
+              <p className="text-[9px] sm:text-[10px] md:text-xs text-muted-foreground leading-snug line-clamp-2">{subtitle}</p>
             )}
             {trend && (
               <p

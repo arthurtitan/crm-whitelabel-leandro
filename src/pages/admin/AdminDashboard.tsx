@@ -393,7 +393,7 @@ export default function AdminDashboard() {
           <div className="kpi-grid-6">
             <KPICard
               title="Total de Leads"
-              subtitle={getAgentContextSubtitle('Contatos únicos que tiveram conversa')}
+              subtitle={getAgentContextSubtitle('Contatos únicos')}
               value={displayedData.kpis.totalLeads}
               icon={Users}
               iconColor="text-primary"
@@ -402,7 +402,7 @@ export default function AdminDashboard() {
             />
             <KPICard
               title="Conversas Ativas"
-              subtitle={getAgentContextSubtitle('Atendimentos em andamento')}
+              subtitle={getAgentContextSubtitle('Em andamento')}
               value={displayedData.kpis.conversasAtivas}
               icon={MessageSquare}
               iconColor="text-info"
@@ -413,7 +413,7 @@ export default function AdminDashboard() {
               title="Agendamentos"
               subtitle={selectedAgentFromTable 
                 ? `Dados de ${selectedAgentFromTable}` 
-                : (isAdmin ? (selectedAgent !== 'all' ? 'Do agente selecionado' : 'Visão geral da clínica') : 'Seus agendamentos')}
+                : (isAdmin ? (selectedAgent !== 'all' ? 'Agente selecionado' : 'Visão geral') : 'Seus agendamentos')}
               value={totalAppointments}
               icon={CalendarCheck}
               iconColor="text-success"
@@ -422,7 +422,7 @@ export default function AdminDashboard() {
             />
             <KPICard
               title="Atendimentos IA"
-              subtitle={getAgentContextSubtitle('Conversas gerenciadas pela IA')}
+              subtitle={getAgentContextSubtitle('Via automação')}
               value={aiServiceCount}
               icon={Bot}
               iconColor="text-info"
