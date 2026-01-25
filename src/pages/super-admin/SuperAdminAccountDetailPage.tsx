@@ -38,6 +38,10 @@ import {
   Languages,
   Play,
   Pause,
+  RefreshCw,
+  Loader2,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -48,9 +52,12 @@ interface EditFormData {
   idioma: 'pt' | 'en';
   status: AccountStatus;
   chatwootEnabled: boolean;
+  chatwootBaseUrl: string;
   chatwootAccountId: string;
   chatwootApiKey: string;
 }
+
+type ConnectionStatus = 'idle' | 'loading' | 'success' | 'error';
 
 export default function SuperAdminAccountDetailPage() {
   const { accountId } = useParams<{ accountId: string }>();
@@ -67,9 +74,11 @@ export default function SuperAdminAccountDetailPage() {
     idioma: 'pt',
     status: 'active',
     chatwootEnabled: false,
+    chatwootBaseUrl: '',
     chatwootAccountId: '',
     chatwootApiKey: '',
   });
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('idle');
 
   if (!account) {
     return (
@@ -100,12 +109,35 @@ export default function SuperAdminAccountDetailPage() {
       nome: account.nome,
       idioma: (account as any).idioma || 'pt',
       status: account.status,
-      chatwootEnabled: !!(account.chatwoot_account_id || account.chatwoot_api_key),
+      chatwootEnabled: !!(account.chatwoot_account_id || account.chatwoot_api_key || account.chatwoot_base_url),
+      chatwootBaseUrl: account.chatwoot_base_url || '',
       chatwootAccountId: account.chatwoot_account_id || '',
       chatwootApiKey: account.chatwoot_api_key || '',
     });
+    setConnectionStatus('idle');
     setIsControlOpen(true);
   };
+
+  const handleTestConnection = async () => {
+    setConnectionStatus('loading');
+    
+    // Simulate API call
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    
+    // Mock validation - check if all fields are filled
+    if (editFormData.chatwootBaseUrl && editFormData.chatwootAccountId && editFormData.chatwootApiKey) {
+      setConnectionStatus('success');
+      toast.success('Conexão verificada com sucesso!');
+    } else {
+      setConnectionStatus('error');
+      toast.error('Preencha todos os campos da integração');
+    }
+  };
+
+  const canTestConnection = editFormData.chatwootEnabled && 
+    editFormData.chatwootBaseUrl.trim() !== '' &&
+    editFormData.chatwootAccountId.trim() !== '' && 
+    editFormData.chatwootApiKey.trim() !== '';
 
   const handleToggleStatus = () => {
     const newStatus = account.status === 'active' ? 'paused' : 'active';
@@ -122,6 +154,7 @@ export default function SuperAdminAccountDetailPage() {
       ...account,
       nome: editFormData.nome,
       status: editFormData.status,
+      chatwoot_base_url: editFormData.chatwootEnabled ? editFormData.chatwootBaseUrl : undefined,
       chatwoot_account_id: editFormData.chatwootEnabled ? editFormData.chatwootAccountId : undefined,
       chatwoot_api_key: editFormData.chatwootEnabled ? editFormData.chatwootApiKey : undefined,
       updated_at: new Date().toISOString(),
@@ -464,24 +497,39 @@ export default function SuperAdminAccountDetailPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <Label htmlFor="edit-chatwoot">Integração Chatwoot</Label>
-                  <p className="text-xs text-muted-foreground">Habilitar consumo de dados do Chatwoot</p>
+                  <p className="text-xs text-muted-foreground">Habilitar para sincronizar agentes do Chatwoot</p>
                 </div>
                 <Switch
                   id="edit-chatwoot"
                   checked={editFormData.chatwootEnabled}
-                  onCheckedChange={(checked) => setEditFormData({ ...editFormData, chatwootEnabled: checked })}
+                  onCheckedChange={(checked) => {
+                    setEditFormData({ ...editFormData, chatwootEnabled: checked });
+                    if (!checked) setConnectionStatus('idle');
+                  }}
                 />
               </div>
               
               {editFormData.chatwootEnabled && (
-                <div className="space-y-4 pl-2 border-l-2 border-primary/30">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-chatwoot-url">URL da Instância</Label>
+                    <Input
+                      id="edit-chatwoot-url"
+                      value={editFormData.chatwootBaseUrl}
+                      onChange={(e) => setEditFormData({ ...editFormData, chatwootBaseUrl: e.target.value })}
+                      placeholder="https://app.chatwoot.com"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      URL do Chatwoot Cloud ou da sua instância self-hosted
+                    </p>
+                  </div>
                   <div className="space-y-2">
                     <Label htmlFor="edit-chatwoot-id">Account ID</Label>
                     <Input
                       id="edit-chatwoot-id"
                       value={editFormData.chatwootAccountId}
                       onChange={(e) => setEditFormData({ ...editFormData, chatwootAccountId: e.target.value })}
-                      placeholder="Ex: 12345"
+                      placeholder="ID da conta no Chatwoot"
                     />
                   </div>
                   <div className="space-y-2">
@@ -491,9 +539,32 @@ export default function SuperAdminAccountDetailPage() {
                       type="password"
                       value={editFormData.chatwootApiKey}
                       onChange={(e) => setEditFormData({ ...editFormData, chatwootApiKey: e.target.value })}
-                      placeholder="Sua chave de API do Chatwoot"
+                      placeholder="Access Token do usuário"
                     />
                   </div>
+
+                  {/* Test Connection Button */}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full gap-2"
+                    disabled={!canTestConnection || connectionStatus === 'loading'}
+                    onClick={handleTestConnection}
+                  >
+                    {connectionStatus === 'loading' && (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    )}
+                    {connectionStatus === 'success' && (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                    )}
+                    {connectionStatus === 'error' && (
+                      <XCircle className="w-4 h-4 text-destructive" />
+                    )}
+                    {connectionStatus === 'idle' && (
+                      <RefreshCw className="w-4 h-4" />
+                    )}
+                    {connectionStatus === 'loading' ? 'Testando...' : 'Testar Conexão e Buscar Agentes'}
+                  </Button>
                 </div>
               )}
             </div>
