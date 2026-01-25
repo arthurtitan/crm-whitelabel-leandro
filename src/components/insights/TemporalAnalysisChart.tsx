@@ -137,7 +137,7 @@ export function TemporalAnalysisChart({
         </div>
 
         {/* Chart */}
-        <ChartContainer config={chartConfig} className="h-[250px] w-full">
+        <ChartContainer config={chartConfig} className="h-[200px] sm:h-[220px] md:h-[250px] w-full">
           <AreaChart data={dataWithMovingAverage} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="colorValor" x1="0" y1="0" x2="0" y2="1">
@@ -155,9 +155,9 @@ export function TemporalAnalysisChart({
             <YAxis 
               axisLine={false} 
               tickLine={false}
-              tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
+              tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 9 }}
               tickFormatter={(value) => formatCurrency(value)}
-              width={70}
+              width={55}
             />
             <ChartTooltip
               content={

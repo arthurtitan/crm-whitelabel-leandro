@@ -91,7 +91,7 @@ export function ProductAnalysisTable({ products, totalRevenue }: ProductAnalysis
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Highlight Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 gap-3">
           {starProduct && (
             <div className="p-3 rounded-lg bg-warning/5 border border-warning/20">
               <div className="flex items-center gap-2 mb-2">
@@ -125,17 +125,17 @@ export function ProductAnalysisTable({ products, totalRevenue }: ProductAnalysis
         </div>
 
         {/* Full Table */}
-        <ScrollArea className="h-[300px]">
-          <div className="overflow-x-auto">
-            <Table className="min-w-[600px]">
+        <ScrollArea className="h-[280px] sm:h-[300px]">
+          <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+            <Table className="min-w-[540px]">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="min-w-[180px]">Produto</TableHead>
-                  <TableHead className="text-center min-w-[80px]">Vendas</TableHead>
-                  <TableHead className="text-right min-w-[120px]">Receita</TableHead>
-                  <TableHead className="text-right min-w-[100px]">Ticket</TableHead>
-                  <TableHead className="min-w-[100px] hidden md:table-cell">Participação</TableHead>
-                  <TableHead className="text-center min-w-[60px]">Trend</TableHead>
+                  <TableHead className="min-w-[140px]">Produto</TableHead>
+                  <TableHead className="text-center min-w-[60px]">Vendas</TableHead>
+                  <TableHead className="text-right min-w-[90px]">Receita</TableHead>
+                  <TableHead className="text-right min-w-[80px] hidden sm:table-cell">Ticket</TableHead>
+                  <TableHead className="min-w-[90px] hidden md:table-cell">Participação</TableHead>
+                  <TableHead className="text-center min-w-[50px]">Trend</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -156,10 +156,10 @@ export function ProductAnalysisTable({ products, totalRevenue }: ProductAnalysis
                     <TableCell className="text-center">
                       <Badge variant="secondary">{product.unidadesVendidas}</Badge>
                     </TableCell>
-                    <TableCell className="text-right font-semibold text-success">
+                    <TableCell className="text-right font-semibold text-success text-sm">
                       {formatCurrency(product.receita)}
                     </TableCell>
-                    <TableCell className="text-right text-muted-foreground">
+                    <TableCell className="text-right text-muted-foreground text-sm hidden sm:table-cell">
                       {formatCurrency(product.ticketMedio)}
                     </TableCell>
                     <TableCell className="hidden md:table-cell">

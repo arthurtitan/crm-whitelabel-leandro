@@ -97,14 +97,14 @@ export function AgentPerformanceTable({
       </CardHeader>
       <CardContent className="p-0">
         <div className="overflow-x-auto">
-          <Table>
+          <Table className="min-w-[520px]">
             <TableHeader>
               <TableRow className="bg-muted/50 hover:bg-muted/50">
-                <TableHead className="font-semibold">Agente</TableHead>
-                <TableHead className="text-center font-semibold">Assumidos</TableHead>
-                <TableHead className="text-center font-semibold">Resolvidos</TableHead>
-                <TableHead className="text-center font-semibold">Tempo Médio</TableHead>
-                <TableHead className="text-center font-semibold">Taxa Resolução</TableHead>
+                <TableHead className="font-semibold min-w-[140px]">Agente</TableHead>
+                <TableHead className="text-center font-semibold min-w-[70px]">Assumidos</TableHead>
+                <TableHead className="text-center font-semibold min-w-[70px]">Resolvidos</TableHead>
+                <TableHead className="text-center font-semibold min-w-[80px] hidden sm:table-cell">Tempo Médio</TableHead>
+                <TableHead className="text-center font-semibold min-w-[80px]">Taxa</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -150,7 +150,7 @@ export function AgentPerformanceTable({
                     <TableCell className="text-center font-medium">
                       {agent.atendimentosResolvidos}
                     </TableCell>
-                    <TableCell className="text-center text-muted-foreground">
+                    <TableCell className="text-center text-muted-foreground hidden sm:table-cell">
                       {agent.tempoMedioResposta}
                     </TableCell>
                     <TableCell className="text-center">

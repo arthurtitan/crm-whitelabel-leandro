@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { mockEvents, mockUsers } from '@/data/mockData';
 import { CRMEvent, EventType } from '@/types/crm';
+import { KPICard } from '@/components/dashboard/KPICard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -245,45 +246,30 @@ export default function AdminEventsPage() {
 
       {/* Summary Stats */}
       <div className="kpi-grid">
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-success/10 flex items-center justify-center">
-              <LogIn className="w-5 h-5 text-success" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">
-                {sortedEvents.filter((e) => e.event_type === 'auth.login.success').length}
-              </p>
-              <p className="text-sm text-muted-foreground">Logins</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-warning/10 flex items-center justify-center">
-              <LogOut className="w-5 h-5 text-warning" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">
-                {sortedEvents.filter((e) => e.event_type === 'auth.logout').length}
-              </p>
-              <p className="text-sm text-muted-foreground">Logouts</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-destructive/10 flex items-center justify-center">
-              <XCircle className="w-5 h-5 text-destructive" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">
-                {sortedEvents.filter((e) => e.event_type === 'auth.login.failed').length}
-              </p>
-              <p className="text-sm text-muted-foreground">Falhas</p>
-            </div>
-          </CardContent>
-        </Card>
+        <KPICard
+          title="Logins"
+          subtitle="Acessos bem-sucedidos"
+          value={sortedEvents.filter((e) => e.event_type === 'auth.login.success').length}
+          icon={LogIn}
+          iconColor="text-success"
+          iconBgColor="bg-success/10"
+        />
+        <KPICard
+          title="Logouts"
+          subtitle="Sessões encerradas"
+          value={sortedEvents.filter((e) => e.event_type === 'auth.logout').length}
+          icon={LogOut}
+          iconColor="text-warning"
+          iconBgColor="bg-warning/10"
+        />
+        <KPICard
+          title="Falhas"
+          subtitle="Tentativas com erro"
+          value={sortedEvents.filter((e) => e.event_type === 'auth.login.failed').length}
+          icon={XCircle}
+          iconColor="text-destructive"
+          iconBgColor="bg-destructive/10"
+        />
       </div>
 
       {/* Tabs */}
@@ -552,17 +538,17 @@ export default function AdminEventsPage() {
               <CardTitle className="text-base">Detalhamento por Funcionário</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="table-container">
-                <Table>
+              <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+                <Table className="min-w-[640px]">
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Funcionário</TableHead>
-                      <TableHead className="text-center">Logins</TableHead>
-                      <TableHead className="text-center">Logouts</TableHead>
-                      <TableHead className="text-center">Falhas</TableHead>
-                      <TableHead className="text-center">Dias Ativos</TableHead>
-                      <TableHead className="text-right">Tempo Médio</TableHead>
-                      <TableHead className="text-right">Tempo Total</TableHead>
+                      <TableHead className="min-w-[140px]">Funcionário</TableHead>
+                      <TableHead className="text-center min-w-[60px]">Logins</TableHead>
+                      <TableHead className="text-center min-w-[60px] hidden sm:table-cell">Logouts</TableHead>
+                      <TableHead className="text-center min-w-[60px] hidden sm:table-cell">Falhas</TableHead>
+                      <TableHead className="text-center min-w-[60px]">Dias</TableHead>
+                      <TableHead className="text-right min-w-[80px] hidden md:table-cell">Tempo Médio</TableHead>
+                      <TableHead className="text-right min-w-[80px]">Tempo Total</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -579,18 +565,18 @@ export default function AdminEventsPage() {
                             {perf.totalLogins}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-center">
+                        <TableCell className="text-center hidden sm:table-cell">
                           <Badge variant="outline" className="bg-warning/10 text-warning border-warning/20">
                             {perf.totalLogouts}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-center">
+                        <TableCell className="text-center hidden sm:table-cell">
                           <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20">
                             {perf.totalFailures}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-center font-medium">{perf.daysWorked}</TableCell>
-                        <TableCell className="text-right text-muted-foreground">
+                        <TableCell className="text-right text-muted-foreground hidden md:table-cell">
                           {formatDuration(perf.avgSessionMinutes)}
                         </TableCell>
                         <TableCell className="text-right font-semibold text-primary">
