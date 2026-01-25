@@ -359,9 +359,9 @@ export default function AdminDashboard() {
       {/* Global Filters */}
       <DashboardFilters
         onPeriodChange={handlePeriodChange}
-        onChannelChange={setChannel}
         onAgentChange={setSelectedAgent}
         showAgentFilter={false}
+        showChannelFilter={false}
         showTypeFilter={false}
       />
 
