@@ -215,7 +215,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         )}
       >
         <ScrollArea className="h-[calc(100%-5rem)]">
-          <nav className="p-2 sm:p-3 space-y-0.5 sm:space-y-1">
+          <nav className="p-3 space-y-1">
             {visibleNavItems.map((item) => {
               const isActive = location.pathname === item.href;
               return (
@@ -224,14 +224,14 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                   to={item.href}
                   onClick={() => setMobileOpen(false)}
                   className={cn(
-                    'flex items-center gap-3 px-3 py-3 sm:py-2.5 rounded-lg transition-all touch-target',
+                    'flex items-center justify-start gap-3 px-4 py-3 rounded-lg transition-all touch-target text-left',
                     isActive
                       ? 'bg-sidebar-primary text-sidebar-primary-foreground'
                       : 'text-sidebar-foreground hover:bg-sidebar-accent'
                   )}
                 >
                   <item.icon className="w-5 h-5 flex-shrink-0" />
-                  <span className="font-medium text-sm sm:text-base">{item.title}</span>
+                  <span className="font-medium">{item.title}</span>
                 </Link>
               );
             })}
