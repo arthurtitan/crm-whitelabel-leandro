@@ -360,9 +360,9 @@ export default function AdminDashboard() {
       <DashboardFilters
         onPeriodChange={handlePeriodChange}
         onChannelChange={setChannel}
-        onTypeChange={setType}
         onAgentChange={setSelectedAgent}
         showAgentFilter={false}
+        showTypeFilter={false}
       />
 
       {isEmpty ? (
