@@ -79,17 +79,17 @@ export function PaymentMethodChart({ isLoading = false }: PaymentMethodChartProp
 
   if (data.length === 0) {
     return (
-      <Card>
-        <CardHeader className="pb-2">
+      <Card className="overflow-hidden">
+        <CardHeader className="p-3 sm:p-4 pb-2">
           <div className="flex items-center gap-2">
-            <CreditCard className="w-5 h-5 text-primary" />
-            <CardTitle className="text-base font-semibold text-foreground">
-              Distribuição por Método de Pagamento
+            <CreditCard className="w-4 h-4 sm:w-5 sm:h-5 text-primary shrink-0" />
+            <CardTitle className="text-sm sm:text-base font-semibold text-foreground truncate">
+              Distribuição por Método
             </CardTitle>
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+        <CardContent className="p-2 sm:p-4">
+          <div className="h-[160px] sm:h-[200px] flex items-center justify-center text-muted-foreground text-sm">
             Nenhuma venda paga no período
           </div>
         </CardContent>
@@ -98,18 +98,18 @@ export function PaymentMethodChart({ isLoading = false }: PaymentMethodChartProp
   }
 
   return (
-    <Card>
-      <CardHeader className="pb-2">
+    <Card className="overflow-hidden">
+      <CardHeader className="p-3 sm:p-4 pb-2">
         <div className="flex items-center gap-2">
-          <CreditCard className="w-5 h-5 text-primary" />
-          <CardTitle className="text-base font-semibold text-foreground">
-            Distribuição por Método de Pagamento
+          <CreditCard className="w-4 h-4 sm:w-5 sm:h-5 text-primary shrink-0" />
+          <CardTitle className="text-sm sm:text-base font-semibold text-foreground truncate">
+            Distribuição por Método
           </CardTitle>
         </div>
-        <p className="text-xs text-muted-foreground">Vendas pagas por forma de pagamento</p>
+        <p className="text-[10px] sm:text-xs text-muted-foreground">Vendas pagas por forma de pagamento</p>
       </CardHeader>
-      <CardContent className="p-3 sm:p-6">
-        <ChartContainer config={chartConfig} className="h-[180px] sm:h-[220px] md:h-[260px] w-full">
+      <CardContent className="p-2 sm:p-4 pt-0">
+        <ChartContainer config={chartConfig} className="h-[160px] sm:h-[200px] md:h-[240px] w-full">
           <PieChart>
             <Pie
               data={data}
@@ -152,16 +152,16 @@ export function PaymentMethodChart({ isLoading = false }: PaymentMethodChartProp
         </ChartContainer>
 
         {/* Legend - responsive grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 mt-3 sm:mt-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 sm:gap-2 mt-2 sm:mt-3">
           {data.map((item) => {
             const percentage = total > 0 ? ((item.value / total) * 100).toFixed(0) : 0;
             return (
-              <div key={item.method} className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+              <div key={item.method} className="flex items-center gap-1.5 min-w-0">
                 <div
-                  className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shrink-0"
+                  className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full shrink-0"
                   style={{ backgroundColor: COLORS[item.method] }}
                 />
-                <span className="text-[10px] sm:text-xs md:text-sm text-foreground truncate">
+                <span className="text-[9px] sm:text-[10px] md:text-xs text-foreground truncate">
                   {item.name} ({percentage}%)
                 </span>
               </div>

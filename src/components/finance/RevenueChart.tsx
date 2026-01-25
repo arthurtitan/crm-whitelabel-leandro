@@ -49,19 +49,21 @@ export function RevenueChart({ isLoading = false }: RevenueChartProps) {
   };
 
   return (
-    <Card>
-      <CardHeader className="pb-2">
+    <Card className="overflow-hidden">
+      <CardHeader className="p-3 sm:p-4 pb-2">
         <div className="flex items-center gap-2">
-          <TrendingUp className="w-5 h-5" style={{ color: CHART_GREEN }} />
-          <CardTitle className="text-base font-semibold text-foreground">Evolução do Faturamento</CardTitle>
+          <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" style={{ color: CHART_GREEN }} />
+          <CardTitle className="text-sm sm:text-base font-semibold text-foreground truncate">
+            Evolução do Faturamento
+          </CardTitle>
         </div>
-        <p className="text-xs text-muted-foreground">Últimos 7 dias</p>
+        <p className="text-[10px] sm:text-xs text-muted-foreground">Últimos 7 dias</p>
       </CardHeader>
-      <CardContent className="p-3 sm:p-6">
+      <CardContent className="p-2 sm:p-4 pt-0">
         <ChartContainer config={chartConfig} className="h-[200px] sm:h-[250px] md:h-[300px] w-full">
           <AreaChart
             data={kpis.faturamentoPorDia}
-            margin={{ top: 10, right: 5, left: -10, bottom: 0 }}
+            margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
           >
             <defs>
               <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
@@ -76,13 +78,14 @@ export function RevenueChart({ isLoading = false }: RevenueChartProps) {
               tickLine={false}
               axisLine={false}
               tick={{ fontSize: 10, fill: '#64748B' }}
+              tickMargin={8}
             />
             <YAxis
               tickLine={false}
               axisLine={false}
               tickFormatter={formatCurrency}
               tick={{ fontSize: 9, fill: '#64748B' }}
-              width={45}
+              width={50}
             />
             <ChartTooltip
               content={
