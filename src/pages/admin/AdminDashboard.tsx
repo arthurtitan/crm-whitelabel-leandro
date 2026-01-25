@@ -267,24 +267,60 @@ export default function AdminDashboard() {
     return filteredEvents.length;
   }, [events, isAdmin, user?.id, selectedAgent, selectedAgentFromTable, dateRange]);
 
-  // Get displayed KPIs based on selected agent from table
+  // Channel multipliers for mock filtering
+  const channelMultipliers: Record<string, number> = {
+    whatsapp: 0.55,
+    instagram: 0.28,
+    webchat: 0.17,
+  };
+
+  // Get displayed KPIs based on selected agent from table and channel filter
   const displayedData = useMemo(() => {
+    let baseData = {
+      kpis: mockDashboardData.kpis,
+      picoPorHora: mockDashboardData.picoPorHora,
+      backlog: mockDashboardData.backlog,
+      qualidade: mockDashboardData.qualidade,
+    };
+
+    // Apply agent filter first
     if (selectedAgentFromTable && mockAgentDashboardData[selectedAgentFromTable]) {
       const agentData = mockAgentDashboardData[selectedAgentFromTable];
-      return {
+      baseData = {
         kpis: agentData,
         picoPorHora: agentData.picoPorHora,
         backlog: agentData.backlog,
         qualidade: agentData.qualidade,
       };
     }
-    return {
-      kpis: mockDashboardData.kpis,
-      picoPorHora: mockDashboardData.picoPorHora,
-      backlog: mockDashboardData.backlog,
-      qualidade: mockDashboardData.qualidade,
-    };
-  }, [selectedAgentFromTable]);
+
+    // Apply channel filter (mock simulation)
+    if (channel !== 'all') {
+      const multiplier = channelMultipliers[channel] || 1;
+      return {
+        kpis: {
+          ...baseData.kpis,
+          totalLeads: Math.round(baseData.kpis.totalLeads * multiplier),
+          conversasAtivas: Math.round(baseData.kpis.conversasAtivas * multiplier),
+        },
+        picoPorHora: baseData.picoPorHora.map(h => ({
+          ...h,
+          totalConversas: Math.round(h.totalConversas * multiplier),
+        })),
+        backlog: {
+          ate15min: Math.round(baseData.backlog.ate15min * multiplier),
+          de15a60min: Math.round(baseData.backlog.de15a60min * multiplier),
+          acima60min: Math.round(baseData.backlog.acima60min * multiplier),
+        },
+        qualidade: {
+          ...baseData.qualidade,
+          conversasSemResposta: Math.round(baseData.qualidade.conversasSemResposta * multiplier),
+        },
+      };
+    }
+
+    return baseData;
+  }, [selectedAgentFromTable, channel]);
 
   // Calculate AI service count based on percentage and total leads
   const aiServiceCount = useMemo(() => {
@@ -314,11 +350,18 @@ export default function AdminDashboard() {
     <div className="page-container">
       {/* Header */}
       <div className="page-header">
-        <div className="min-w-0">
-          <h1 className="title-responsive text-foreground">Dashboard de Atendimento</h1>
-          <p className="text-responsive-sm text-muted-foreground">
-            Métricas operacionais e estratégicas do atendimento
-          </p>
+        <div className="min-w-0 flex items-center gap-3">
+          <div>
+            <h1 className="title-responsive text-foreground">Dashboard de Atendimento</h1>
+            <p className="text-responsive-sm text-muted-foreground">
+              Métricas operacionais e estratégicas do atendimento
+            </p>
+          </div>
+          {/* Mock Data Indicator */}
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-warning/10 border border-warning/20">
+            <span className="w-2 h-2 rounded-full bg-warning animate-pulse" />
+            <span className="text-xs text-warning whitespace-nowrap">Dados simulados</span>
+          </div>
         </div>
 
         {/* State Toggle (for demo purposes) - hidden on mobile */}
@@ -359,9 +402,10 @@ export default function AdminDashboard() {
       {/* Global Filters */}
       <DashboardFilters
         onPeriodChange={handlePeriodChange}
+        onChannelChange={setChannel}
         onAgentChange={setSelectedAgent}
         showAgentFilter={false}
-        showChannelFilter={false}
+        showChannelFilter={true}
         showTypeFilter={false}
       />
 
