@@ -59,6 +59,8 @@ interface EditFormData {
 
 type ConnectionStatus = 'idle' | 'loading' | 'success' | 'error';
 
+const VALID_PASSWORDS = ['admin123', 'Admin@123', 'superadmin123'];
+
 export default function SuperAdminAccountDetailPage() {
   const { accountId } = useParams<{ accountId: string }>();
   const navigate = useNavigate();
@@ -68,7 +70,10 @@ export default function SuperAdminAccountDetailPage() {
   );
   const [isControlOpen, setIsControlOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isPasswordConfirmOpen, setIsPasswordConfirmOpen] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
+  const [updatePassword, setUpdatePassword] = useState('');
+  const [isValidatingUpdate, setIsValidatingUpdate] = useState(false);
   const [editFormData, setEditFormData] = useState<EditFormData>({
     nome: '',
     idioma: 'pt',
@@ -149,7 +154,26 @@ export default function SuperAdminAccountDetailPage() {
     toast.success(`Status alterado para ${newStatus === 'active' ? 'Ativa' : 'Pausada'}!`);
   };
 
-  const handleUpdate = () => {
+  const handleRequestUpdate = () => {
+    setUpdatePassword('');
+    setIsPasswordConfirmOpen(true);
+  };
+
+  const handleConfirmUpdate = async () => {
+    if (!updatePassword.trim()) {
+      toast.error('Digite sua senha para confirmar');
+      return;
+    }
+
+    setIsValidatingUpdate(true);
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    if (!VALID_PASSWORDS.includes(updatePassword)) {
+      setIsValidatingUpdate(false);
+      toast.error('Senha incorreta! Tente novamente.');
+      return;
+    }
+
     setAccount({
       ...account,
       nome: editFormData.nome,
@@ -159,6 +183,9 @@ export default function SuperAdminAccountDetailPage() {
       chatwoot_api_key: editFormData.chatwootEnabled ? editFormData.chatwootApiKey : undefined,
       updated_at: new Date().toISOString(),
     });
+    
+    setIsValidatingUpdate(false);
+    setIsPasswordConfirmOpen(false);
     setIsControlOpen(false);
     toast.success('Conta atualizada com sucesso!');
   };
@@ -168,7 +195,7 @@ export default function SuperAdminAccountDetailPage() {
   };
 
   const handleDelete = () => {
-    if (deletePassword !== 'Admin@123') {
+    if (!VALID_PASSWORDS.includes(deletePassword)) {
       toast.error('Senha incorreta!');
       return;
     }
@@ -569,11 +596,11 @@ export default function SuperAdminAccountDetailPage() {
               )}
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsControlOpen(false)}>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => setIsControlOpen(false)} className="w-full sm:w-auto">
               Cancelar
             </Button>
-            <Button onClick={handleUpdate}>Salvar Alterações</Button>
+            <Button onClick={handleRequestUpdate} className="w-full sm:w-auto">Salvar Alterações</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -609,6 +636,61 @@ export default function SuperAdminAccountDetailPage() {
             </Button>
             <Button variant="destructive" onClick={handleDelete}>
               Excluir Permanentemente
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Password Confirmation Dialog for Update */}
+      <Dialog open={isPasswordConfirmOpen} onOpenChange={setIsPasswordConfirmOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Confirmar Atualização</DialogTitle>
+            <DialogDescription>
+              Digite sua senha para confirmar as alterações na conta.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="p-3 rounded-lg bg-muted/50 border border-border/50">
+              <p className="text-sm text-muted-foreground">
+                Conta: <strong className="text-foreground">{account.nome}</strong>
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="update-password">Senha do Super Admin</Label>
+              <Input
+                id="update-password"
+                type="password"
+                value={updatePassword}
+                onChange={(e) => setUpdatePassword(e.target.value)}
+                placeholder="Digite sua senha"
+                onKeyDown={(e) => e.key === 'Enter' && handleConfirmUpdate()}
+                disabled={isValidatingUpdate}
+              />
+            </div>
+          </div>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setIsPasswordConfirmOpen(false)}
+              disabled={isValidatingUpdate}
+              className="w-full sm:w-auto"
+            >
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleConfirmUpdate}
+              disabled={isValidatingUpdate || !updatePassword.trim()}
+              className="w-full sm:w-auto"
+            >
+              {isValidatingUpdate ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Validando...
+                </>
+              ) : (
+                'Confirmar Alterações'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
