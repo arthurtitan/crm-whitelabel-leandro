@@ -107,7 +107,8 @@ export const mockUsers: User[] = [
     email: 'pedro@clinicavidaplena.com',
     role: 'agent',
     status: 'active',
-    chatwoot_agent_id: 102, // Vinculado ao agente do Chatwoot
+    chatwoot_agent_id: 102,
+    permissions: ['dashboard', 'kanban', 'leads', 'agenda'], // 4 permissões ativas
     last_login_at: '2025-01-18T17:00:00Z',
     created_at: '2024-07-15T11:00:00Z',
     updated_at: '2025-01-18T17:00:00Z',
