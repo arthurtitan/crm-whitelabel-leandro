@@ -47,12 +47,12 @@ export function KPICard({
   }
 
   return (
-    <Card className={cn('min-w-0 w-full h-full min-h-[100px] sm:min-h-[110px]', className)}>
+    <Card className={cn('min-w-0 w-full h-full min-h-[90px] sm:min-h-[100px]', className)}>
       <CardContent className="p-3 sm:p-4 h-full">
         <div className="flex items-start justify-between gap-2 h-full">
           <div className="space-y-0.5 sm:space-y-1 min-w-0 flex-1">
             {/* Label - fonte fluida com clamp */}
-            <p className="text-kpi-label font-medium text-muted-foreground line-clamp-2">
+            <p className="text-kpi-label font-medium text-muted-foreground">
               {title}
             </p>
             {/* KPI Number - fonte fluida, sempre visível */}
@@ -73,9 +73,9 @@ export function KPICard({
               </p>
             )}
           </div>
-          {/* Icon */}
-          <div className={cn('p-1.5 sm:p-2 rounded-lg shrink-0', iconBgColor)}>
-            <Icon className={cn('w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5', iconColor)} />
+          {/* Icon - hidden on very small screens (< 360px) to prevent overlap */}
+          <div className={cn('hidden xs:flex p-1.5 sm:p-2 rounded-lg shrink-0', iconBgColor)}>
+            <Icon className={cn('w-4 h-4 sm:w-5 sm:h-5', iconColor)} />
           </div>
         </div>
       </CardContent>
