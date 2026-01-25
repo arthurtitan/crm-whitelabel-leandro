@@ -50,13 +50,13 @@ export function KPICard({
     <Card className={cn('min-w-0 w-full h-full min-h-[100px] sm:min-h-[110px]', className)}>
       <CardContent className="p-3 sm:p-4 h-full">
         <div className="flex items-start justify-between gap-2 h-full">
-          <div className="space-y-0.5 sm:space-y-1 min-w-0 flex-1">
-            {/* Label - uppercase, muted, tracking - wrap natural */}
-            <p className="text-[9px] sm:text-[10px] md:text-xs font-medium uppercase tracking-[0.04em] text-muted-foreground leading-tight">
+          <div className="space-y-0.5 sm:space-y-1 min-w-0 flex-1 overflow-hidden">
+            {/* Label - uppercase, muted, tracking - 2 linhas max */}
+            <p className="text-[9px] sm:text-[10px] md:text-xs font-medium uppercase tracking-[0.04em] text-muted-foreground leading-tight line-clamp-2">
               {title}
             </p>
-            {/* KPI Number - responsive size, never wrap */}
-            <p className="text-lg sm:text-xl md:text-2xl font-semibold text-foreground leading-tight whitespace-nowrap">
+            {/* KPI Number - responsive size, trunca se necessário */}
+            <p className="text-lg sm:text-xl md:text-2xl font-semibold text-foreground leading-tight whitespace-nowrap overflow-hidden text-ellipsis max-w-full">
               {value}
             </p>
             {subtitle && (
@@ -65,11 +65,11 @@ export function KPICard({
             {trend && (
               <p
                 className={cn(
-                  'text-[9px] sm:text-[10px] md:text-xs font-medium',
+                  'text-[9px] sm:text-[10px] md:text-xs font-medium whitespace-nowrap',
                   trend.isPositive ? 'text-success' : 'text-destructive'
                 )}
               >
-                {trend.isPositive ? '↑' : '↓'} {Math.abs(trend.value)}% vs período anterior
+                {trend.isPositive ? '↑' : '↓'} {Math.abs(trend.value)}%
               </p>
             )}
           </div>

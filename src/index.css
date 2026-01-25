@@ -476,8 +476,7 @@
 }
 
 @media (min-width: 480px) {
-  .kpi-grid,
-  .kpi-grid-6 {
+  .kpi-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -485,9 +484,6 @@
 @media (min-width: 640px) {
   .kpi-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .kpi-grid-6 {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
   .kpi-grid-finance {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -499,21 +495,11 @@
   .kpi-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
-  .kpi-grid-6 {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
   .kpi-grid-finance {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
   .chart-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-/* Dashboard com 5 KPIs: 5 colunas a partir de 900px */
-@media (min-width: 900px) {
-  .kpi-grid-6 {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 }
 
@@ -532,9 +518,18 @@
   }
 }
 
-@media (min-width: 1536px) {
+/* .kpi-grid-6: Grade adaptativa baseada no espaço do container (auto-fit) */
+/* Isso resolve o problema de 5 KPIs quebrando quando o sidebar está aberto */
+.kpi-grid-6 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem;
+}
+
+@media (min-width: 640px) {
   .kpi-grid-6 {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
   }
 }
 
