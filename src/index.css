@@ -141,8 +141,9 @@
     --info: 217 91% 60%;
     --info-foreground: 0 0% 100%;
 
-    --border: 270 40% 18%;
-    --input: 270 40% 18%;
+    --border: 270 40% 25%;
+    --input: 270 40% 20%;
+    --input-foreground: 0 0% 100%;
     --ring: 217 91% 60%;
 
     /* Sidebar - Deeper purple */
