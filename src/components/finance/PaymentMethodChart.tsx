@@ -108,15 +108,15 @@ export function PaymentMethodChart({ isLoading = false }: PaymentMethodChartProp
         </div>
         <p className="text-xs text-muted-foreground">Vendas pagas por forma de pagamento</p>
       </CardHeader>
-      <CardContent>
-        <ChartContainer config={chartConfig} className="h-[300px] w-full">
+      <CardContent className="p-3 sm:p-6">
+        <ChartContainer config={chartConfig} className="h-[180px] sm:h-[220px] md:h-[260px] w-full">
           <PieChart>
             <Pie
               data={data}
               cx="50%"
               cy="50%"
-              innerRadius={60}
-              outerRadius={100}
+              innerRadius="40%"
+              outerRadius="70%"
               paddingAngle={2}
               dataKey="value"
               nameKey="name"
@@ -136,12 +136,12 @@ export function PaymentMethodChart({ isLoading = false }: PaymentMethodChartProp
                 const data = payload[0].payload;
                 const percentage = total > 0 ? ((data.value / total) * 100).toFixed(1) : 0;
                 return (
-                  <div className="bg-card border border-border rounded-lg p-3 shadow-card">
-                    <p className="font-medium text-foreground">{data.name}</p>
-                    <p className="text-sm text-muted-foreground">
+                  <div className="bg-card border border-border rounded-lg p-2 sm:p-3 shadow-card">
+                    <p className="font-medium text-foreground text-sm">{data.name}</p>
+                    <p className="text-xs sm:text-sm text-muted-foreground">
                       {formatCurrency(data.value)} ({percentage}%)
                     </p>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs sm:text-sm text-muted-foreground">
                       {data.count} venda{data.count !== 1 ? 's' : ''}
                     </p>
                   </div>
@@ -151,17 +151,17 @@ export function PaymentMethodChart({ isLoading = false }: PaymentMethodChartProp
           </PieChart>
         </ChartContainer>
 
-        {/* Legend */}
-        <div className="flex flex-wrap justify-center gap-4 mt-4">
+        {/* Legend - responsive grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 mt-3 sm:mt-4">
           {data.map((item) => {
             const percentage = total > 0 ? ((item.value / total) * 100).toFixed(0) : 0;
             return (
-              <div key={item.method} className="flex items-center gap-2">
+              <div key={item.method} className="flex items-center gap-1.5 sm:gap-2 min-w-0">
                 <div
-                  className="w-3 h-3 rounded-full"
+                  className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shrink-0"
                   style={{ backgroundColor: COLORS[item.method] }}
                 />
-                <span className="text-sm text-foreground">
+                <span className="text-[10px] sm:text-xs md:text-sm text-foreground truncate">
                   {item.name} ({percentage}%)
                 </span>
               </div>

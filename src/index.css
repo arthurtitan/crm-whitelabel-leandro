@@ -319,7 +319,9 @@
   }
 
   .kpi-grid-finance {
-    @apply grid grid-cols-1 gap-3 sm:gap-4;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
   }
 
   .chart-grid {
@@ -465,11 +467,17 @@
 }
 
 /* Media Queries para KPI Grids - fora da layer para maior especificidade */
-/* Breakpoint ajustado para 480px para evitar truncamento de textos */
+/* Breakpoint mínimo de 400px para garantir texto legível */
+@media (min-width: 400px) {
+  .kpi-grid-finance {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+}
+
 @media (min-width: 480px) {
   .kpi-grid,
-  .kpi-grid-6,
-  .kpi-grid-finance {
+  .kpi-grid-6 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -482,7 +490,8 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
   .kpi-grid-finance {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
   }
 }
 
@@ -494,7 +503,7 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
   .kpi-grid-finance {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
   .chart-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));

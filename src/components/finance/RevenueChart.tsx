@@ -57,11 +57,11 @@ export function RevenueChart({ isLoading = false }: RevenueChartProps) {
         </div>
         <p className="text-xs text-muted-foreground">Últimos 7 dias</p>
       </CardHeader>
-      <CardContent>
-        <ChartContainer config={chartConfig} className="h-[300px] w-full">
+      <CardContent className="p-3 sm:p-6">
+        <ChartContainer config={chartConfig} className="h-[200px] sm:h-[250px] md:h-[300px] w-full">
           <AreaChart
             data={kpis.faturamentoPorDia}
-            margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+            margin={{ top: 10, right: 5, left: -10, bottom: 0 }}
           >
             <defs>
               <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
@@ -75,14 +75,14 @@ export function RevenueChart({ isLoading = false }: RevenueChartProps) {
               dataKey="date"
               tickLine={false}
               axisLine={false}
-              tick={{ fontSize: 12, fill: '#64748B' }}
+              tick={{ fontSize: 10, fill: '#64748B' }}
             />
             <YAxis
               tickLine={false}
               axisLine={false}
               tickFormatter={formatCurrency}
-              tick={{ fontSize: 10, fill: '#64748B' }}
-              width={55}
+              tick={{ fontSize: 9, fill: '#64748B' }}
+              width={45}
             />
             <ChartTooltip
               content={
