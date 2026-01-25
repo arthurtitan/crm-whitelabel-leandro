@@ -165,7 +165,7 @@ export default function AdminKanbanPage() {
       <div className="page-header">
         <div className="min-w-0">
           <h1 className="title-responsive text-foreground">Kanban</h1>
-          <p className="text-responsive-sm text-muted-foreground">Gerencie seus leads no funil • Sincronizado com Chatwoot</p>
+          <p className="text-responsive-sm text-muted-foreground">Gerencie seus leads no funil</p>
         </div>
         <div className="flex flex-col xs:flex-row items-stretch xs:items-center gap-2 sm:gap-3 w-full xs:w-auto">
           <CreateStageDialog
