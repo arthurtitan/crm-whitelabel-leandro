@@ -109,7 +109,7 @@ export default function AdminSalesPage() {
       <div className="kpi-grid">
         <KPICard
           title="Faturamento Total"
-          subtitle="Vendas pagas no período"
+          subtitle="Vendas pagas"
           value={new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalRevenue)}
           icon={DollarSign}
           iconColor="text-success"
@@ -117,7 +117,7 @@ export default function AdminSalesPage() {
         />
         <KPICard
           title="Ticket Médio"
-          subtitle="Valor médio por venda"
+          subtitle="Média por venda"
           value={new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(avgTicket)}
           icon={TrendingUp}
           iconColor="text-primary"
@@ -125,7 +125,7 @@ export default function AdminSalesPage() {
         />
         <KPICard
           title="Vendas Pagas"
-          subtitle="Pagamentos confirmados"
+          subtitle="Confirmados"
           value={paidSalesCount}
           icon={CheckCircle}
           iconColor="text-success"
@@ -133,7 +133,7 @@ export default function AdminSalesPage() {
         />
         <KPICard
           title="Pendentes"
-          subtitle="Aguardando pagamento"
+          subtitle="Aguardando"
           value={pendingSalesCount}
           icon={Clock}
           iconColor="text-warning"

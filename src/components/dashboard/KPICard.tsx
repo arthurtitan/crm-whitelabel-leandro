@@ -50,22 +50,22 @@ export function KPICard({
     <Card className={cn('min-w-0 w-full h-full min-h-[100px] sm:min-h-[110px]', className)}>
       <CardContent className="p-3 sm:p-4 h-full">
         <div className="flex items-start justify-between gap-2 h-full">
-          <div className="space-y-0.5 sm:space-y-1 min-w-0 flex-1 overflow-hidden">
-            {/* Label - uppercase, muted, tracking - 2 linhas max */}
-            <p className="text-[9px] sm:text-[10px] md:text-xs font-medium uppercase tracking-[0.04em] text-muted-foreground leading-tight line-clamp-2">
+          <div className="space-y-0.5 sm:space-y-1 min-w-0 flex-1">
+            {/* Label - fonte fluida com clamp */}
+            <p className="text-kpi-label font-medium text-muted-foreground line-clamp-2">
               {title}
             </p>
-            {/* KPI Number - responsive size, trunca se necessário */}
-            <p className="text-lg sm:text-xl md:text-2xl font-semibold text-foreground leading-tight whitespace-nowrap overflow-hidden text-ellipsis max-w-full">
+            {/* KPI Number - fonte fluida, sempre visível */}
+            <p className="text-kpi-value font-semibold text-foreground">
               {value}
             </p>
             {subtitle && (
-              <p className="text-[9px] sm:text-[10px] md:text-xs text-muted-foreground leading-snug line-clamp-2">{subtitle}</p>
+              <p className="text-kpi-subtitle text-muted-foreground">{subtitle}</p>
             )}
             {trend && (
               <p
                 className={cn(
-                  'text-[9px] sm:text-[10px] md:text-xs font-medium whitespace-nowrap',
+                  'text-kpi-subtitle font-medium whitespace-nowrap',
                   trend.isPositive ? 'text-success' : 'text-destructive'
                 )}
               >
@@ -73,7 +73,7 @@ export function KPICard({
               </p>
             )}
           </div>
-          {/* Icon - muted or primary */}
+          {/* Icon */}
           <div className={cn('p-1.5 sm:p-2 rounded-lg shrink-0', iconBgColor)}>
             <Icon className={cn('w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5', iconColor)} />
           </div>
