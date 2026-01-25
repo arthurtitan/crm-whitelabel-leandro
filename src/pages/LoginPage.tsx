@@ -1,13 +1,44 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { getDefaultRoute } from '@/components/auth/ProtectedRoute';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { AlertCircle, Eye, EyeOff, LogIn } from 'lucide-react';
 import glepsLogo from '@/assets/gleps-logo.png';
+
+// Helper function to get default route based on role and permissions
+function getSmartDefaultRoute(user: { role: string; permissions?: string[] }): string {
+  if (user.role === 'super_admin') {
+    return '/super-admin';
+  }
+  if (user.role === 'admin') {
+    return '/admin';
+  }
+  // For agents, find first allowed route based on permissions
+  const permissionRouteMap: Record<string, string> = {
+    'dashboard': '/admin',
+    'kanban': '/admin/kanban',
+    'leads': '/admin/leads',
+    'agenda': '/admin/agenda',
+    'sales': '/admin/sales',
+    'finance': '/admin/finance',
+    'products': '/admin/products',
+    'events': '/admin/events',
+    'insights': '/admin/insights',
+  };
+  
+  const routeOrder = ['dashboard', 'kanban', 'leads', 'agenda', 'sales', 'finance', 'products', 'events', 'insights'];
+  
+  for (const perm of routeOrder) {
+    if (user.permissions?.includes(perm)) {
+      return permissionRouteMap[perm];
+    }
+  }
+  
+  return '/admin'; // Fallback
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -36,7 +67,7 @@ export default function LoginPage() {
       const { mockUsers } = await import('@/data/mockData');
       const user = mockUsers.find(u => u.email === email);
       if (user) {
-        navigate(getDefaultRoute(user.role), { replace: true });
+        navigate(getSmartDefaultRoute(user), { replace: true });
       }
     } else {
       setError(result.error || 'Erro ao fazer login');

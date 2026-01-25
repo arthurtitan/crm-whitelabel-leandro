@@ -113,7 +113,7 @@ const App = () => (
             <Route
               path="/admin"
               element={
-                <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+                <ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}>
                   <AdminFinanceWrapper>
                     <AdminLayout>
                       <AdminDashboard />
@@ -125,7 +125,7 @@ const App = () => (
             <Route
               path="/admin/kanban"
               element={
-                <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+                <ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}>
                   <AdminFinanceWrapper>
                     <AdminLayout>
                       <AdminKanbanPage />
@@ -137,7 +137,7 @@ const App = () => (
             <Route
               path="/admin/leads"
               element={
-                <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+                <ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}>
                   <AdminFinanceWrapper>
                     <AdminLayout>
                       <AdminLeadsPage />
@@ -149,7 +149,7 @@ const App = () => (
             <Route
               path="/admin/sales"
               element={
-                <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+                <ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}>
                   <AdminFinanceWrapper>
                     <AdminLayout>
                       <AdminSalesPage />
@@ -161,7 +161,7 @@ const App = () => (
             <Route
               path="/admin/events"
               element={
-                <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+                <ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}>
                   <AdminFinanceWrapper>
                     <AdminLayout>
                       <AdminEventsPage />
@@ -173,7 +173,7 @@ const App = () => (
             <Route
               path="/admin/finance"
               element={
-                <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+                <ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}>
                   <AdminFinanceWrapper>
                     <AdminLayout>
                       <AdminFinancePage />
@@ -185,7 +185,7 @@ const App = () => (
             <Route
               path="/admin/products"
               element={
-                <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+                <ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}>
                   <AdminFinanceWrapper>
                     <AdminLayout>
                       <AdminProductsPage />
@@ -197,7 +197,7 @@ const App = () => (
             <Route
               path="/admin/agenda"
               element={
-                <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+                <ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}>
                   <AdminFinanceWrapper>
                     <AdminLayout>
                       <AdminAgendaPage />
@@ -209,7 +209,7 @@ const App = () => (
             <Route
               path="/admin/insights"
               element={
-                <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+                <ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}>
                   <AdminFinanceWrapper>
                     <AdminLayout>
                       <AdminInsightsPage />
