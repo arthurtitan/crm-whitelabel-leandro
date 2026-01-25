@@ -59,48 +59,48 @@ export function MarketingMetrics({
         </div>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 xs:grid-cols-2 gap-3 sm:gap-4">
           {/* LTV */}
-          <div className="p-4 rounded-lg border bg-card">
-            <div className="flex items-center gap-2 mb-3">
-              <Users className="w-4 h-4 text-primary" />
-              <span className="text-xs font-medium text-muted-foreground">LTV Estimado</span>
+          <div className="p-3 sm:p-4 rounded-lg border bg-card">
+            <div className="flex items-center gap-2 mb-2 sm:mb-3">
+              <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
+              <span className="text-[10px] sm:text-xs font-medium text-muted-foreground">LTV Estimado</span>
             </div>
-            <p className="text-2xl font-bold text-primary">{formatCurrency(ltv)}</p>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="text-lg sm:text-xl md:text-2xl font-bold text-primary break-words">{formatCurrency(ltv)}</p>
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
               Valor médio por cliente recorrente
             </p>
           </div>
 
           {/* CAC Implícito */}
-          <div className="p-4 rounded-lg border bg-card">
-            <div className="flex items-center gap-2 mb-3">
-              <Users className="w-4 h-4 text-warning" />
-              <span className="text-xs font-medium text-muted-foreground">CAC Implícito</span>
+          <div className="p-3 sm:p-4 rounded-lg border bg-card">
+            <div className="flex items-center gap-2 mb-2 sm:mb-3">
+              <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-warning" />
+              <span className="text-[10px] sm:text-xs font-medium text-muted-foreground">CAC Implícito</span>
             </div>
-            <p className="text-2xl font-bold text-foreground">
+            <p className="text-lg sm:text-xl md:text-2xl font-bold text-foreground">
               {cacImplicito.toFixed(1)} leads
             </p>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
               Leads necessários para 1 venda
             </p>
           </div>
 
           {/* Taxa de Recorrência */}
-          <div className="p-4 rounded-lg border bg-card">
-            <div className="flex items-center justify-between mb-3">
+          <div className="p-3 sm:p-4 rounded-lg border bg-card">
+            <div className="flex items-center justify-between mb-2 sm:mb-3 gap-2">
               <div className="flex items-center gap-2">
-                <Repeat className="w-4 h-4 text-success" />
-                <span className="text-xs font-medium text-muted-foreground">Recorrência</span>
+                <Repeat className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-success" />
+                <span className="text-[10px] sm:text-xs font-medium text-muted-foreground">Recorrência</span>
               </div>
-              <Badge variant="outline" className={cn("text-xs", recurrenceLevel.color)}>
+              <Badge variant="outline" className={cn("text-[10px] sm:text-xs", recurrenceLevel.color)}>
                 {recurrenceLevel.label}
               </Badge>
             </div>
             <div className="space-y-2">
-              <div className="flex justify-between items-end">
-                <p className="text-2xl font-bold">{taxaRecorrencia.toFixed(1)}%</p>
-                <p className="text-xs text-muted-foreground">
+              <div className="flex justify-between items-end gap-2">
+                <p className="text-lg sm:text-xl md:text-2xl font-bold">{taxaRecorrencia.toFixed(1)}%</p>
+                <p className="text-[10px] sm:text-xs text-muted-foreground">
                   {clientesRecorrentes}/{totalClientes}
                 </p>
               </div>
@@ -109,20 +109,20 @@ export function MarketingMetrics({
           </div>
 
           {/* Ciclo Médio de Venda */}
-          <div className="p-4 rounded-lg border bg-card">
-            <div className="flex items-center justify-between mb-3">
+          <div className="p-3 sm:p-4 rounded-lg border bg-card">
+            <div className="flex items-center justify-between mb-2 sm:mb-3 gap-2">
               <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-secondary-foreground" />
-                <span className="text-xs font-medium text-muted-foreground">Ciclo de Venda</span>
+                <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-secondary-foreground" />
+                <span className="text-[10px] sm:text-xs font-medium text-muted-foreground">Ciclo de Venda</span>
               </div>
-              <Badge variant="outline" className={cn("text-xs", cycleLevel.color)}>
+              <Badge variant="outline" className={cn("text-[10px] sm:text-xs", cycleLevel.color)}>
                 {cycleLevel.label}
               </Badge>
             </div>
-            <p className="text-2xl font-bold text-foreground">
+            <p className="text-lg sm:text-xl md:text-2xl font-bold text-foreground">
               {cicloMedioVenda.toFixed(1)} dias
             </p>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
               Lead → Pagamento
             </p>
           </div>

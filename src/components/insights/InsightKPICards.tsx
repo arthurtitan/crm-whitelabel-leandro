@@ -32,14 +32,14 @@ function KPICard({ title, value, subtitle, icon, variation, iconBgClass = 'bg-pr
   const isPositive = hasVariation && variation >= 0;
 
   return (
-    <Card className="hover:shadow-md transition-shadow">
-      <CardContent className="p-4 sm:p-6">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs sm:text-sm font-medium text-muted-foreground truncate">{title}</p>
-            <p className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground mt-1 truncate">{value}</p>
+    <Card className="hover:shadow-md transition-shadow min-w-0 w-full h-full">
+      <CardContent className="p-3 sm:p-4 h-full">
+        <div className="flex items-start justify-between gap-2 h-full">
+          <div className="min-w-0 flex-1 space-y-0.5 sm:space-y-1">
+            <p className="text-[9px] sm:text-[10px] md:text-xs font-medium uppercase tracking-[0.04em] text-muted-foreground leading-tight">{title}</p>
+            <p className="text-lg sm:text-xl md:text-2xl font-semibold text-foreground leading-tight break-words">{value}</p>
             {subtitle && (
-              <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
+              <p className="text-[9px] sm:text-[10px] md:text-xs text-muted-foreground leading-snug break-words">{subtitle}</p>
             )}
             {hasVariation && (
               <Badge 
@@ -56,8 +56,8 @@ function KPICard({ title, value, subtitle, icon, variation, iconBgClass = 'bg-pr
               </Badge>
             )}
           </div>
-          <div className={cn("p-2 sm:p-3 rounded-lg shrink-0", iconBgClass)}>
-            {icon}
+          <div className={cn("p-1.5 sm:p-2 rounded-lg shrink-0", iconBgClass)}>
+            <div className="[&>svg]:w-3.5 [&>svg]:h-3.5 sm:[&>svg]:w-4 sm:[&>svg]:h-4 md:[&>svg]:w-5 md:[&>svg]:h-5">{icon}</div>
           </div>
         </div>
       </CardContent>
@@ -87,7 +87,7 @@ export function InsightKPICards({
   };
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+    <div className="kpi-grid">
       <KPICard
         title="Faturamento"
         value={formatCurrency(faturamento)}

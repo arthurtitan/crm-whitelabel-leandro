@@ -8,6 +8,7 @@ import { SaleItemsRow } from '@/components/finance/SaleItemsRow';
 import { SaleDetailsSheet } from '@/components/finance/SaleDetailsSheet';
 import { SalesAuditLog } from '@/components/finance/SalesAuditLog';
 import { AgentFilter } from '@/components/dashboard/AgentFilter';
+import { KPICard } from '@/components/dashboard/KPICard';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -106,62 +107,38 @@ export default function AdminSalesPage() {
     <>
       {/* KPI Cards */}
       <div className="kpi-grid">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Faturamento Total</p>
-                <p className="text-2xl font-bold text-success">
-                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalRevenue)}
-                </p>
-              </div>
-              <div className="p-2 rounded-lg bg-success/10">
-                <DollarSign className="w-5 h-5 text-success" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Ticket Médio</p>
-                <p className="text-2xl font-bold">
-                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(avgTicket)}
-                </p>
-              </div>
-              <div className="p-2 rounded-lg bg-primary/10">
-                <TrendingUp className="w-5 h-5 text-primary" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Vendas Pagas</p>
-                <p className="text-2xl font-bold">{paidSalesCount}</p>
-              </div>
-              <div className="p-2 rounded-lg bg-success/10">
-                <CheckCircle className="w-5 h-5 text-success" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Pendentes</p>
-                <p className="text-2xl font-bold text-warning">{pendingSalesCount}</p>
-              </div>
-              <div className="p-2 rounded-lg bg-warning/10">
-                <Clock className="w-5 h-5 text-warning" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <KPICard
+          title="Faturamento Total"
+          subtitle="Vendas pagas no período"
+          value={new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalRevenue)}
+          icon={DollarSign}
+          iconColor="text-success"
+          iconBgColor="bg-success/10"
+        />
+        <KPICard
+          title="Ticket Médio"
+          subtitle="Valor médio por venda"
+          value={new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(avgTicket)}
+          icon={TrendingUp}
+          iconColor="text-primary"
+          iconBgColor="bg-primary/10"
+        />
+        <KPICard
+          title="Vendas Pagas"
+          subtitle="Pagamentos confirmados"
+          value={paidSalesCount}
+          icon={CheckCircle}
+          iconColor="text-success"
+          iconBgColor="bg-success/10"
+        />
+        <KPICard
+          title="Pendentes"
+          subtitle="Aguardando pagamento"
+          value={pendingSalesCount}
+          icon={Clock}
+          iconColor="text-warning"
+          iconBgColor="bg-warning/10"
+        />
       </div>
 
       {/* Filters */}
