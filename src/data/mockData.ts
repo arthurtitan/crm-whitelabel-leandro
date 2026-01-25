@@ -179,7 +179,7 @@ export const mockContacts: Contact[] = [
   { id: 'contact-2', account_id: 'acc-1', nome: 'João Santos', telefone: '+55 11 99999-2222', email: 'joao@email.com', origem: 'instagram', created_at: '2025-01-12T14:00:00Z', updated_at: '2025-01-18T16:00:00Z' },
   { id: 'contact-3', account_id: 'acc-1', nome: 'Fernanda Lima', telefone: '+55 11 99999-3333', email: 'fernanda@email.com', origem: 'site', created_at: '2025-01-15T09:00:00Z', updated_at: '2025-01-19T07:30:00Z' },
   { id: 'contact-4', account_id: 'acc-1', nome: 'Ricardo Almeida', telefone: '+55 11 99999-4444', email: 'ricardo@email.com', origem: 'whatsapp', created_at: '2025-01-16T11:00:00Z', updated_at: '2025-01-19T09:00:00Z' },
-  { id: 'contact-5', account_id: 'acc-1', nome: 'Camila Rocha', telefone: '+55 11 99999-5555', email: 'camila@email.com', origem: 'manual', created_at: '2025-01-17T08:00:00Z', updated_at: '2025-01-17T08:00:00Z' },
+  { id: 'contact-5', account_id: 'acc-1', nome: 'Camila Rocha', telefone: '+55 11 99999-5555', email: 'camila@email.com', origem: 'indicacao', created_at: '2025-01-17T08:00:00Z', updated_at: '2025-01-17T08:00:00Z' },
   { id: 'contact-6', account_id: 'acc-1', nome: 'Bruno Costa', telefone: '+55 11 99999-6666', email: 'bruno@email.com', origem: 'whatsapp', created_at: '2025-01-18T13:00:00Z', updated_at: '2025-01-19T10:00:00Z' },
   { id: 'contact-7', account_id: 'acc-1', nome: 'Juliana Martins', telefone: '+55 11 99999-7777', email: 'juliana@email.com', origem: 'instagram', created_at: '2025-01-18T15:00:00Z', updated_at: '2025-01-19T11:00:00Z' },
   { id: 'contact-8', account_id: 'acc-1', nome: 'André Silva', telefone: '+55 11 99999-8888', email: 'andre@email.com', origem: 'site', created_at: '2025-01-19T07:00:00Z', updated_at: '2025-01-19T07:00:00Z' },
