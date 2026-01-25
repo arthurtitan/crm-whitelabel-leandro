@@ -47,16 +47,15 @@ export function KPICard({
   }
 
   return (
-    <Card className={cn('min-w-0 w-full h-full min-h-[90px] sm:min-h-[100px]', className)}>
-      <CardContent className="p-3 sm:p-4 h-full">
-        <div className="flex items-start justify-between gap-2 h-full">
-          <div className="space-y-0.5 sm:space-y-1 min-w-0 flex-1">
-            {/* Label - fonte fluida com clamp */}
+    <Card className={cn('min-w-0 w-full h-full min-h-[100px] sm:min-h-[110px]', className)}>
+      <CardContent className="p-3 sm:p-4 h-full flex flex-col justify-center">
+        <div className="flex items-start justify-between gap-3">
+          {/* Conteúdo textual - sempre tem prioridade */}
+          <div className="min-w-0 flex-1 space-y-0.5 sm:space-y-1">
             <p className="text-kpi-label font-medium text-muted-foreground">
               {title}
             </p>
-            {/* KPI Number - fonte fluida, sempre visível */}
-            <p className="text-kpi-value font-semibold text-foreground">
+            <p className="text-kpi-value font-semibold text-foreground whitespace-nowrap">
               {value}
             </p>
             {subtitle && (
@@ -73,9 +72,9 @@ export function KPICard({
               </p>
             )}
           </div>
-          {/* Icon - hidden on very small screens (< 360px) to prevent overlap */}
-          <div className={cn('hidden xs:flex p-1.5 sm:p-2 rounded-lg shrink-0', iconBgColor)}>
-            <Icon className={cn('w-4 h-4 sm:w-5 sm:h-5', iconColor)} />
+          {/* Icon - oculto em telas < 640px para priorizar valores */}
+          <div className={cn('hidden sm:flex p-2 rounded-lg shrink-0', iconBgColor)}>
+            <Icon className={cn('w-5 h-5', iconColor)} />
           </div>
         </div>
       </CardContent>
