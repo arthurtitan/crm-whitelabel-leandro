@@ -210,14 +210,10 @@ const mockAgentDashboardData: Record<string, typeof mockDashboardData.kpis & {
   },
 };
 
-type ViewState = 'loading' | 'empty' | 'data';
-
 export default function AdminDashboard() {
   const { user, account } = useAuth();
   const { isAdmin } = useRoleAccess();
   const { events } = useCalendar();
-  
-  const [viewState, setViewState] = useState<ViewState>('data');
   const [period, setPeriod] = useState('7d');
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: subDays(new Date(), 7),
@@ -329,14 +325,8 @@ export default function AdminDashboard() {
     return Math.round((totalLeads * percentualIA) / 100);
   }, [displayedData.kpis.totalLeads, displayedData.kpis.percentualIA]);
 
-  // Simulate different states for demonstration
-  const handleStateChange = (state: ViewState) => {
-    setViewState(state);
-  };
-
   const data = mockDashboardData;
-  const isLoading = viewState === 'loading';
-  const isEmpty = viewState === 'empty';
+  const isLoading = false;
 
   // Helper for subtitle context
   const getAgentContextSubtitle = (defaultText: string) => {
@@ -350,52 +340,11 @@ export default function AdminDashboard() {
     <div className="page-container">
       {/* Header */}
       <div className="page-header">
-        <div className="min-w-0 flex items-center gap-3">
-          <div>
-            <h1 className="title-responsive text-foreground">Dashboard de Atendimento</h1>
-            <p className="text-responsive-sm text-muted-foreground">
-              Métricas operacionais e estratégicas do atendimento
-            </p>
-          </div>
-          {/* Mock Data Indicator */}
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-warning/10 border border-warning/20">
-            <span className="w-2 h-2 rounded-full bg-warning animate-pulse" />
-            <span className="text-xs text-warning whitespace-nowrap">Dados simulados</span>
-          </div>
-        </div>
-
-        {/* State Toggle (for demo purposes) - hidden on mobile */}
-        <div className="hidden sm:flex flex-wrap gap-2">
-          <button
-            onClick={() => handleStateChange('data')}
-            className={`px-3 py-1.5 text-xs rounded-md transition-colors min-h-[32px] ${
-              viewState === 'data'
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-muted text-muted-foreground hover:bg-muted/80'
-            }`}
-          >
-            Com Dados
-          </button>
-          <button
-            onClick={() => handleStateChange('loading')}
-            className={`px-3 py-1.5 text-xs rounded-md transition-colors min-h-[32px] ${
-              viewState === 'loading'
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-muted text-muted-foreground hover:bg-muted/80'
-            }`}
-          >
-            Carregando
-          </button>
-          <button
-            onClick={() => handleStateChange('empty')}
-            className={`px-3 py-1.5 text-xs rounded-md transition-colors min-h-[32px] ${
-              viewState === 'empty'
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-muted text-muted-foreground hover:bg-muted/80'
-            }`}
-          >
-            Sem Dados
-          </button>
+        <div className="min-w-0">
+          <h1 className="title-responsive text-foreground">Dashboard de Atendimento</h1>
+          <p className="text-responsive-sm text-muted-foreground">
+            Métricas operacionais e estratégicas do atendimento
+          </p>
         </div>
       </div>
 
@@ -408,14 +357,6 @@ export default function AdminDashboard() {
         showChannelFilter={true}
         showTypeFilter={false}
       />
-
-      {isEmpty ? (
-        <EmptyState
-          title="Nenhum dado de atendimento"
-          description="Não há conversas registradas para o período e filtros selecionados. Aguarde novos atendimentos ou altere os filtros."
-        />
-      ) : (
-        <>
           {/* Agent Filter Active Banner */}
           {selectedAgentFromTable && (
             <div className="flex items-center justify-between p-3 rounded-lg bg-primary/10 border border-primary/20">
@@ -530,8 +471,6 @@ export default function AdminDashboard() {
 
           {/* Quality & Conversion Cards */}
           <QualityCards data={displayedData.qualidade} isLoading={isLoading} />
-        </>
-      )}
     </div>
   );
 }

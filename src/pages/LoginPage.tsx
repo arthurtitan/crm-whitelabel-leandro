@@ -74,17 +74,6 @@ export default function LoginPage() {
     }
   };
 
-  const demoCredentials = [
-    { email: 'superadmin@sistema.com', password: 'Admin@123', role: 'Super Admin' },
-    { email: 'carlos@clinicavidaplena.com', password: 'Admin@123', role: 'Admin' },
-    { email: 'ana@clinicavidaplena.com', password: 'Agent@123', role: 'Agente' },
-  ];
-
-  const fillCredentials = (email: string, password: string) => {
-    setEmail(email);
-    setPassword(password);
-    setError('');
-  };
 
   return (
     <div className="dark min-h-screen flex items-center justify-center bg-background p-4">
@@ -184,38 +173,6 @@ export default function LoginPage() {
           </CardContent>
         </Card>
 
-        {/* Demo Credentials */}
-        <Card className="border-border/50 glass">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Credenciais de demonstração
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {demoCredentials.map((cred) => (
-              <button
-                key={cred.email}
-                onClick={() => fillCredentials(cred.email, cred.password)}
-                className="w-full flex items-center justify-between p-3 text-left rounded-lg border border-border/50 hover:bg-muted/50 hover:border-primary/30 transition-all group"
-              >
-                <div className="space-y-0.5">
-                  <p className="text-sm font-medium group-hover:text-primary transition-colors">
-                    {cred.email}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Senha: {cred.password}
-                  </p>
-                </div>
-                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                  cred.role === 'Super Admin' ? 'badge-super-admin' :
-                  cred.role === 'Admin' ? 'badge-admin' : 'badge-agent'
-                }`}>
-                  {cred.role}
-                </span>
-              </button>
-            ))}
-          </CardContent>
-        </Card>
       </div>
     </div>
   );
