@@ -219,15 +219,16 @@ export default function AdminLeadsPage() {
     <div className="page-container">
       {/* Header */}
       <div className="page-header">
-        <div>
-          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground">Leads</h1>
-          <p className="text-xs sm:text-sm text-muted-foreground">Gerencie todos os leads da conta</p>
+        <div className="min-w-0">
+          <h1 className="title-responsive text-foreground">Leads</h1>
+          <p className="text-responsive-sm text-muted-foreground">Gerencie todos os leads da conta</p>
         </div>
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
           <DialogTrigger asChild>
-            <Button className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2">
+            <Button className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2 min-h-[40px] sm:min-h-0">
               <Plus className="w-4 h-4" />
-              Novo Lead
+              <span className="hidden xs:inline">Novo Lead</span>
+              <span className="xs:hidden">Novo</span>
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
@@ -298,19 +299,19 @@ export default function AdminLeadsPage() {
 
       {/* Filters */}
       <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="relative flex-1">
+        <CardContent className="p-3 sm:p-4">
+          <div className="filter-container">
+            <div className="relative flex-1 min-w-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 placeholder="Buscar por nome, telefone ou email..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9"
+                className="pl-9 min-h-[40px]"
               />
             </div>
             <Select value={originFilter} onValueChange={setOriginFilter}>
-              <SelectTrigger className="w-full sm:w-[180px]">
+              <SelectTrigger className="w-full sm:w-[160px] min-h-[40px]">
                 <SelectValue placeholder="Origem" />
               </SelectTrigger>
               <SelectContent>

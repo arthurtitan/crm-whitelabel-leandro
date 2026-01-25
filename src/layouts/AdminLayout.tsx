@@ -78,18 +78,19 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Mobile Header */}
-      <header className="lg:hidden fixed top-0 left-0 right-0 z-50 h-16 border-b border-sidebar-border bg-sidebar px-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      {/* Mobile Header - Safe area support */}
+      <header className="lg:hidden fixed top-0 left-0 right-0 z-50 h-14 sm:h-16 border-b border-sidebar-border bg-sidebar px-3 sm:px-4 flex items-center justify-between safe-area-top">
+        <div className="flex items-center gap-2 sm:gap-3">
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
-            className="p-2 rounded-lg hover:bg-sidebar-accent text-sidebar-foreground"
+            className="p-2 sm:p-2.5 rounded-lg hover:bg-sidebar-accent text-sidebar-foreground touch-target"
+            aria-label={mobileOpen ? 'Fechar menu' : 'Abrir menu'}
           >
             {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
           <div className="flex items-center gap-2">
-            <img src={glepsLogo} alt="Gleps.AI" className="w-7 h-7 object-contain" />
-            <span className="font-semibold text-sidebar-foreground truncate max-w-[150px]">
+            <img src={glepsLogo} alt="Gleps.AI" className="w-6 h-6 sm:w-7 sm:h-7 object-contain" />
+            <span className="font-semibold text-sidebar-foreground truncate max-w-[120px] xs:max-w-[150px] sm:max-w-[180px] text-sm sm:text-base">
               Painel Gleps
             </span>
           </div>
@@ -209,12 +210,12 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       {/* Mobile Sidebar */}
       <aside
         className={cn(
-          'lg:hidden fixed top-16 left-0 z-50 h-[calc(100vh-4rem)] w-64 bg-sidebar border-r border-sidebar-border transition-transform duration-300',
+          'lg:hidden fixed top-14 sm:top-16 left-0 z-50 h-[calc(100vh-3.5rem)] sm:h-[calc(100vh-4rem)] w-[75vw] xs:w-64 bg-sidebar border-r border-sidebar-border transition-transform duration-300 safe-area-bottom',
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
         <ScrollArea className="h-[calc(100%-5rem)]">
-          <nav className="p-3 space-y-1">
+          <nav className="p-2 sm:p-3 space-y-0.5 sm:space-y-1">
             {visibleNavItems.map((item) => {
               const isActive = location.pathname === item.href;
               return (
@@ -223,21 +224,21 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                   to={item.href}
                   onClick={() => setMobileOpen(false)}
                   className={cn(
-                    'flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all',
+                    'flex items-center gap-3 px-3 py-3 sm:py-2.5 rounded-lg transition-all touch-target',
                     isActive
                       ? 'bg-sidebar-primary text-sidebar-primary-foreground'
                       : 'text-sidebar-foreground hover:bg-sidebar-accent'
                   )}
                 >
-                  <item.icon className="w-5 h-5" />
-                  <span className="font-medium">{item.title}</span>
+                  <item.icon className="w-5 h-5 flex-shrink-0" />
+                  <span className="font-medium text-sm sm:text-base">{item.title}</span>
                 </Link>
               );
             })}
           </nav>
         </ScrollArea>
-        <div className="absolute bottom-0 left-0 right-0 p-3 border-t border-sidebar-border">
-          <Button onClick={handleLogout} variant="ghost" className="w-full justify-start text-destructive">
+        <div className="absolute bottom-0 left-0 right-0 p-3 border-t border-sidebar-border safe-area-bottom">
+          <Button onClick={handleLogout} variant="ghost" className="w-full justify-start text-destructive min-h-[44px]">
             <LogOut className="w-4 h-4 mr-2" />
             Sair
           </Button>
@@ -249,24 +250,26 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         className={cn(
           'transition-all duration-300 min-h-screen',
           collapsed ? 'lg:pl-[72px]' : 'lg:pl-64',
-          'pt-16 lg:pt-0'
+          'pt-14 sm:pt-16 lg:pt-0'
         )}
         style={{ backgroundColor: '#F8FAFC' }}
       >
         {isImpersonating && (
-          <div className="bg-warning/10 border-b border-warning/30 px-4 py-2">
-            <div className="flex items-center justify-center gap-2 text-sm text-warning">
-              <ArrowLeftRight className="w-4 h-4" />
-              <span>
-                Visualizando como <strong>{user?.nome}</strong>
-              </span>
-              <button onClick={exitImpersonation} className="underline hover:no-underline ml-2">
+          <div className="bg-warning/10 border-b border-warning/30 px-3 sm:px-4 py-2">
+            <div className="flex flex-col xs:flex-row items-center justify-center gap-1 xs:gap-2 text-xs sm:text-sm text-warning">
+              <div className="flex items-center gap-1.5">
+                <ArrowLeftRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span>
+                  Visualizando como <strong className="truncate max-w-[100px] inline-block align-bottom">{user?.nome}</strong>
+                </span>
+              </div>
+              <button onClick={exitImpersonation} className="underline hover:no-underline whitespace-nowrap">
                 Sair
               </button>
             </div>
           </div>
         )}
-        <div className="p-4 sm:p-6">{children}</div>
+        {children}
       </main>
     </div>
   );
