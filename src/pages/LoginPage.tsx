@@ -96,7 +96,7 @@ export default function LoginPage() {
               )}
               
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email" className="text-white/90 font-medium">Email</Label>
                 <Input
                   id="email"
                   type="email"
@@ -110,7 +110,7 @@ export default function LoginPage() {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="password">Senha</Label>
+                <Label htmlFor="password" className="text-white/90 font-medium">Senha</Label>
                 <div className="relative">
                   <Input
                     id="password"
