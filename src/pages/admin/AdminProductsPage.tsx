@@ -26,9 +26,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useProduct } from '@/contexts/ProductContext';
-import { CreateProductDialog, EditProductDialog } from '@/components/products';
+import { CreateProductDialog, EditProductDialog, DeleteProductDialog } from '@/components/products';
 import { Product, PaymentMethod } from '@/types/crm';
-import { Search, MoreVertical, Pencil, ToggleLeft, ToggleRight, Package } from 'lucide-react';
+import { Search, MoreVertical, Pencil, ToggleLeft, ToggleRight, Package, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
@@ -50,10 +50,11 @@ const PAYMENT_METHOD_COLORS: Record<PaymentMethod, string> = {
 };
 
 export default function AdminProductsPage() {
-  const { products, toggleProductStatus } = useProduct();
+  const { products, toggleProductStatus, deleteProduct } = useProduct();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
 
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
@@ -72,6 +73,15 @@ export default function AdminProductsPage() {
       toast.success(`Produto "${product.nome}" ${product.ativo ? 'desativado' : 'ativado'}`);
     } else {
       toast.error(result.error || 'Erro ao alterar status');
+    }
+  };
+
+  const handleDeleteProduct = (product: Product) => {
+    const result = deleteProduct(product.id);
+    if (result.success) {
+      toast.success(`Produto "${product.nome}" excluído com sucesso`);
+    } else {
+      toast.error(result.error || 'Erro ao excluir produto');
     }
   };
 
@@ -220,6 +230,14 @@ export default function AdminProductsPage() {
                                 </>
                               )}
                             </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem 
+                              onClick={() => setDeletingProduct(product)}
+                              className="text-destructive focus:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Excluir
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -238,6 +256,16 @@ export default function AdminProductsPage() {
           product={editingProduct}
           open={!!editingProduct}
           onOpenChange={(open) => !open && setEditingProduct(null)}
+        />
+      )}
+
+      {/* Delete Dialog */}
+      {deletingProduct && (
+        <DeleteProductDialog
+          open={!!deletingProduct}
+          onOpenChange={(open) => !open && setDeletingProduct(null)}
+          productName={deletingProduct.nome}
+          onConfirm={() => handleDeleteProduct(deletingProduct)}
         />
       )}
     </div>
