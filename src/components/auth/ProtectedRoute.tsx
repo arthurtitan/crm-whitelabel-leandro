@@ -1,6 +1,7 @@
 import { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePermissions } from '@/hooks/usePermissions';
 import { UserRole } from '@/types/crm';
 
 interface ProtectedRouteProps {
@@ -15,6 +16,7 @@ export function ProtectedRoute({
   requireSuperAdmin = false,
 }: ProtectedRouteProps) {
   const { isAuthenticated, user, isLoading } = useAuth();
+  const { canAccessRoute, getFirstAllowedRoute } = usePermissions();
   const location = useLocation();
 
   if (isLoading) {
@@ -42,6 +44,13 @@ export function ProtectedRoute({
     return <Navigate to="/unauthorized" replace />;
   }
 
+  // For agents, check granular permissions
+  if (user.role === 'agent' && !canAccessRoute(location.pathname)) {
+    // Redirect to first allowed route instead of unauthorized
+    const allowedRoute = getFirstAllowedRoute();
+    return <Navigate to={allowedRoute} replace />;
+  }
+
   return <>{children}</>;
 }
 
@@ -53,7 +62,7 @@ export function getDefaultRoute(role: UserRole): string {
     case 'admin':
       return '/admin';
     case 'agent':
-      return '/agent';
+      return '/admin'; // Agents now use /admin routes with permission check
     default:
       return '/';
   }
