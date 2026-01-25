@@ -616,7 +616,6 @@ export default function SuperAdminAccountsPage() {
                 <SelectItem value="all">Todos os status</SelectItem>
                 <SelectItem value="active">Ativas</SelectItem>
                 <SelectItem value="paused">Pausadas</SelectItem>
-                <SelectItem value="cancelled">Canceladas</SelectItem>
               </SelectContent>
             </Select>
           </div>
