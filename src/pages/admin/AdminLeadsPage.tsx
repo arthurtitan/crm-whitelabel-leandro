@@ -88,7 +88,7 @@ export default function AdminLeadsPage() {
     nome: '',
     telefone: '',
     email: '',
-    origem: 'manual' as ContactOrigin,
+    origem: 'indicacao' as ContactOrigin,
   });
 
   // Filter by agent if selected (based on sales association)
@@ -136,7 +136,7 @@ export default function AdminLeadsPage() {
       case 'site':
         return <Badge className="bg-blue-500/10 text-blue-500 border-blue-500/20">Site</Badge>;
       default:
-        return <Badge variant="secondary">Manual</Badge>;
+        return <Badge variant="secondary">Indicação</Badge>;
     }
   };
 
@@ -147,7 +147,7 @@ export default function AdminLeadsPage() {
   };
 
   const resetForm = () => {
-    setFormData({ nome: '', telefone: '', email: '', origem: 'manual' });
+    setFormData({ nome: '', telefone: '', email: '', origem: 'indicacao' });
   };
 
   const handleCreate = () => {
@@ -270,17 +270,17 @@ export default function AdminLeadsPage() {
               <div className="space-y-2">
                 <Label htmlFor="origem">Origem</Label>
                 <Select
-                  value={formData.origem || 'manual'}
+                  value={formData.origem || 'indicacao'}
                   onValueChange={(v) => setFormData({ ...formData, origem: v as ContactOrigin })}
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="manual">Manual</SelectItem>
                     <SelectItem value="whatsapp">WhatsApp</SelectItem>
                     <SelectItem value="instagram">Instagram</SelectItem>
                     <SelectItem value="site">Site</SelectItem>
+                    <SelectItem value="indicacao">Indicação</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -319,7 +319,7 @@ export default function AdminLeadsPage() {
                 <SelectItem value="whatsapp">WhatsApp</SelectItem>
                 <SelectItem value="instagram">Instagram</SelectItem>
                 <SelectItem value="site">Site</SelectItem>
-                <SelectItem value="manual">Manual</SelectItem>
+                <SelectItem value="indicacao">Indicação</SelectItem>
               </SelectContent>
             </Select>
             
@@ -490,7 +490,7 @@ export default function AdminLeadsPage() {
               <div className="space-y-2">
                 <Label htmlFor="edit-origem">Origem</Label>
                 <Select
-                  value={editingContact.origem || 'manual'}
+                  value={editingContact.origem || 'indicacao'}
                   onValueChange={(v) =>
                     setEditingContact({ ...editingContact, origem: v as ContactOrigin })
                   }
@@ -499,10 +499,10 @@ export default function AdminLeadsPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="manual">Manual</SelectItem>
                     <SelectItem value="whatsapp">WhatsApp</SelectItem>
                     <SelectItem value="instagram">Instagram</SelectItem>
                     <SelectItem value="site">Site</SelectItem>
+                    <SelectItem value="indicacao">Indicação</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
