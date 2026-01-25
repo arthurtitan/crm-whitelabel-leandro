@@ -163,33 +163,34 @@ export default function AdminKanbanPage() {
     <div className="page-container h-[calc(100vh-8rem)]">
       {/* Header */}
       <div className="page-header">
-        <div>
-          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground">Kanban</h1>
-          <p className="text-xs sm:text-sm text-muted-foreground">Gerencie seus leads no funil • Sincronizado com Chatwoot</p>
+        <div className="min-w-0">
+          <h1 className="title-responsive text-foreground">Kanban</h1>
+          <p className="text-responsive-sm text-muted-foreground">Gerencie seus leads no funil • Sincronizado com Chatwoot</p>
         </div>
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
+        <div className="flex flex-col xs:flex-row items-stretch xs:items-center gap-2 sm:gap-3 w-full xs:w-auto">
           <CreateStageDialog
             trigger={
-              <Button variant="outline" size="sm" className="gap-2">
+              <Button variant="outline" size="sm" className="gap-2 min-h-[40px] sm:min-h-0">
                 <Plus className="w-4 h-4" />
-                Nova Etapa
+                <span className="hidden xs:inline">Nova Etapa</span>
+                <span className="xs:hidden">Etapa</span>
               </Button>
             }
           />
-          <div className="relative w-full sm:w-64">
+          <div className="relative w-full xs:w-48 sm:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               placeholder="Buscar leads..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9"
+              className="pl-9 min-h-[40px] sm:min-h-0"
             />
           </div>
         </div>
       </div>
 
       {/* Kanban Board - Horizontal scroll with snap */}
-      <div className="flex gap-4 overflow-x-auto pb-4 h-[calc(100%-6rem)] snap-x snap-mandatory -mx-4 px-4 sm:mx-0 sm:px-0">
+      <div className="kanban-container h-[calc(100%-6rem)]">
         {stageTags.map((stage, index) => {
           const stageLeads = getLeadsByStage(stage.id);
           const isFirst = index === 0;
@@ -198,7 +199,7 @@ export default function AdminKanbanPage() {
           return (
             <div
               key={stage.id}
-              className="flex-shrink-0 w-72 sm:w-80 snap-start"
+              className="kanban-column kanban-column-snap"
               onDragOver={handleDragOver}
               onDrop={() => handleDrop(stage.id)}
             >

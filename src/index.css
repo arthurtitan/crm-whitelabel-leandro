@@ -303,19 +303,19 @@
 
   /* Responsive Layout Utilities */
   .page-container {
-    @apply space-y-4 sm:space-y-6 animate-fade-in;
+    @apply space-y-4 sm:space-y-6 animate-fade-in p-4 sm:p-6;
   }
 
   .page-header {
-    @apply flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between;
+    @apply flex flex-col gap-3 sm:gap-4 sm:flex-row sm:items-center sm:justify-between;
   }
 
   .kpi-grid {
-    @apply grid grid-cols-1 gap-4;
+    @apply grid grid-cols-1 gap-3 sm:gap-4;
   }
 
   .kpi-grid-6 {
-    @apply grid grid-cols-1 gap-4;
+    @apply grid grid-cols-1 gap-3 sm:gap-4;
   }
 
   .chart-grid {
@@ -323,20 +323,145 @@
   }
 
   .filter-container {
-    @apply flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4;
+    @apply flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3;
   }
 
   .table-container {
-    @apply overflow-x-auto -mx-4 sm:mx-0;
+    @apply overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0;
   }
 
   .table-responsive {
-    @apply min-w-[600px] sm:min-w-full;
+    @apply min-w-[640px];
+  }
+
+  /* Touch Targets - Minimum 44px for mobile */
+  .touch-target {
+    @apply min-h-[44px] min-w-[44px] flex items-center justify-center;
+  }
+
+  /* Modal/Dialog Container - Full responsive */
+  .modal-container {
+    @apply max-h-[90vh] overflow-hidden flex flex-col;
+  }
+
+  .modal-body {
+    @apply overflow-y-auto flex-1 overscroll-contain;
+  }
+
+  .modal-footer {
+    @apply flex flex-col-reverse gap-2 pt-4 sm:flex-row sm:justify-end sm:gap-2;
+  }
+
+  /* Form Grid - Responsive 1-2 columns */
+  .form-grid {
+    @apply grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-4;
+  }
+
+  .form-grid-3 {
+    @apply grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3;
+  }
+
+  /* Responsive Typography */
+  .text-responsive-xs {
+    @apply text-[10px] sm:text-xs;
+  }
+
+  .text-responsive-sm {
+    @apply text-xs sm:text-sm;
+  }
+
+  .text-responsive-base {
+    @apply text-sm sm:text-base;
+  }
+
+  .text-responsive-lg {
+    @apply text-base sm:text-lg md:text-xl;
+  }
+
+  .title-responsive {
+    @apply text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold;
+  }
+
+  /* Responsive Spacing */
+  .gap-responsive {
+    @apply gap-2 sm:gap-3 md:gap-4;
+  }
+
+  .p-responsive {
+    @apply p-3 sm:p-4 md:p-6;
+  }
+
+  .space-y-responsive {
+    @apply space-y-3 sm:space-y-4 md:space-y-6;
+  }
+
+  /* Button Groups - Responsive */
+  .btn-group {
+    @apply flex flex-col gap-2 sm:flex-row sm:gap-2;
+  }
+
+  .btn-group > * {
+    @apply w-full sm:w-auto;
+  }
+
+  /* Card Hover */
+  .card-hover {
+    @apply transition-all duration-200 hover:shadow-lg hover:border-primary/20;
+  }
+
+  /* Chart Responsive Heights */
+  .chart-height {
+    @apply h-[220px] xs:h-[250px] sm:h-[280px] md:h-[320px];
+  }
+
+  .chart-height-sm {
+    @apply h-[180px] xs:h-[200px] sm:h-[240px];
+  }
+
+  /* Kanban Responsive */
+  .kanban-column {
+    @apply w-[80vw] xs:w-[75vw] sm:w-72 md:w-80 flex-shrink-0;
+  }
+
+  .kanban-container {
+    @apply flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory sm:snap-none;
+  }
+
+  .kanban-column-snap {
+    @apply snap-center sm:snap-align-none;
+  }
+
+  /* Table Mobile Optimizations */
+  .table-cell-hide-mobile {
+    @apply hidden md:table-cell;
+  }
+
+  .table-cell-hide-tablet {
+    @apply hidden lg:table-cell;
+  }
+
+  /* Action Buttons Mobile */
+  .action-buttons-mobile {
+    @apply flex flex-wrap gap-1.5 sm:gap-2;
+  }
+
+  /* Stats/Info Grid */
+  .stats-grid {
+    @apply grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4;
+  }
+
+  /* Safe Area for Mobile Devices */
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top, 0);
+  }
+
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0);
   }
 }
 
 /* Media Queries para KPI Grids - fora da layer para maior especificidade */
-@media (min-width: 480px) {
+@media (min-width: 360px) {
   .kpi-grid,
   .kpi-grid-6 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -388,23 +513,20 @@
   }
 }
 
-/* Utilitários de responsividade adicionais */
+/* Responsive Button */
 .btn-responsive {
   @apply w-full sm:w-auto;
 }
 
 .header-responsive {
-  @apply flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between;
+  @apply flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between;
 }
 
 .text-responsive {
   @apply text-sm sm:text-base;
 }
 
-.title-responsive {
-  @apply text-xl sm:text-2xl md:text-3xl font-bold;
-}
-
+/* Animations */
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -448,4 +570,16 @@
 
 .logo-glow {
   animation: logoGlow 3s ease-in-out infinite;
+}
+
+/* Mobile-first responsive overrides */
+@media (max-width: 359px) {
+  .page-container {
+    @apply p-3;
+  }
+  
+  .kpi-grid,
+  .kpi-grid-6 {
+    grid-template-columns: 1fr;
+  }
 }

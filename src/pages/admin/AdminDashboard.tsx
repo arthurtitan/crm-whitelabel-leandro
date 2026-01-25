@@ -314,18 +314,18 @@ export default function AdminDashboard() {
     <div className="page-container">
       {/* Header */}
       <div className="page-header">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-foreground">Dashboard de Atendimento</h1>
-          <p className="text-sm text-muted-foreground">
+        <div className="min-w-0">
+          <h1 className="title-responsive text-foreground">Dashboard de Atendimento</h1>
+          <p className="text-responsive-sm text-muted-foreground">
             Métricas operacionais e estratégicas do atendimento
           </p>
         </div>
 
         {/* State Toggle (for demo purposes) - hidden on mobile */}
-        <div className="hidden sm:flex gap-2">
+        <div className="hidden sm:flex flex-wrap gap-2">
           <button
             onClick={() => handleStateChange('data')}
-            className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
+            className={`px-3 py-1.5 text-xs rounded-md transition-colors min-h-[32px] ${
               viewState === 'data'
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -335,7 +335,7 @@ export default function AdminDashboard() {
           </button>
           <button
             onClick={() => handleStateChange('loading')}
-            className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
+            className={`px-3 py-1.5 text-xs rounded-md transition-colors min-h-[32px] ${
               viewState === 'loading'
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -345,7 +345,7 @@ export default function AdminDashboard() {
           </button>
           <button
             onClick={() => handleStateChange('empty')}
-            className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
+            className={`px-3 py-1.5 text-xs rounded-md transition-colors min-h-[32px] ${
               viewState === 'empty'
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-muted text-muted-foreground hover:bg-muted/80'
