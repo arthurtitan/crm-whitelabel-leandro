@@ -131,27 +131,27 @@ export function SalesTable({ isLoading = false }: SalesTableProps) {
   return (
     <>
       <Card>
-        <CardHeader className="pb-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <CardHeader className="p-3 sm:p-6 pb-3 sm:pb-4">
+          <div className="flex flex-col gap-3">
             <div className="flex items-center gap-2">
-              <Receipt className="w-5 h-5 text-primary" />
-              <CardTitle className="text-base font-semibold">Tabela de Vendas</CardTitle>
+              <Receipt className="w-4 h-4 sm:w-5 sm:h-5 text-primary shrink-0" />
+              <CardTitle className="text-sm sm:text-base font-semibold">Tabela de Vendas</CardTitle>
             </div>
             <div className="flex flex-col sm:flex-row gap-2">
-              <div className="relative">
+              <div className="relative flex-1 sm:flex-none">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   placeholder="Buscar cliente..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9 w-full sm:w-64"
+                  className="pl-9 w-full sm:w-48 md:w-64 h-9 text-sm"
                 />
               </div>
               <Select
                 value={statusFilter}
                 onValueChange={(v) => setStatusFilter(v as SaleStatus | 'all')}
               >
-                <SelectTrigger className="w-full sm:w-40">
+                <SelectTrigger className="w-full sm:w-32 md:w-40 h-9 text-sm">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -164,23 +164,23 @@ export function SalesTable({ isLoading = false }: SalesTableProps) {
             </div>
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="rounded-md border overflow-x-auto">
-            <Table className="min-w-[600px]">
+        <CardContent className="p-3 sm:p-6 pt-0 sm:pt-0">
+          <div className="rounded-md border overflow-x-auto -mx-3 sm:mx-0">
+            <Table className="min-w-[400px] sm:min-w-[500px]">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="min-w-[120px]">Cliente</TableHead>
-                  <TableHead className="min-w-[80px]">Valor</TableHead>
-                  <TableHead className="min-w-[90px] hidden sm:table-cell">Pagamento</TableHead>
-                  <TableHead className="min-w-[80px]">Status</TableHead>
-                  <TableHead className="min-w-[100px] hidden md:table-cell">Data</TableHead>
-                  <TableHead className="text-right min-w-[60px]">Ações</TableHead>
+                  <TableHead className="text-xs sm:text-sm min-w-[80px] sm:min-w-[120px]">Cliente</TableHead>
+                  <TableHead className="text-xs sm:text-sm min-w-[70px] sm:min-w-[80px]">Valor</TableHead>
+                  <TableHead className="text-xs sm:text-sm min-w-[70px] hidden sm:table-cell">Pagamento</TableHead>
+                  <TableHead className="text-xs sm:text-sm min-w-[60px] sm:min-w-[80px]">Status</TableHead>
+                  <TableHead className="text-xs sm:text-sm min-w-[90px] hidden md:table-cell">Data</TableHead>
+                  <TableHead className="text-xs sm:text-sm text-right min-w-[50px] sm:min-w-[60px]">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredSales.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={6} className="text-center py-6 sm:py-8 text-xs sm:text-sm text-muted-foreground">
                       Nenhuma venda encontrada
                     </TableCell>
                   </TableRow>
@@ -189,21 +189,21 @@ export function SalesTable({ isLoading = false }: SalesTableProps) {
                     const contact = getContactById(sale.contact_id);
                     return (
                       <TableRow key={sale.id}>
-                        <TableCell className="font-medium truncate max-w-[150px]">
+                        <TableCell className="font-medium text-xs sm:text-sm truncate max-w-[80px] sm:max-w-[150px]">
                           {contact?.nome || 'Cliente não encontrado'}
                         </TableCell>
-                        <TableCell className="whitespace-nowrap">{formatCurrency(sale.valor)}</TableCell>
+                        <TableCell className="whitespace-nowrap text-xs sm:text-sm">{formatCurrency(sale.valor)}</TableCell>
                         <TableCell className="hidden sm:table-cell">{getPaymentMethodBadge(sale.metodo_pagamento)}</TableCell>
                         <TableCell>{getStatusBadge(sale.status)}</TableCell>
-                        <TableCell className="hidden md:table-cell whitespace-nowrap">
-                          {format(new Date(sale.created_at), 'dd/MM/yyyy HH:mm', {
+                        <TableCell className="hidden md:table-cell whitespace-nowrap text-xs sm:text-sm">
+                          {format(new Date(sale.created_at), 'dd/MM HH:mm', {
                             locale: ptBR,
                           })}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right p-1 sm:p-4">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon">
+                              <Button variant="ghost" size="icon" className="h-8 w-8 sm:h-9 sm:w-9">
                                 <MoreHorizontal className="w-4 h-4" />
                               </Button>
                             </DropdownMenuTrigger>

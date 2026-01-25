@@ -78,12 +78,12 @@ export function FunnelConversionChart({ isLoading = false }: FunnelConversionCha
           </p>
         </div>
       </CardHeader>
-      <CardContent>
-        <div className="flex flex-col sm:flex-row items-stretch gap-4">
+      <CardContent className="p-3 sm:p-6">
+        <div className="flex flex-col sm:flex-row items-stretch gap-3 sm:gap-4">
           {steps.map((step, index) => (
-            <div key={step.label} className="flex-1 flex items-center gap-2">
-              <div className="flex-1">
-                <div className={`p-4 rounded-lg ${step.bgColor} text-center relative group`}>
+            <div key={step.label} className="flex-1 flex flex-col sm:flex-row items-center gap-2">
+              <div className="flex-1 w-full">
+                <div className={`p-3 sm:p-4 rounded-lg ${step.bgColor} text-center relative group`}>
                   {step.configurable && (
                     <Popover 
                       open={activePopover === step.id} 
@@ -93,7 +93,7 @@ export function FunnelConversionChart({ isLoading = false }: FunnelConversionCha
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
+                          className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 sm:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
                         >
                           <Settings2 className="h-3.5 w-3.5" />
                         </Button>
@@ -126,22 +126,33 @@ export function FunnelConversionChart({ isLoading = false }: FunnelConversionCha
                       </PopoverContent>
                     </Popover>
                   )}
-                  <step.icon className={`w-6 h-6 ${step.color} mx-auto mb-2`} />
-                  <p className="text-2xl font-bold">{step.value}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{step.label}</p>
+                  <step.icon className={`w-5 h-5 sm:w-6 sm:h-6 ${step.color} mx-auto mb-1.5 sm:mb-2`} />
+                  <p className="text-xl sm:text-2xl font-bold">{step.value}</p>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 sm:mt-1">{step.label}</p>
                 </div>
-                <p className="text-xs text-muted-foreground text-center mt-2">
+                <p className="text-[10px] sm:text-xs text-muted-foreground text-center mt-1.5 sm:mt-2 hidden sm:block">
                   {step.description}
                 </p>
               </div>
               
+              {/* Arrow - vertical on mobile, horizontal on desktop */}
               {index < steps.length - 1 && (
-                <div className="hidden sm:flex flex-col items-center justify-center px-2">
-                  <ArrowRight className="w-5 h-5 text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground mt-1">
-                    {getConversionRate(steps[index].value, steps[index + 1].value)}
-                  </span>
-                </div>
+                <>
+                  <div className="flex sm:hidden items-center justify-center py-1">
+                    <div className="flex flex-col items-center">
+                      <ArrowRight className="w-4 h-4 text-muted-foreground rotate-90" />
+                      <span className="text-[10px] text-muted-foreground">
+                        {getConversionRate(steps[index].value, steps[index + 1].value)}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="hidden sm:flex flex-col items-center justify-center px-2">
+                    <ArrowRight className="w-5 h-5 text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground mt-1">
+                      {getConversionRate(steps[index].value, steps[index + 1].value)}
+                    </span>
+                  </div>
+                </>
               )}
             </div>
           ))}

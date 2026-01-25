@@ -91,16 +91,16 @@ export function DashboardFilters({
   };
 
   return (
-    <div className="flex flex-col gap-3 p-4 bg-card rounded-lg border border-border sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
-      <div className="flex items-center gap-2 w-full sm:w-auto">
-        <CalendarIcon className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-        <div className="flex flex-wrap bg-muted rounded-lg p-1 gap-1">
+    <div className="flex flex-col gap-2 sm:gap-3 p-3 sm:p-4 bg-card rounded-lg border border-border sm:flex-row sm:flex-wrap sm:items-center">
+      <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto">
+        <CalendarIcon className="w-4 h-4 text-muted-foreground flex-shrink-0 hidden sm:block" />
+        <div className="flex bg-muted rounded-lg p-0.5 sm:p-1 gap-0.5 sm:gap-1 min-w-0">
           {periods.map((period) => (
             <Button
               key={period.value}
               variant={activePeriod === period.value ? 'default' : 'ghost'}
               size="sm"
-              className="h-8 px-3 text-xs"
+              className="h-7 sm:h-8 px-2 sm:px-3 text-[10px] sm:text-xs shrink-0"
               onClick={() => handlePeriodChange(period.value)}
             >
               {period.label}
@@ -114,18 +114,18 @@ export function DashboardFilters({
                 variant={activePeriod === 'custom' ? 'default' : 'ghost'}
                 size="sm"
                 className={cn(
-                  "h-8 px-3 text-xs gap-1.5",
+                  "h-7 sm:h-8 px-2 sm:px-3 text-[10px] sm:text-xs gap-1 sm:gap-1.5 shrink-0",
                   activePeriod === 'custom' && "bg-primary text-primary-foreground"
                 )}
               >
-                <CalendarIcon className="h-3.5 w-3.5" />
+                <CalendarIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                 {activePeriod === 'custom' && dateRange?.from ? (
                   dateRange.to ? (
                     <>
                       {format(dateRange.from, "dd/MM", { locale: ptBR })} - {format(dateRange.to, "dd/MM", { locale: ptBR })}
                     </>
                   ) : (
-                    format(dateRange.from, "dd/MM/yyyy", { locale: ptBR })
+                    format(dateRange.from, "dd/MM", { locale: ptBR })
                   )
                 ) : (
                   "Período"
@@ -139,8 +139,19 @@ export function DashboardFilters({
                 defaultMonth={dateRange?.from}
                 selected={dateRange}
                 onSelect={handleDateRangeChange}
+                numberOfMonths={1}
+                locale={ptBR}
+                className="sm:hidden"
+              />
+              <Calendar
+                initialFocus
+                mode="range"
+                defaultMonth={dateRange?.from}
+                selected={dateRange}
+                onSelect={handleDateRangeChange}
                 numberOfMonths={2}
                 locale={ptBR}
+                className="hidden sm:block"
               />
             </PopoverContent>
           </Popover>
@@ -152,9 +163,9 @@ export function DashboardFilters({
         <>
           <div className="hidden sm:block h-6 w-px bg-border" />
           <div className="flex items-center gap-2 w-full sm:w-auto">
-            <MessageCircle className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+            <MessageCircle className="w-4 h-4 text-muted-foreground flex-shrink-0 hidden sm:block" />
             <Select value={channel} onValueChange={handleChannelChange}>
-              <SelectTrigger className="w-full sm:w-[140px] h-9 sm:h-8">
+              <SelectTrigger className="w-full sm:w-[120px] md:w-[140px] h-8 text-xs sm:text-sm">
                 <SelectValue placeholder="Canal" />
               </SelectTrigger>
               <SelectContent className="bg-popover border border-border z-50">
@@ -171,9 +182,9 @@ export function DashboardFilters({
       {/* Type Filter (IA/Human) */}
       {showTypeFilter && (
         <div className="flex items-center gap-2 w-full sm:w-auto">
-          <Filter className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+          <Filter className="w-4 h-4 text-muted-foreground flex-shrink-0 hidden sm:block" />
           <Select value={type} onValueChange={handleTypeChange}>
-            <SelectTrigger className="w-full sm:w-[140px] h-9 sm:h-8">
+            <SelectTrigger className="w-full sm:w-[110px] md:w-[140px] h-8 text-xs sm:text-sm">
               <SelectValue placeholder="Tipo" />
             </SelectTrigger>
             <SelectContent className="bg-popover border border-border z-50">
