@@ -8,6 +8,7 @@ import {
   FunnelConversionChart,
   SalesTable,
   CreateSaleDialog,
+  ExportXMLButton,
 } from '@/components/finance';
 
 export default function AdminFinancePage() {
@@ -29,7 +30,10 @@ export default function AdminFinancePage() {
           </p>
         </div>
 
-        <CreateSaleDialog />
+        <div className="flex items-center gap-2">
+          <ExportXMLButton period={period} />
+          <CreateSaleDialog />
+        </div>
       </div>
 
       {/* Global Filters - Agent filter removed from Finance */}
