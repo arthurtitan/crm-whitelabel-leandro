@@ -269,11 +269,11 @@ export function ExportXMLButton({ period }: ExportXMLButtonProps) {
     
     try {
       const xml = generateExcelXML();
-      const blob = new Blob([xml], { type: 'application/xml;charset=utf-8' });
+      const blob = new Blob([xml], { type: 'application/vnd.ms-excel' });
       const url = URL.createObjectURL(blob);
       
       const link = document.createElement('a');
-      const fileName = `relatorio-financeiro-${format(new Date(), 'yyyy-MM-dd-HHmm')}.xml`;
+      const fileName = `relatorio-financeiro-${format(new Date(), 'yyyy-MM-dd-HHmm')}.xls`;
       link.href = url;
       link.download = fileName;
       document.body.appendChild(link);
