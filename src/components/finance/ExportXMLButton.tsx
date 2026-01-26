@@ -70,7 +70,7 @@ export function ExportXMLButton({ period }: ExportXMLButtonProps) {
     }).format(value);
   };
 
-  const generateXML = (): string => {
+  const generateExcelXML = (): string => {
     const { start, end } = getPeriodDates(period);
     const periodLabel = getPeriodLabel(period);
     const exportDate = format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
@@ -82,124 +82,184 @@ export function ExportXMLButton({ period }: ExportXMLButtonProps) {
     });
 
     let xml = `<?xml version="1.0" encoding="UTF-8"?>
-<RelatorioFinanceiro>
-  <Cabecalho>
-    <Conta>${escapeXML(account?.nome || 'Conta')}</Conta>
-    <DataExportacao>${exportDate}</DataExportacao>
-    <Periodo>
-      <Descricao>${periodLabel}</Descricao>
-      <DataInicio>${format(start, 'yyyy-MM-dd')}</DataInicio>
-      <DataFim>${format(end, 'yyyy-MM-dd')}</DataFim>
-    </Periodo>
-  </Cabecalho>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+  <Styles>
+    <Style ss:ID="Header">
+      <Font ss:Bold="1"/>
+      <Interior ss:Color="#4472C4" ss:Pattern="Solid"/>
+      <Font ss:Color="#FFFFFF"/>
+    </Style>
+    <Style ss:ID="Currency">
+      <NumberFormat ss:Format="R$ #,##0.00"/>
+    </Style>
+  </Styles>
 
-  <ResumoFinanceiro>
-    <FaturamentoBruto>${kpis.faturamentoBruto.toFixed(2)}</FaturamentoBruto>
-    <FaturamentoBrutoFormatado>${formatCurrency(kpis.faturamentoBruto)}</FaturamentoBrutoFormatado>
-    <TicketMedio>${kpis.ticketMedio.toFixed(2)}</TicketMedio>
-    <TicketMedioFormatado>${formatCurrency(kpis.ticketMedio)}</TicketMedioFormatado>
-    <TotalVendas>${kpis.totalVendas}</TotalVendas>
-    <VendasPagas>
-      <Quantidade>${kpis.vendasPagas.count}</Quantidade>
-      <Valor>${kpis.vendasPagas.valor.toFixed(2)}</Valor>
-      <ValorFormatado>${formatCurrency(kpis.vendasPagas.valor)}</ValorFormatado>
-    </VendasPagas>
-    <VendasPendentes>
-      <Quantidade>${kpis.vendasPendentes.count}</Quantidade>
-      <Valor>${kpis.vendasPendentes.valor.toFixed(2)}</Valor>
-      <ValorFormatado>${formatCurrency(kpis.vendasPendentes.valor)}</ValorFormatado>
-    </VendasPendentes>
-    <VendasEstornadas>
-      <Quantidade>${kpis.vendasEstornadas.count}</Quantidade>
-      <Valor>${kpis.vendasEstornadas.valor.toFixed(2)}</Valor>
-      <ValorFormatado>${formatCurrency(kpis.vendasEstornadas.valor)}</ValorFormatado>
-    </VendasEstornadas>
-  </ResumoFinanceiro>
-
-  <MetodosPagamento>
+  <Worksheet ss:Name="Resumo">
+    <Table>
+      <Row>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">Relatório Financeiro</Data></Cell>
+      </Row>
+      <Row>
+        <Cell><Data ss:Type="String">Conta:</Data></Cell>
+        <Cell><Data ss:Type="String">${escapeXML(account?.nome || 'Conta')}</Data></Cell>
+      </Row>
+      <Row>
+        <Cell><Data ss:Type="String">Data Exportação:</Data></Cell>
+        <Cell><Data ss:Type="String">${exportDate}</Data></Cell>
+      </Row>
+      <Row>
+        <Cell><Data ss:Type="String">Período:</Data></Cell>
+        <Cell><Data ss:Type="String">${periodLabel}</Data></Cell>
+      </Row>
+      <Row>
+        <Cell><Data ss:Type="String">Data Início:</Data></Cell>
+        <Cell><Data ss:Type="String">${format(start, 'dd/MM/yyyy')}</Data></Cell>
+      </Row>
+      <Row>
+        <Cell><Data ss:Type="String">Data Fim:</Data></Cell>
+        <Cell><Data ss:Type="String">${format(end, 'dd/MM/yyyy')}</Data></Cell>
+      </Row>
+      <Row></Row>
+      <Row>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">KPIs Financeiros</Data></Cell>
+      </Row>
+      <Row>
+        <Cell><Data ss:Type="String">Faturamento Bruto:</Data></Cell>
+        <Cell ss:StyleID="Currency"><Data ss:Type="Number">${kpis.faturamentoBruto}</Data></Cell>
+      </Row>
+      <Row>
+        <Cell><Data ss:Type="String">Ticket Médio:</Data></Cell>
+        <Cell ss:StyleID="Currency"><Data ss:Type="Number">${kpis.ticketMedio}</Data></Cell>
+      </Row>
+      <Row>
+        <Cell><Data ss:Type="String">Total de Vendas:</Data></Cell>
+        <Cell><Data ss:Type="Number">${kpis.totalVendas}</Data></Cell>
+      </Row>
+      <Row>
+        <Cell><Data ss:Type="String">Vendas Pagas:</Data></Cell>
+        <Cell><Data ss:Type="Number">${kpis.vendasPagas.count}</Data></Cell>
+        <Cell ss:StyleID="Currency"><Data ss:Type="Number">${kpis.vendasPagas.valor}</Data></Cell>
+      </Row>
+      <Row>
+        <Cell><Data ss:Type="String">Vendas Pendentes:</Data></Cell>
+        <Cell><Data ss:Type="Number">${kpis.vendasPendentes.count}</Data></Cell>
+        <Cell ss:StyleID="Currency"><Data ss:Type="Number">${kpis.vendasPendentes.valor}</Data></Cell>
+      </Row>
+      <Row>
+        <Cell><Data ss:Type="String">Vendas Estornadas:</Data></Cell>
+        <Cell><Data ss:Type="Number">${kpis.vendasEstornadas.count}</Data></Cell>
+        <Cell ss:StyleID="Currency"><Data ss:Type="Number">${kpis.vendasEstornadas.valor}</Data></Cell>
+      </Row>
+      <Row></Row>
+      <Row>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">Métodos de Pagamento</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">Qtd</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">Valor</Data></Cell>
+      </Row>
 `;
 
     kpis.porMetodoPagamento.forEach((method) => {
-      xml += `    <Metodo>
-      <Nome>${escapeXML(method.method)}</Nome>
-      <Quantidade>${method.count}</Quantidade>
-      <Valor>${method.valor.toFixed(2)}</Valor>
-      <ValorFormatado>${formatCurrency(method.valor)}</ValorFormatado>
-    </Metodo>
+      xml += `      <Row>
+        <Cell><Data ss:Type="String">${escapeXML(method.method)}</Data></Cell>
+        <Cell><Data ss:Type="Number">${method.count}</Data></Cell>
+        <Cell ss:StyleID="Currency"><Data ss:Type="Number">${method.valor}</Data></Cell>
+      </Row>
 `;
     });
 
-    xml += `  </MetodosPagamento>
+    xml += `    </Table>
+  </Worksheet>
 
-  <Vendas total="${filteredSales.length}">
+  <Worksheet ss:Name="Vendas">
+    <Table>
+      <Row>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">ID</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">Status</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">Valor</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">Método Pagamento</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">Convênio</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">Recorrente</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">Data Criação</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">Data Pagamento</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">Cliente</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">Telefone</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">Email</Data></Cell>
+      </Row>
 `;
 
     filteredSales.forEach((sale) => {
       const contact = contacts.find((c) => c.id === sale.contact_id);
-      const product = products.find((p) => p.id === sale.product_id);
-
-      xml += `    <Venda>
-      <ID>${escapeXML(sale.id)}</ID>
-      <Status>${escapeXML(sale.status)}</Status>
-      <Valor>${sale.valor.toFixed(2)}</Valor>
-      <ValorFormatado>${formatCurrency(sale.valor)}</ValorFormatado>
-      <MetodoPagamento>${escapeXML(sale.metodo_pagamento || 'Não definido')}</MetodoPagamento>
-      <Convenio>${escapeXML(sale.convenio_nome || '')}</Convenio>
-      <Recorrente>${sale.is_recurring ? 'Sim' : 'Não'}</Recorrente>
-      <DataCriacao>${sale.created_at}</DataCriacao>
-      <DataPagamento>${sale.paid_at || ''}</DataPagamento>
-      <DataEstorno>${sale.refunded_at || ''}</DataEstorno>
-      <Cliente>
-        <ID>${escapeXML(contact?.id || '')}</ID>
-        <Nome>${escapeXML(contact?.nome || 'Cliente não identificado')}</Nome>
-        <Telefone>${escapeXML(contact?.telefone || '')}</Telefone>
-        <Email>${escapeXML(contact?.email || '')}</Email>
-        <Origem>${escapeXML(contact?.origem || '')}</Origem>
-      </Cliente>
-      <Itens>
-`;
-
-      sale.items.forEach((item) => {
-        const itemProduct = products.find((p) => p.id === item.product_id);
-        xml += `        <Item>
-          <ProdutoID>${escapeXML(item.product_id)}</ProdutoID>
-          <ProdutoNome>${escapeXML(itemProduct?.nome || 'Produto')}</ProdutoNome>
-          <Quantidade>${item.quantidade}</Quantidade>
-          <ValorUnitario>${item.valor_unitario.toFixed(2)}</ValorUnitario>
-          <ValorTotal>${item.valor_total.toFixed(2)}</ValorTotal>
-          <Estornado>${(item as any).refunded ? 'Sim' : 'Não'}</Estornado>
-        </Item>
-`;
-      });
-
-      xml += `      </Itens>
-    </Venda>
+      xml += `      <Row>
+        <Cell><Data ss:Type="String">${escapeXML(sale.id)}</Data></Cell>
+        <Cell><Data ss:Type="String">${escapeXML(sale.status)}</Data></Cell>
+        <Cell ss:StyleID="Currency"><Data ss:Type="Number">${sale.valor}</Data></Cell>
+        <Cell><Data ss:Type="String">${escapeXML(sale.metodo_pagamento || 'Não definido')}</Data></Cell>
+        <Cell><Data ss:Type="String">${escapeXML(sale.convenio_nome || '')}</Data></Cell>
+        <Cell><Data ss:Type="String">${sale.is_recurring ? 'Sim' : 'Não'}</Data></Cell>
+        <Cell><Data ss:Type="String">${format(new Date(sale.created_at), 'dd/MM/yyyy HH:mm')}</Data></Cell>
+        <Cell><Data ss:Type="String">${sale.paid_at ? format(new Date(sale.paid_at), 'dd/MM/yyyy HH:mm') : ''}</Data></Cell>
+        <Cell><Data ss:Type="String">${escapeXML(contact?.nome || 'Cliente não identificado')}</Data></Cell>
+        <Cell><Data ss:Type="String">${escapeXML(contact?.telefone || '')}</Data></Cell>
+        <Cell><Data ss:Type="String">${escapeXML(contact?.email || '')}</Data></Cell>
+      </Row>
 `;
     });
 
-    xml += `  </Vendas>
+    xml += `    </Table>
+  </Worksheet>
 
-  <FaturamentoPorDia>
+  <Worksheet ss:Name="Itens Vendidos">
+    <Table>
+      <Row>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">Venda ID</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">Produto</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">Quantidade</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">Valor Unitário</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">Valor Total</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">Estornado</Data></Cell>
+      </Row>
+`;
+
+    filteredSales.forEach((sale) => {
+      sale.items.forEach((item) => {
+        const itemProduct = products.find((p) => p.id === item.product_id);
+        xml += `      <Row>
+        <Cell><Data ss:Type="String">${escapeXML(sale.id)}</Data></Cell>
+        <Cell><Data ss:Type="String">${escapeXML(itemProduct?.nome || 'Produto')}</Data></Cell>
+        <Cell><Data ss:Type="Number">${item.quantidade}</Data></Cell>
+        <Cell ss:StyleID="Currency"><Data ss:Type="Number">${item.valor_unitario}</Data></Cell>
+        <Cell ss:StyleID="Currency"><Data ss:Type="Number">${item.valor_total}</Data></Cell>
+        <Cell><Data ss:Type="String">${(item as any).refunded ? 'Sim' : 'Não'}</Data></Cell>
+      </Row>
+`;
+      });
+    });
+
+    xml += `    </Table>
+  </Worksheet>
+
+  <Worksheet ss:Name="Faturamento por Dia">
+    <Table>
+      <Row>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">Data</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">Valor</Data></Cell>
+      </Row>
 `;
 
     kpis.faturamentoPorDia.forEach((day) => {
-      xml += `    <Dia>
-      <Data>${escapeXML(day.date)}</Data>
-      <Valor>${day.valor.toFixed(2)}</Valor>
-      <ValorFormatado>${formatCurrency(day.valor)}</ValorFormatado>
-    </Dia>
+      xml += `      <Row>
+        <Cell><Data ss:Type="String">${escapeXML(day.date)}</Data></Cell>
+        <Cell ss:StyleID="Currency"><Data ss:Type="Number">${day.valor}</Data></Cell>
+      </Row>
 `;
     });
 
-    xml += `  </FaturamentoPorDia>
+    xml += `    </Table>
+  </Worksheet>
 
-  <Funil>
-    <LeadsConvertidos>${kpis.leadsConvertidos}</LeadsConvertidos>
-    <VendasCriadas>${kpis.vendasCriadas}</VendasCriadas>
-    <VendasPagas>${kpis.vendasPagasCount}</VendasPagas>
-  </Funil>
-
-</RelatorioFinanceiro>`;
+</Workbook>`;
 
     return xml;
   };
@@ -208,7 +268,7 @@ export function ExportXMLButton({ period }: ExportXMLButtonProps) {
     setIsExporting(true);
     
     try {
-      const xml = generateXML();
+      const xml = generateExcelXML();
       const blob = new Blob([xml], { type: 'application/xml;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       
