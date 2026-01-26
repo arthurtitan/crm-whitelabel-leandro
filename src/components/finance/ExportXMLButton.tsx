@@ -269,7 +269,9 @@ export function ExportXMLButton({ period }: ExportXMLButtonProps) {
     
     try {
       const xml = generateExcelXML();
-      const blob = new Blob([xml], { type: 'application/vnd.ms-excel' });
+      // Add UTF-8 BOM for Excel to properly recognize encoding
+      const BOM = '\uFEFF';
+      const blob = new Blob([BOM + xml], { type: 'application/vnd.ms-excel;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       
       const link = document.createElement('a');
