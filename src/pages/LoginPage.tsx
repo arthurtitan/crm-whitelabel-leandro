@@ -89,7 +89,7 @@ export default function LoginPage() {
             <img 
               src={glepsLogo} 
               alt="Gleps.AI" 
-              className="w-20 h-20 object-contain logo-glow"
+              className="w-20 h-20 object-contain logo-glow rounded-xl"
             />
           </div>
           <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-purple-400 bg-clip-text text-transparent">Painel Gleps</h1>
