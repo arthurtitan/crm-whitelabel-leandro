@@ -1,0 +1,166 @@
+/**
+ * API Endpoints Configuration
+ * 
+ * Centralized definition of all API endpoints organized by microservice/domain.
+ * This file serves as the single source of truth for API routes.
+ * 
+ * When backend is ready:
+ * 1. Update apiConfig.baseUrl with the real API URL
+ * 2. Endpoints will automatically use the correct paths
+ */
+
+export const API_ENDPOINTS = {
+  // ============= AUTH SERVICE =============
+  AUTH: {
+    LOGIN: '/api/auth/login',
+    LOGOUT: '/api/auth/logout',
+    REFRESH: '/api/auth/refresh',
+    ME: '/api/auth/me',
+    FORGOT_PASSWORD: '/api/auth/forgot-password',
+    RESET_PASSWORD: '/api/auth/reset-password',
+    IMPERSONATE: (userId: string) => `/api/auth/impersonate/${userId}`,
+    EXIT_IMPERSONATION: '/api/auth/exit-impersonation',
+  },
+
+  // ============= ACCOUNTS SERVICE (Super Admin) =============
+  ACCOUNTS: {
+    LIST: '/api/accounts',
+    GET: (id: string) => `/api/accounts/${id}`,
+    CREATE: '/api/accounts',
+    UPDATE: (id: string) => `/api/accounts/${id}`,
+    DELETE: (id: string) => `/api/accounts/${id}`,
+    PAUSE: (id: string) => `/api/accounts/${id}/pause`,
+    ACTIVATE: (id: string) => `/api/accounts/${id}/activate`,
+    STATS: (id: string) => `/api/accounts/${id}/stats`,
+  },
+
+  // ============= USERS SERVICE =============
+  USERS: {
+    LIST: '/api/users',
+    GET: (id: string) => `/api/users/${id}`,
+    CREATE: '/api/users',
+    UPDATE: (id: string) => `/api/users/${id}`,
+    DELETE: (id: string) => `/api/users/${id}`,
+    BY_ACCOUNT: (accountId: string) => `/api/accounts/${accountId}/users`,
+    UPDATE_STATUS: (id: string) => `/api/users/${id}/status`,
+    UPDATE_PERMISSIONS: (id: string) => `/api/users/${id}/permissions`,
+  },
+
+  // ============= CONTACTS SERVICE =============
+  CONTACTS: {
+    LIST: '/api/contacts',
+    GET: (id: string) => `/api/contacts/${id}`,
+    CREATE: '/api/contacts',
+    UPDATE: (id: string) => `/api/contacts/${id}`,
+    DELETE: (id: string) => `/api/contacts/${id}`,
+    SEARCH: '/api/contacts/search',
+    BY_STAGE: (stageId: string) => `/api/contacts/stage/${stageId}`,
+    MOVE_STAGE: (id: string) => `/api/contacts/${id}/move`,
+    NOTES: (id: string) => `/api/contacts/${id}/notes`,
+    ADD_NOTE: (id: string) => `/api/contacts/${id}/notes`,
+  },
+
+  // ============= SALES SERVICE =============
+  SALES: {
+    LIST: '/api/sales',
+    GET: (id: string) => `/api/sales/${id}`,
+    CREATE: '/api/sales',
+    UPDATE: (id: string) => `/api/sales/${id}`,
+    DELETE: (id: string) => `/api/sales/${id}`,
+    MARK_PAID: (id: string) => `/api/sales/${id}/pay`,
+    REFUND: (id: string) => `/api/sales/${id}/refund`,
+    REFUND_ITEM: (saleId: string, itemId: string) => `/api/sales/${saleId}/items/${itemId}/refund`,
+    BY_CONTACT: (contactId: string) => `/api/contacts/${contactId}/sales`,
+    TRANSACTIONS: (id: string) => `/api/sales/${id}/transactions`,
+    STATS: '/api/sales/stats',
+  },
+
+  // ============= PRODUCTS SERVICE =============
+  PRODUCTS: {
+    LIST: '/api/products',
+    GET: (id: string) => `/api/products/${id}`,
+    CREATE: '/api/products',
+    UPDATE: (id: string) => `/api/products/${id}`,
+    DELETE: (id: string) => `/api/products/${id}`,
+    TOGGLE_STATUS: (id: string) => `/api/products/${id}/toggle`,
+  },
+
+  // ============= TAGS SERVICE =============
+  TAGS: {
+    LIST: '/api/tags',
+    GET: (id: string) => `/api/tags/${id}`,
+    CREATE: '/api/tags',
+    UPDATE: (id: string) => `/api/tags/${id}`,
+    DELETE: (id: string) => `/api/tags/${id}`,
+    REORDER: '/api/tags/reorder',
+    BY_CONTACT: (contactId: string) => `/api/contacts/${contactId}/tags`,
+    ADD_TO_CONTACT: (contactId: string) => `/api/contacts/${contactId}/tags`,
+    REMOVE_FROM_CONTACT: (contactId: string, tagId: string) => `/api/contacts/${contactId}/tags/${tagId}`,
+    HISTORY: (contactId: string) => `/api/contacts/${contactId}/tags/history`,
+  },
+
+  // ============= FUNNEL SERVICE =============
+  FUNNELS: {
+    LIST: '/api/funnels',
+    GET: (id: string) => `/api/funnels/${id}`,
+    CREATE: '/api/funnels',
+    UPDATE: (id: string) => `/api/funnels/${id}`,
+    DELETE: (id: string) => `/api/funnels/${id}`,
+    STAGES: (funnelId: string) => `/api/funnels/${funnelId}/stages`,
+  },
+
+  // ============= CALENDAR SERVICE =============
+  CALENDAR: {
+    EVENTS: '/api/calendar/events',
+    EVENT: (id: string) => `/api/calendar/events/${id}`,
+    CREATE_EVENT: '/api/calendar/events',
+    UPDATE_EVENT: (id: string) => `/api/calendar/events/${id}`,
+    DELETE_EVENT: (id: string) => `/api/calendar/events/${id}`,
+    SYNC: '/api/calendar/sync',
+    INTEGRATIONS: '/api/calendar/integrations',
+    CONNECT_GOOGLE: '/api/calendar/connect/google',
+    DISCONNECT_GOOGLE: '/api/calendar/disconnect/google',
+  },
+
+  // ============= EVENTS/AUDIT SERVICE =============
+  EVENTS: {
+    LIST: '/api/events',
+    GET: (id: string) => `/api/events/${id}`,
+    BY_ENTITY: (entityType: string, entityId: string) => `/api/events/${entityType}/${entityId}`,
+    STATS: '/api/events/stats',
+  },
+
+  // ============= CHATWOOT INTEGRATION =============
+  CHATWOOT: {
+    AGENTS: '/api/chatwoot/agents',
+    IMPORT_AGENTS: '/api/chatwoot/agents/import',
+    CONVERSATIONS: '/api/chatwoot/conversations',
+    CONVERSATION: (id: string) => `/api/chatwoot/conversations/${id}`,
+    MESSAGES: (conversationId: string) => `/api/chatwoot/conversations/${conversationId}/messages`,
+    METRICS: '/api/chatwoot/metrics',
+    SYNC: '/api/chatwoot/sync',
+  },
+
+  // ============= DASHBOARD/ANALYTICS =============
+  DASHBOARD: {
+    SUPER_ADMIN_KPIS: '/api/dashboard/super-admin/kpis',
+    ADMIN_KPIS: '/api/dashboard/admin/kpis',
+    AGENT_KPIS: '/api/dashboard/agent/kpis',
+    HOURLY_PEAK: '/api/dashboard/hourly-peak',
+    AGENT_PERFORMANCE: '/api/dashboard/agent-performance',
+    REVENUE: '/api/dashboard/revenue',
+    CONVERSION_FUNNEL: '/api/dashboard/conversion-funnel',
+  },
+
+  // ============= INSIGHTS/REPORTS =============
+  INSIGHTS: {
+    OVERVIEW: '/api/insights/overview',
+    PRODUCT_ANALYSIS: '/api/insights/products',
+    TEMPORAL_ANALYSIS: '/api/insights/temporal',
+    PAYMENT_METHODS: '/api/insights/payment-methods',
+    MARKETING: '/api/insights/marketing',
+    AUTOMATIC: '/api/insights/automatic',
+  },
+} as const;
+
+export default API_ENDPOINTS;
