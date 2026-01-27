@@ -73,7 +73,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ChatwootAgentImport, EmbeddedUserCreationForm } from '@/components/chatwoot';
+import { ChatwootAgentImport, EmbeddedUserCreationForm, UserCreationData } from '@/components/chatwoot';
 
 type AccountStatus = 'active' | 'paused' | 'cancelled';
 type Language = 'pt' | 'en';
@@ -292,25 +292,23 @@ export default function SuperAdminAccountsPage() {
     return selectedAgents[currentAgentIndex] || null;
   };
 
-  const handleUserCreated = async (user: User) => {
+  const handleUserCreated = async (data: UserCreationData) => {
     const currentAgent = getCurrentAgent();
     if (!currentAgent || !createdAccountId) return;
 
     try {
-      // Generate temporary password
-      const tempPassword = `Gleps${Date.now().toString(36)}!`;
-      
+      // Use the password provided by the user in the form
       await usersCloudService.create({
         email: currentAgent.email,
         nome: currentAgent.name,
-        password: tempPassword,
-        role: user.role,
+        password: data.password,
+        role: data.user.role,
         account_id: createdAccountId,
         chatwoot_agent_id: currentAgent.id,
-        permissions: user.permissions || ['dashboard'],
+        permissions: data.user.permissions || ['dashboard'],
       });
       
-      setCreatedUsers(prev => [...prev, user]);
+      setCreatedUsers(prev => [...prev, data.user]);
       
       // Move to next agent or finish
       const selectedAgents = getSelectedAgents();

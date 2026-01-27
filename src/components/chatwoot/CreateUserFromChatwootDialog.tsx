@@ -307,6 +307,14 @@ export function CreateUserFromChatwootDialog({
 }
 
 /**
+ * User data with password for creation
+ */
+export interface UserCreationData {
+  user: User;
+  password: string;
+}
+
+/**
  * Embedded version for use inside another DialogContent
  * This renders just the content without a wrapping Dialog
  */
@@ -315,7 +323,7 @@ interface EmbeddedUserCreationFormProps {
   currentIndex: number;
   totalAgents: number;
   accountId: string;
-  onUserCreated: (user: User) => void;
+  onUserCreated: (data: UserCreationData) => void;
   onSkip: () => void;
 }
 
@@ -369,7 +377,7 @@ export function EmbeddedUserCreationForm({
       updated_at: new Date().toISOString(),
     };
 
-    onUserCreated(newUser);
+    onUserCreated({ user: newUser, password });
   };
 
   const isValid = password.length >= 6 && password === confirmPassword;
