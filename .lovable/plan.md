@@ -1,98 +1,86 @@
 
-# Plano: Corrigir Timeout na Conexão com Chatwoot
 
-## Problema Identificado
+# Plano: Corrigir Headers da Edge Function para Compatibilidade com Chatwoot
 
-A Edge Function `test-chatwoot-connection` está dando timeout após **15 segundos** ao tentar conectar com a instância Chatwoot em `https://atendimento.gleps.com.br`. Os logs confirmam:
+## Problema Real Identificado
 
+Após sua confirmação de que a API funciona, analisei o código e identifiquei possíveis problemas de compatibilidade na requisição:
+
+1. **Falta de User-Agent** - Algumas instâncias Chatwoot (especialmente com Cloudflare) bloqueiam requisições sem User-Agent
+2. **Header Content-Type desnecessário em GET** - Pode causar problemas em alguns servidores
+3. **Falta de Accept header** - O servidor pode não saber que esperamos JSON
+
+## Comparação: Código Atual vs Documentação
+
+```text
+┌─────────────────────────────────────┬─────────────────────────────────────┐
+│        CÓDIGO ATUAL                 │      DOCUMENTAÇÃO CHATWOOT          │
+├─────────────────────────────────────┼─────────────────────────────────────┤
+│ headers: {                          │ --header 'api_access_token: <key>'  │
+│   'api_access_token': apiKey,       │                                     │
+│   'Content-Type': 'application/json'│ (sem Content-Type para GET)         │
+│ }                                   │ (sem User-Agent especificado)       │
+└─────────────────────────────────────┴─────────────────────────────────────┘
 ```
-2026-01-27T07:55:24Z INFO Testing Chatwoot connection: https://atendimento.gleps.com.br/api/v1/accounts/1/agents
-2026-01-27T07:55:39Z ERROR AbortError: The signal has been aborted
-```
-
-O intervalo de 15 segundos (07:55:24 → 07:55:39) mostra que o timeout está sendo atingido exatamente no limite configurado.
-
-## Causas Prováveis
-
-1. **Servidor Chatwoot lento** - A instância pode estar sobrecarregada
-2. **Firewall/Cloudflare** - Proteções podem estar limitando ou atrasando requisições de IPs externos (servidores Supabase)
-3. **Latência geográfica** - Distância entre servidor da Edge Function e servidor Chatwoot
 
 ## Solução Proposta
 
-### 1. Aumentar Timeout da Edge Function
+### Modificações no `supabase/functions/test-chatwoot-connection/index.ts`
 
-Aumentar de 15 segundos para **45 segundos** para dar mais tempo ao servidor Chatwoot responder:
-
+1. **Adicionar User-Agent** para evitar bloqueio por bots:
 ```typescript
-// Antes
-const CHATWOOT_FETCH_TIMEOUT_MS = 15000;
-
-// Depois  
-const CHATWOOT_FETCH_TIMEOUT_MS = 45000;
-```
-
-### 2. Adicionar Logs de Diagnóstico
-
-Incluir timestamps para medir exatamente quanto tempo cada etapa demora:
-
-```typescript
-console.log(`[${Date.now()}] Iniciando conexão com: ${agentsUrl}`);
-// ... fetch
-console.log(`[${Date.now()}] Resposta recebida em ${elapsed}ms`);
-```
-
-### 3. Melhorar Mensagens de Erro
-
-Fornecer informações mais úteis quando ocorrer timeout:
-
-- Mostrar a URL que estava sendo acessada
-- Sugerir verificar se o servidor está acessível
-- Indicar possíveis problemas de firewall
-
-### 4. Adicionar Retry Automático
-
-Implementar uma tentativa automática caso a primeira falhe (útil para instabilidades temporárias):
-
-```typescript
-async function fetchWithRetry(url: string, init: RequestInit, retries = 2) {
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      return await fetchWithTimeout(url, init);
-    } catch (error) {
-      if (attempt === retries) throw error;
-      console.log(`Tentativa ${attempt} falhou, tentando novamente...`);
-      await new Promise(r => setTimeout(r, 1000)); // Espera 1s entre tentativas
-    }
-  }
+headers: {
+  'api_access_token': normalizedApiKey,
+  'Accept': 'application/json',
+  'User-Agent': 'LovableCRM/1.0 (Chatwoot Integration)',
 }
 ```
 
+2. **Remover Content-Type do GET** - Não é necessário e pode causar problemas
+
+3. **Adicionar log do host e IP** para debug adicional:
+```typescript
+console.log(`[Chatwoot Test] Host: ${new URL(normalizedBaseUrl).hostname}`);
+```
+
+4. **Tentar DNS diferente** - Usar fetch com redirect: 'follow' explícito
+
 ---
 
-## Arquivo a Modificar
+## Arquivos a Modificar
 
-| Arquivo | Ação |
-|---------|------|
-| `supabase/functions/test-chatwoot-connection/index.ts` | **MODIFICAR** - Aumentar timeout, adicionar retry e logs |
+| Arquivo | Mudança |
+|---------|---------|
+| `supabase/functions/test-chatwoot-connection/index.ts` | Corrigir headers da requisição |
 
 ---
 
 ## Código Atualizado
 
-A Edge Function será atualizada com:
+```typescript
+const commonInit: RequestInit = {
+  method: 'GET',
+  headers: {
+    'api_access_token': normalizedApiKey,
+    'Accept': 'application/json',
+    'User-Agent': 'LovableCRM/1.0 (Chatwoot Integration)',
+  },
+  redirect: 'follow',
+};
+```
 
-1. **Timeout de 45 segundos** (era 15s)
-2. **2 tentativas automáticas** com intervalo de 2 segundos
-3. **Logs detalhados** com timestamps para debug
-4. **Mensagem de erro melhorada** com sugestões de solução
-5. **Fallback para buscar apenas agentes** se inboxes/labels demorarem
+---
+
+## Por que isso deve funcionar
+
+1. **User-Agent** - Cloudflare e proxies reversos frequentemente bloqueiam requisições sem identificação
+2. **Accept header** - Informa ao servidor que esperamos JSON, melhor do que Content-Type em GET
+3. **redirect: 'follow'** - Garante que redirecionamentos HTTP sejam seguidos automaticamente
+4. **Remoção de Content-Type** - Em requisições GET, este header pode causar comportamento inesperado
 
 ---
 
 ## Resultado Esperado
 
-- Conexões lentas (até 45s) serão bem-sucedidas
-- Em caso de falha intermitente, haverá retry automático
-- Mensagens de erro mais informativas ajudarão no diagnóstico
-- Logs detalhados facilitarão debug futuro
+Após deploy, a Edge Function deve conseguir conectar ao `https://atendimento.gleps.com.br` corretamente e retornar os agentes, inboxes e labels.
+
