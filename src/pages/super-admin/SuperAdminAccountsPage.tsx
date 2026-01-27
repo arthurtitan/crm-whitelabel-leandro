@@ -161,33 +161,40 @@ export default function SuperAdminAccountsPage() {
     setConnectionError(null);
     setConnectionResult(null);
     setSelectedAgentIds([]);
-    
-    const result = await accountsCloudService.testChatwootConnection(
-      formData.chatwootBaseUrl,
-      formData.chatwootAccountId,
-      formData.chatwootApiKey
-    );
 
-    if (result.success) {
-      setConnectionStatus('success');
-      // Map agents to ChatwootAgent type with proper role typing
-      const agents: ChatwootAgent[] = (result.agents || []).map((a: any) => ({
-        id: a.id,
-        name: a.name,
-        email: a.email,
-        role: (a.role === 'administrator' ? 'administrator' : 'agent') as 'administrator' | 'agent',
-        availability_status: a.availability_status as 'online' | 'busy' | 'offline' | undefined,
-      }));
-      setConnectionResult({
-        agents,
-        inboxes: result.inboxes || [],
-        labels: result.labels || [],
-      });
-      toast.success(result.message);
-    } else {
+    try {
+      const result = await accountsCloudService.testChatwootConnection(
+        formData.chatwootBaseUrl,
+        formData.chatwootAccountId,
+        formData.chatwootApiKey
+      );
+
+      if (result.success) {
+        setConnectionStatus('success');
+        // Map agents to ChatwootAgent type with proper role typing
+        const agents: ChatwootAgent[] = (result.agents || []).map((a: any) => ({
+          id: a.id,
+          name: a.name,
+          email: a.email,
+          role: (a.role === 'administrator' ? 'administrator' : 'agent') as 'administrator' | 'agent',
+          availability_status: a.availability_status as 'online' | 'busy' | 'offline' | undefined,
+        }));
+        setConnectionResult({
+          agents,
+          inboxes: result.inboxes || [],
+          labels: result.labels || [],
+        });
+        toast.success(result.message);
+      } else {
+        setConnectionStatus('error');
+        setConnectionError(result.message);
+        toast.error(result.message);
+      }
+    } catch (e: any) {
+      const msg = e?.message || 'Erro inesperado ao testar conexão';
       setConnectionStatus('error');
-      setConnectionError(result.message);
-      toast.error(result.message);
+      setConnectionError(msg);
+      toast.error(msg);
     }
   };
 
@@ -516,7 +523,14 @@ export default function SuperAdminAccountsPage() {
                           <Input
                             id="chatwootBaseUrl"
                             value={formData.chatwootBaseUrl}
-                            onChange={(e) => setFormData({ ...formData, chatwootBaseUrl: e.target.value })}
+                            onChange={(e) => {
+                              setFormData({ ...formData, chatwootBaseUrl: e.target.value });
+                              if (connectionStatus !== 'idle') {
+                                setConnectionStatus('idle');
+                                setConnectionError(null);
+                                setConnectionResult(null);
+                              }
+                            }}
                             placeholder="https://app.chatwoot.com"
                           />
                           <p className="text-xs text-muted-foreground">
@@ -528,7 +542,14 @@ export default function SuperAdminAccountsPage() {
                           <Input
                             id="chatwootAccountId"
                             value={formData.chatwootAccountId}
-                            onChange={(e) => setFormData({ ...formData, chatwootAccountId: e.target.value })}
+                            onChange={(e) => {
+                              setFormData({ ...formData, chatwootAccountId: e.target.value });
+                              if (connectionStatus !== 'idle') {
+                                setConnectionStatus('idle');
+                                setConnectionError(null);
+                                setConnectionResult(null);
+                              }
+                            }}
                             placeholder="ID da conta no Chatwoot"
                           />
                         </div>
@@ -538,7 +559,14 @@ export default function SuperAdminAccountsPage() {
                             id="chatwootApiKey"
                             type="password"
                             value={formData.chatwootApiKey}
-                            onChange={(e) => setFormData({ ...formData, chatwootApiKey: e.target.value })}
+                            onChange={(e) => {
+                              setFormData({ ...formData, chatwootApiKey: e.target.value });
+                              if (connectionStatus !== 'idle') {
+                                setConnectionStatus('idle');
+                                setConnectionError(null);
+                                setConnectionResult(null);
+                              }
+                            }}
                             placeholder="Access Token do usuário"
                           />
                         </div>

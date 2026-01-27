@@ -209,19 +209,34 @@ export const accountsCloudService = {
     labels?: Array<{ id: number; title: string; color: string }>;
   }> {
     try {
+      const normalizedBaseUrl = String(baseUrl || '').trim().replace(/\/$/, '');
+      const normalizedAccountId = String(accountId || '').trim();
+      const normalizedApiKey = String(apiKey || '').trim();
+
       const { data, error } = await supabase.functions.invoke('test-chatwoot-connection', {
         body: {
-          baseUrl: baseUrl.replace(/\/$/, ''),
-          accountId,
-          apiKey,
+          baseUrl: normalizedBaseUrl,
+          accountId: normalizedAccountId,
+          apiKey: normalizedApiKey,
         },
       });
 
       if (error) {
         console.error('[Chatwoot] Edge function error:', error);
+
+        const msg = error.message || 'Erro ao conectar com o servidor';
+        // Common generic error when the request is interrupted or times out.
+        if (/Failed to send a request to the Edge Function/i.test(msg)) {
+          return {
+            success: false,
+            message:
+              'Não foi possível comunicar com o serviço de teste. Tente novamente; se persistir, verifique se a URL está acessível externamente e se sua sessão não expirou.',
+          };
+        }
+
         return { 
           success: false, 
-          message: error.message || 'Erro ao conectar com o servidor' 
+          message: msg,
         };
       }
 

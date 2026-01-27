@@ -6,14 +6,19 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Increased from 15s to 45s to handle slow Chatwoot instances
-const CHATWOOT_FETCH_TIMEOUT_MS = 45000;
+// Keep total runtime comfortably below typical serverless request limits.
+// If a Chatwoot instance is unreachable/blocked, we prefer failing fast with a clear message
+// instead of the client seeing a generic "Failed to send a request...".
+const CHATWOOT_FETCH_TIMEOUT_MS = 25000;
 const MAX_RETRIES = 2;
-const RETRY_DELAY_MS = 2000;
+const RETRY_DELAY_MS = 1000;
 
-async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+// Secondary metadata (inboxes/labels) should not delay the primary validation.
+const CHATWOOT_SECONDARY_TIMEOUT_MS = 6000;
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = CHATWOOT_FETCH_TIMEOUT_MS): Promise<Response> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), CHATWOOT_FETCH_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(url, { ...init, signal: controller.signal });
   } finally {
@@ -39,6 +44,11 @@ async function fetchWithRetry(url: string, init: RequestInit, context: string): 
       
       console.error(`[${context}] Attempt ${attempt} failed after ${elapsed}ms: ${lastError.message}`);
       
+      // If we timed out, retrying rarely helps and can exceed request time limits.
+      if (lastError.name === 'AbortError') {
+        break;
+      }
+
       if (attempt < MAX_RETRIES) {
         console.log(`[${context}] Waiting ${RETRY_DELAY_MS}ms before retry...`);
         await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
@@ -60,12 +70,12 @@ serve(async (req) => {
   try {
     const { baseUrl, accountId, apiKey } = await req.json();
 
-    if (!baseUrl || !accountId || !apiKey) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Missing required parameters' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+     if (!baseUrl || !accountId || !apiKey) {
+       return new Response(
+         JSON.stringify({ success: false, error: 'Missing required parameters' }),
+         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+       );
+     }
 
     const normalizedBaseUrl = String(baseUrl).trim().replace(/\/$/, '');
     const normalizedAccountId = String(accountId).trim();
@@ -131,12 +141,12 @@ serve(async (req) => {
     console.log(`[Chatwoot Test] Fetching inboxes and labels in parallel...`);
 
     const [inboxesResult, labelsResult] = await Promise.allSettled([
-      fetchWithRetry(inboxesUrl, commonInit, 'Inboxes').catch(e => {
-        console.warn(`[Inboxes] Failed: ${e.message}`);
+      fetchWithTimeout(inboxesUrl, commonInit, CHATWOOT_SECONDARY_TIMEOUT_MS).catch((e) => {
+        console.warn(`[Inboxes] Failed: ${e?.message || String(e)}`);
         return null;
       }),
-      fetchWithRetry(labelsUrl, commonInit, 'Labels').catch(e => {
-        console.warn(`[Labels] Failed: ${e.message}`);
+      fetchWithTimeout(labelsUrl, commonInit, CHATWOOT_SECONDARY_TIMEOUT_MS).catch((e) => {
+        console.warn(`[Labels] Failed: ${e?.message || String(e)}`);
         return null;
       }),
     ]);
@@ -214,9 +224,10 @@ serve(async (req) => {
       );
     }
 
+    // Always reply with 200 + { success: false } so the UI can surface a friendly message.
     return new Response(
       JSON.stringify({ success: false, error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
