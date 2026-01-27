@@ -74,6 +74,12 @@ type AccountStatus = 'active' | 'paused' | 'cancelled';
 type Language = 'pt' | 'en';
 type ConnectionStatus = 'idle' | 'loading' | 'success' | 'error';
 
+interface ChatwootConnectionResult {
+  agents: Array<{ id: number; name: string; email: string; role: string }>;
+  inboxes: Array<{ id: number; name: string; channel_type: string }>;
+  labels: Array<{ id: number; title: string; color: string }>;
+}
+
 interface CreateFormData {
   nome: string;
   idioma: Language;
@@ -112,6 +118,7 @@ export default function SuperAdminAccountsPage() {
   const [formData, setFormData] = useState<CreateFormData>(initialFormData);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('idle');
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [connectionResult, setConnectionResult] = useState<ChatwootConnectionResult | null>(null);
 
   // Load accounts from database
   useEffect(() => {
@@ -139,6 +146,7 @@ export default function SuperAdminAccountsPage() {
   const handleTestConnection = async () => {
     setConnectionStatus('loading');
     setConnectionError(null);
+    setConnectionResult(null);
     
     const result = await accountsCloudService.testChatwootConnection(
       formData.chatwootBaseUrl,
@@ -148,7 +156,12 @@ export default function SuperAdminAccountsPage() {
 
     if (result.success) {
       setConnectionStatus('success');
-      toast.success('Conexão estabelecida com sucesso!');
+      setConnectionResult({
+        agents: result.agents || [],
+        inboxes: result.inboxes || [],
+        labels: result.labels || [],
+      });
+      toast.success(result.message);
     } else {
       setConnectionStatus('error');
       setConnectionError(result.message);
@@ -186,6 +199,7 @@ export default function SuperAdminAccountsPage() {
     setFormData(initialFormData);
     setConnectionStatus('idle');
     setConnectionError(null);
+    setConnectionResult(null);
   };
 
   const handleUpdate = async () => {
@@ -380,8 +394,27 @@ export default function SuperAdminAccountsPage() {
                     {connectionStatus === 'error' && connectionError && (
                       <p className="text-xs text-destructive">{connectionError}</p>
                     )}
-                    {connectionStatus === 'success' && (
-                      <p className="text-xs text-emerald-500">Conexão estabelecida!</p>
+                    
+                    {connectionStatus === 'success' && connectionResult && (
+                      <div className="rounded-md bg-emerald-500/10 border border-emerald-500/20 p-3 space-y-2">
+                        <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                          ✓ Conexão estabelecida!
+                        </p>
+                        <div className="grid grid-cols-3 gap-2 text-xs">
+                          <div className="text-center p-2 rounded bg-background">
+                            <div className="font-bold text-lg text-foreground">{connectionResult.agents.length}</div>
+                            <div className="text-muted-foreground">Agentes</div>
+                          </div>
+                          <div className="text-center p-2 rounded bg-background">
+                            <div className="font-bold text-lg text-foreground">{connectionResult.inboxes.length}</div>
+                            <div className="text-muted-foreground">Canais</div>
+                          </div>
+                          <div className="text-center p-2 rounded bg-background">
+                            <div className="font-bold text-lg text-foreground">{connectionResult.labels.length}</div>
+                            <div className="text-muted-foreground">Etiquetas</div>
+                          </div>
+                        </div>
+                      </div>
                     )}
                   </div>
                 )}

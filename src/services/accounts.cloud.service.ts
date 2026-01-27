@@ -195,28 +195,68 @@ export const accountsCloudService = {
   },
 
   /**
-   * Test Chatwoot connection
+   * Test Chatwoot connection via Edge Function (avoids CORS issues)
    */
-  async testChatwootConnection(baseUrl: string, accountId: string, apiKey: string): Promise<{ success: boolean; message: string }> {
+  async testChatwootConnection(
+    baseUrl: string, 
+    accountId: string, 
+    apiKey: string
+  ): Promise<{ 
+    success: boolean; 
+    message: string;
+    agents?: Array<{ id: number; name: string; email: string; role: string }>;
+    inboxes?: Array<{ id: number; name: string; channel_type: string }>;
+    labels?: Array<{ id: number; title: string; color: string }>;
+  }> {
     try {
-      const url = `${baseUrl.replace(/\/$/, '')}/api/v1/accounts/${accountId}/agents`;
-      
-      const response = await fetch(url, {
-        headers: {
-          'api_access_token': apiKey,
-          'Content-Type': 'application/json',
+      const { data, error } = await supabase.functions.invoke('test-chatwoot-connection', {
+        body: {
+          baseUrl: baseUrl.replace(/\/$/, ''),
+          accountId,
+          apiKey,
         },
       });
 
-      if (response.ok) {
-        return { success: true, message: 'Conexão estabelecida com sucesso!' };
-      } else if (response.status === 401) {
-        return { success: false, message: 'API Key inválida ou sem permissões' };
+      if (error) {
+        console.error('[Chatwoot] Edge function error:', error);
+        return { 
+          success: false, 
+          message: error.message || 'Erro ao conectar com o servidor' 
+        };
+      }
+
+      if (data?.success) {
+        return {
+          success: true,
+          message: `Conexão estabelecida! ${data.agents?.length || 0} agentes, ${data.inboxes?.length || 0} canais, ${data.labels?.length || 0} etiquetas encontradas.`,
+          agents: data.agents,
+          inboxes: data.inboxes,
+          labels: data.labels,
+        };
       } else {
-        return { success: false, message: `Erro: ${response.status}` };
+        return {
+          success: false,
+          message: data?.error || 'Falha na conexão com Chatwoot',
+        };
       }
     } catch (error: any) {
-      return { success: false, message: error.message || 'Erro de conexão' };
+      console.error('[Chatwoot] Connection test failed:', error);
+      return { 
+        success: false, 
+        message: error.message || 'Erro de conexão' 
+      };
     }
+  },
+
+  /**
+   * Fetch Chatwoot agents via Edge Function
+   */
+  async fetchChatwootAgents(
+    baseUrl: string,
+    accountId: string,
+    apiKey: string
+  ): Promise<Array<{ id: number; name: string; email: string; role: string; availability_status?: string }>> {
+    const result = await this.testChatwootConnection(baseUrl, accountId, apiKey);
+    return result.agents || [];
   },
 };
