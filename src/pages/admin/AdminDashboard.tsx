@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useAuth, useRoleAccess } from '@/contexts/AuthContext';
 import { useCalendar } from '@/contexts/CalendarContext';
+import { useChatwootMetrics } from '@/hooks/useChatwootMetrics';
 import {
   Users,
   MessageSquare,
@@ -9,10 +10,13 @@ import {
   CalendarCheck,
   Bot,
   X,
+  AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
 import { subDays, isWithinInterval, parseISO } from 'date-fns';
 import { DateRange } from 'react-day-picker';
 import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 // Dashboard Components
 import { DashboardFilters } from '@/components/dashboard/DashboardFilters';
@@ -22,193 +26,6 @@ import { HourlyPeakChart } from '@/components/dashboard/HourlyPeakChart';
 import { BacklogCard } from '@/components/dashboard/BacklogCard';
 import { AgentPerformanceTable } from '@/components/dashboard/AgentPerformanceTable';
 import { QualityCards } from '@/components/dashboard/QualityCards';
-import { EmptyState } from '@/components/dashboard/EmptyState';
-
-// Mock data for the dashboard
-const mockDashboardData = {
-  kpis: {
-    totalLeads: 1248,
-    conversasAtivas: 47,
-    percentualIA: 68,
-    percentualHumano: 32,
-    tempoMedioPrimeiraResposta: '2m 14s',
-    tempoMedioResolucao: '18m 40s',
-    taxaTransbordo: '12.5%',
-  },
-  conversasPorCanal: [
-    { canal: 'whatsapp', totalConversas: 456 },
-    { canal: 'instagram', totalConversas: 234 },
-    { canal: 'webchat', totalConversas: 178 },
-  ],
-  conversasPorDia: [
-    { data: '13/01', totalConversas: 45 },
-    { data: '14/01', totalConversas: 62 },
-    { data: '15/01', totalConversas: 58 },
-    { data: '16/01', totalConversas: 71 },
-    { data: '17/01', totalConversas: 89 },
-    { data: '18/01', totalConversas: 76 },
-    { data: '19/01', totalConversas: 94 },
-  ],
-  picoPorHora: [
-    { hora: 8, totalConversas: 12 },
-    { hora: 9, totalConversas: 28 },
-    { hora: 10, totalConversas: 45 },
-    { hora: 11, totalConversas: 52 },
-    { hora: 12, totalConversas: 38 },
-    { hora: 13, totalConversas: 32 },
-    { hora: 14, totalConversas: 48 },
-    { hora: 15, totalConversas: 56 },
-    { hora: 16, totalConversas: 62 },
-    { hora: 17, totalConversas: 48 },
-    { hora: 18, totalConversas: 35 },
-    { hora: 19, totalConversas: 22 },
-    { hora: 20, totalConversas: 15 },
-  ],
-  backlog: {
-    ate15min: 28,
-    de15a60min: 12,
-    acima60min: 7,
-  },
-  agentes: [
-    {
-      agentName: 'Ana Silva',
-      atendimentosAssumidos: 145,
-      atendimentosResolvidos: 138,
-      tempoMedioResposta: '1m 45s',
-      taxaResolucao: 95,
-    },
-    {
-      agentName: 'Carlos Santos',
-      atendimentosAssumidos: 128,
-      atendimentosResolvidos: 112,
-      tempoMedioResposta: '2m 12s',
-      taxaResolucao: 87,
-    },
-    {
-      agentName: 'Maria Oliveira',
-      atendimentosAssumidos: 156,
-      atendimentosResolvidos: 149,
-      tempoMedioResposta: '1m 32s',
-      taxaResolucao: 96,
-    },
-    {
-      agentName: 'Pedro Costa',
-      atendimentosAssumidos: 98,
-      atendimentosResolvidos: 82,
-      tempoMedioResposta: '3m 05s',
-      taxaResolucao: 84,
-    },
-    {
-      agentName: 'Julia Ferreira',
-      atendimentosAssumidos: 167,
-      atendimentosResolvidos: 158,
-      tempoMedioResposta: '1m 58s',
-      taxaResolucao: 95,
-    },
-  ],
-  qualidade: {
-    conversasSemResposta: 8,
-    taxaAtendimentoVenda: '17.5%',
-  },
-};
-
-// Mock data by agent for filtered views
-const mockAgentDashboardData: Record<string, typeof mockDashboardData.kpis & { 
-  backlog: typeof mockDashboardData.backlog;
-  qualidade: typeof mockDashboardData.qualidade;
-  picoPorHora: typeof mockDashboardData.picoPorHora;
-}> = {
-  'Ana Silva': {
-    totalLeads: 245,
-    conversasAtivas: 12,
-    percentualIA: 45,
-    percentualHumano: 55,
-    tempoMedioPrimeiraResposta: '1m 45s',
-    tempoMedioResolucao: '15m 20s',
-    taxaTransbordo: '8.2%',
-    backlog: { ate15min: 8, de15a60min: 3, acima60min: 1 },
-    qualidade: { conversasSemResposta: 2, taxaAtendimentoVenda: '22.5%' },
-    picoPorHora: [
-      { hora: 8, totalConversas: 5 }, { hora: 9, totalConversas: 12 }, { hora: 10, totalConversas: 18 },
-      { hora: 11, totalConversas: 22 }, { hora: 12, totalConversas: 15 }, { hora: 13, totalConversas: 10 },
-      { hora: 14, totalConversas: 20 }, { hora: 15, totalConversas: 25 }, { hora: 16, totalConversas: 28 },
-      { hora: 17, totalConversas: 18 }, { hora: 18, totalConversas: 12 }, { hora: 19, totalConversas: 8 },
-      { hora: 20, totalConversas: 5 },
-    ],
-  },
-  'Carlos Santos': {
-    totalLeads: 198,
-    conversasAtivas: 8,
-    percentualIA: 52,
-    percentualHumano: 48,
-    tempoMedioPrimeiraResposta: '2m 12s',
-    tempoMedioResolucao: '22m 10s',
-    taxaTransbordo: '15.3%',
-    backlog: { ate15min: 5, de15a60min: 4, acima60min: 2 },
-    qualidade: { conversasSemResposta: 3, taxaAtendimentoVenda: '18.2%' },
-    picoPorHora: [
-      { hora: 8, totalConversas: 3 }, { hora: 9, totalConversas: 8 }, { hora: 10, totalConversas: 12 },
-      { hora: 11, totalConversas: 15 }, { hora: 12, totalConversas: 10 }, { hora: 13, totalConversas: 8 },
-      { hora: 14, totalConversas: 14 }, { hora: 15, totalConversas: 16 }, { hora: 16, totalConversas: 18 },
-      { hora: 17, totalConversas: 14 }, { hora: 18, totalConversas: 10 }, { hora: 19, totalConversas: 6 },
-      { hora: 20, totalConversas: 4 },
-    ],
-  },
-  'Maria Oliveira': {
-    totalLeads: 312,
-    conversasAtivas: 15,
-    percentualIA: 72,
-    percentualHumano: 28,
-    tempoMedioPrimeiraResposta: '1m 32s',
-    tempoMedioResolucao: '14m 45s',
-    taxaTransbordo: '6.8%',
-    backlog: { ate15min: 10, de15a60min: 2, acima60min: 1 },
-    qualidade: { conversasSemResposta: 1, taxaAtendimentoVenda: '24.8%' },
-    picoPorHora: [
-      { hora: 8, totalConversas: 6 }, { hora: 9, totalConversas: 14 }, { hora: 10, totalConversas: 22 },
-      { hora: 11, totalConversas: 26 }, { hora: 12, totalConversas: 18 }, { hora: 13, totalConversas: 14 },
-      { hora: 14, totalConversas: 24 }, { hora: 15, totalConversas: 28 }, { hora: 16, totalConversas: 30 },
-      { hora: 17, totalConversas: 22 }, { hora: 18, totalConversas: 16 }, { hora: 19, totalConversas: 10 },
-      { hora: 20, totalConversas: 6 },
-    ],
-  },
-  'Pedro Costa': {
-    totalLeads: 156,
-    conversasAtivas: 5,
-    percentualIA: 38,
-    percentualHumano: 62,
-    tempoMedioPrimeiraResposta: '3m 05s',
-    tempoMedioResolucao: '28m 30s',
-    taxaTransbordo: '22.1%',
-    backlog: { ate15min: 3, de15a60min: 2, acima60min: 2 },
-    qualidade: { conversasSemResposta: 2, taxaAtendimentoVenda: '12.3%' },
-    picoPorHora: [
-      { hora: 8, totalConversas: 2 }, { hora: 9, totalConversas: 5 }, { hora: 10, totalConversas: 8 },
-      { hora: 11, totalConversas: 10 }, { hora: 12, totalConversas: 7 }, { hora: 13, totalConversas: 5 },
-      { hora: 14, totalConversas: 9 }, { hora: 15, totalConversas: 11 }, { hora: 16, totalConversas: 12 },
-      { hora: 17, totalConversas: 9 }, { hora: 18, totalConversas: 6 }, { hora: 19, totalConversas: 4 },
-      { hora: 20, totalConversas: 2 },
-    ],
-  },
-  'Julia Ferreira': {
-    totalLeads: 337,
-    conversasAtivas: 18,
-    percentualIA: 78,
-    percentualHumano: 22,
-    tempoMedioPrimeiraResposta: '1m 58s',
-    tempoMedioResolucao: '16m 20s',
-    taxaTransbordo: '9.5%',
-    backlog: { ate15min: 12, de15a60min: 3, acima60min: 1 },
-    qualidade: { conversasSemResposta: 0, taxaAtendimentoVenda: '21.2%' },
-    picoPorHora: [
-      { hora: 8, totalConversas: 7 }, { hora: 9, totalConversas: 16 }, { hora: 10, totalConversas: 24 },
-      { hora: 11, totalConversas: 28 }, { hora: 12, totalConversas: 20 }, { hora: 13, totalConversas: 16 },
-      { hora: 14, totalConversas: 26 }, { hora: 15, totalConversas: 30 }, { hora: 16, totalConversas: 32 },
-      { hora: 17, totalConversas: 24 }, { hora: 18, totalConversas: 18 }, { hora: 19, totalConversas: 11 },
-      { hora: 20, totalConversas: 7 },
-    ],
-  },
-};
 
 export default function AdminDashboard() {
   const { user, account } = useAuth();
@@ -220,9 +37,31 @@ export default function AdminDashboard() {
     to: new Date(),
   });
   const [channel, setChannel] = useState('all');
-  const [type, setType] = useState('all');
   const [selectedAgent, setSelectedAgent] = useState('all');
   const [selectedAgentFromTable, setSelectedAgentFromTable] = useState<string | null>(null);
+
+  // Fetch real metrics from Chatwoot
+  const {
+    data: metricsData,
+    isLoading,
+    error: metricsError,
+    isConfigured,
+    refetch,
+  } = useChatwootMetrics({
+    dateFrom: dateRange?.from || subDays(new Date(), 7),
+    dateTo: dateRange?.to || new Date(),
+    inboxId: channel !== 'all' ? getInboxIdFromChannel(channel) : undefined,
+  });
+
+  // Helper to map channel name to inbox ID (will be dynamic when we have real inboxes)
+  function getInboxIdFromChannel(channelName: string): number | undefined {
+    const channelMap: Record<string, number> = {
+      whatsapp: 1,
+      instagram: 2,
+      webchat: 3,
+    };
+    return channelMap[channelName];
+  }
 
   // Handle period change from filters
   const handlePeriodChange = (newPeriod: string, range?: DateRange) => {
@@ -241,17 +80,14 @@ export default function AdminDashboard() {
     const start = dateRange?.from || subDays(new Date(), 7);
     const end = dateRange?.to || new Date();
     
-    // Filter events to only include appointments/meetings within the selected period
     const periodEvents = events.filter(event => {
       const eventDate = parseISO(event.start);
       return isWithinInterval(eventDate, { start, end }) &&
              (event.type === 'meeting' || event.type === 'appointment');
     });
     
-    // Apply role-based filtering
     let filteredEvents = periodEvents;
     
-    // If agent, show only their own appointments
     if (!isAdmin) {
       filteredEvents = periodEvents.filter(event => event.createdBy === user?.id);
     } else if (selectedAgentFromTable) {
@@ -263,60 +99,67 @@ export default function AdminDashboard() {
     return filteredEvents.length;
   }, [events, isAdmin, user?.id, selectedAgent, selectedAgentFromTable, dateRange]);
 
-  // Channel multipliers for mock filtering
-  const channelMultipliers: Record<string, number> = {
-    whatsapp: 0.55,
-    instagram: 0.28,
-    webchat: 0.17,
-  };
-
-  // Get displayed KPIs based on selected agent from table and channel filter
+  // Get displayed data from real metrics or defaults
   const displayedData = useMemo(() => {
-    let baseData = {
-      kpis: mockDashboardData.kpis,
-      picoPorHora: mockDashboardData.picoPorHora,
-      backlog: mockDashboardData.backlog,
-      qualidade: mockDashboardData.qualidade,
-    };
-
-    // Apply agent filter first
-    if (selectedAgentFromTable && mockAgentDashboardData[selectedAgentFromTable]) {
-      const agentData = mockAgentDashboardData[selectedAgentFromTable];
-      baseData = {
-        kpis: agentData,
-        picoPorHora: agentData.picoPorHora,
-        backlog: agentData.backlog,
-        qualidade: agentData.qualidade,
-      };
-    }
-
-    // Apply channel filter (mock simulation)
-    if (channel !== 'all') {
-      const multiplier = channelMultipliers[channel] || 1;
+    if (!metricsData) {
       return {
         kpis: {
-          ...baseData.kpis,
-          totalLeads: Math.round(baseData.kpis.totalLeads * multiplier),
-          conversasAtivas: Math.round(baseData.kpis.conversasAtivas * multiplier),
+          totalLeads: 0,
+          conversasAtivas: 0,
+          percentualIA: 0,
+          percentualHumano: 0,
+          tempoMedioPrimeiraResposta: '0s',
+          tempoMedioResolucao: '0s',
+          taxaTransbordo: '0%',
         },
-        picoPorHora: baseData.picoPorHora.map(h => ({
-          ...h,
-          totalConversas: Math.round(h.totalConversas * multiplier),
-        })),
-        backlog: {
-          ate15min: Math.round(baseData.backlog.ate15min * multiplier),
-          de15a60min: Math.round(baseData.backlog.de15a60min * multiplier),
-          acima60min: Math.round(baseData.backlog.acima60min * multiplier),
-        },
-        qualidade: {
-          ...baseData.qualidade,
-          conversasSemResposta: Math.round(baseData.qualidade.conversasSemResposta * multiplier),
-        },
+        picoPorHora: [],
+        backlog: { ate15min: 0, de15a60min: 0, acima60min: 0 },
+        qualidade: { conversasSemResposta: 0, taxaAtendimentoVenda: '0%' },
+        agentes: [],
       };
     }
 
-    return baseData;
-  }, [selectedAgentFromTable, channel]);
+    // If agent is selected from table, filter by that agent
+    if (selectedAgentFromTable) {
+      const agentData = metricsData.agentes.find(
+        a => a.agentName === selectedAgentFromTable
+      );
+      if (agentData) {
+        // Return agent-specific view (simplified for now)
+        return {
+          kpis: {
+            totalLeads: agentData.atendimentosAssumidos,
+            conversasAtivas: Math.round(agentData.atendimentosAssumidos * 0.1),
+            percentualIA: metricsData.percentualIA,
+            percentualHumano: metricsData.percentualHumano,
+            tempoMedioPrimeiraResposta: agentData.tempoMedioResposta,
+            tempoMedioResolucao: metricsData.tempoMedioResolucao,
+            taxaTransbordo: metricsData.taxaTransbordo,
+          },
+          picoPorHora: metricsData.picoPorHora,
+          backlog: metricsData.backlog,
+          qualidade: metricsData.qualidade,
+          agentes: metricsData.agentes,
+        };
+      }
+    }
+
+    return {
+      kpis: {
+        totalLeads: metricsData.totalLeads,
+        conversasAtivas: metricsData.conversasAtivas,
+        percentualIA: metricsData.percentualIA,
+        percentualHumano: metricsData.percentualHumano,
+        tempoMedioPrimeiraResposta: metricsData.tempoMedioPrimeiraResposta,
+        tempoMedioResolucao: metricsData.tempoMedioResolucao,
+        taxaTransbordo: metricsData.taxaTransbordo,
+      },
+      picoPorHora: metricsData.picoPorHora,
+      backlog: metricsData.backlog,
+      qualidade: metricsData.qualidade,
+      agentes: metricsData.agentes,
+    };
+  }, [metricsData, selectedAgentFromTable]);
 
   // Calculate AI service count based on percentage and total leads
   const aiServiceCount = useMemo(() => {
@@ -325,8 +168,16 @@ export default function AdminDashboard() {
     return Math.round((totalLeads * percentualIA) / 100);
   }, [displayedData.kpis.totalLeads, displayedData.kpis.percentualIA]);
 
-  const data = mockDashboardData;
-  const isLoading = false;
+  // Format agents for the performance table
+  const agentPerformanceData = useMemo(() => {
+    return displayedData.agentes.map(agent => ({
+      agentName: agent.agentName,
+      atendimentosAssumidos: agent.atendimentosAssumidos,
+      atendimentosResolvidos: agent.atendimentosResolvidos,
+      tempoMedioResposta: agent.tempoMedioResposta,
+      taxaResolucao: agent.taxaResolucao,
+    }));
+  }, [displayedData.agentes]);
 
   // Helper for subtitle context
   const getAgentContextSubtitle = (defaultText: string) => {
@@ -340,13 +191,51 @@ export default function AdminDashboard() {
     <div className="page-container">
       {/* Header */}
       <div className="page-header">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h1 className="title-responsive text-foreground">Dashboard de Atendimento</h1>
           <p className="text-responsive-sm text-muted-foreground">
             Métricas operacionais e estratégicas do atendimento
           </p>
         </div>
+        {isConfigured && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refetch()}
+            disabled={isLoading}
+            className="shrink-0"
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+            Atualizar
+          </Button>
+        )}
       </div>
+
+      {/* Chatwoot Not Configured Alert */}
+      {!isConfigured && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Chatwoot não configurado</AlertTitle>
+          <AlertDescription>
+            A integração com Chatwoot não está configurada para esta conta. 
+            Entre em contato com o administrador para configurar as credenciais.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Error Alert */}
+      {metricsError && isConfigured && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Erro ao carregar métricas</AlertTitle>
+          <AlertDescription className="flex items-center justify-between">
+            <span>{metricsError}</span>
+            <Button variant="outline" size="sm" onClick={() => refetch()}>
+              Tentar novamente
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Global Filters */}
       <DashboardFilters
@@ -357,120 +246,121 @@ export default function AdminDashboard() {
         showChannelFilter={true}
         showTypeFilter={false}
       />
-          {/* Agent Filter Active Banner */}
-          {selectedAgentFromTable && (
-            <div className="flex items-center justify-between p-3 rounded-lg bg-primary/10 border border-primary/20">
-              <span className="text-sm">
-                Visualizando dados de <strong>{selectedAgentFromTable}</strong>
-              </span>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={() => setSelectedAgentFromTable(null)}
-                className="h-7 text-xs"
-              >
-                <X className="w-3 h-3 mr-1" /> Limpar filtro
-              </Button>
-            </div>
-          )}
 
-          {/* KPI Cards - Row 1 */}
-          <div className="kpi-grid-6">
-            <KPICard
-              title="Total de Leads"
-              subtitle={getAgentContextSubtitle('Contatos únicos')}
-              value={displayedData.kpis.totalLeads}
-              icon={Users}
-              iconColor="text-primary"
-              iconBgColor="bg-primary/10"
-              isLoading={isLoading}
-            />
-            <KPICard
-              title="Conversas Ativas"
-              subtitle={getAgentContextSubtitle('Em andamento')}
-              value={displayedData.kpis.conversasAtivas}
-              icon={MessageSquare}
-              iconColor="text-info"
-              iconBgColor="bg-info/10"
-              isLoading={isLoading}
-            />
-            <KPICard
-              title="Agendamentos"
-              subtitle={selectedAgentFromTable 
-                ? `Dados de ${selectedAgentFromTable}` 
-                : (isAdmin ? (selectedAgent !== 'all' ? 'Agente selecionado' : 'Visão geral') : 'Seus agendamentos')}
-              value={totalAppointments}
-              icon={CalendarCheck}
-              iconColor="text-success"
-              iconBgColor="bg-success/10"
-              isLoading={isLoading}
-            />
-            <KPICard
-              title="Atendimentos IA"
-              subtitle={getAgentContextSubtitle('Via automação')}
-              value={aiServiceCount}
-              icon={Bot}
-              iconColor="text-info"
-              iconBgColor="bg-info/10"
-              isLoading={isLoading}
-            />
-            <KPICard
-              title="Taxa de Transbordo"
-              subtitle={getAgentContextSubtitle('IA → Humano')}
-              value={displayedData.kpis.taxaTransbordo}
-              icon={ArrowRightLeft}
-              iconColor="text-warning"
-              iconBgColor="bg-warning/10"
-              isLoading={isLoading}
-            />
-          </div>
+      {/* Agent Filter Active Banner */}
+      {selectedAgentFromTable && (
+        <div className="flex items-center justify-between p-3 rounded-lg bg-primary/10 border border-primary/20">
+          <span className="text-sm">
+            Visualizando dados de <strong>{selectedAgentFromTable}</strong>
+          </span>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => setSelectedAgentFromTable(null)}
+            className="h-7 text-xs"
+          >
+            <X className="w-3 h-3 mr-1" /> Limpar filtro
+          </Button>
+        </div>
+      )}
 
-          {/* KPI Cards - Row 2 (Time metrics + IA vs Human) */}
-          <div className="chart-grid">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <KPICard
-                title="Tempo Médio Primeira Resposta"
-                subtitle={getAgentContextSubtitle('Primeira resposta após mensagem do lead')}
-                value={displayedData.kpis.tempoMedioPrimeiraResposta}
-                icon={Clock}
-                iconColor="text-primary"
-                iconBgColor="bg-primary/10"
-                isLoading={isLoading}
-                className="min-w-0"
-              />
-              <KPICard
-                title="Tempo Médio de Resolução"
-                subtitle={getAgentContextSubtitle('Tempo médio até finalizar atendimento')}
-                value={displayedData.kpis.tempoMedioResolucao}
-                icon={Clock}
-                iconColor="text-success"
-                iconBgColor="bg-success/10"
-                isLoading={isLoading}
-              />
-            </div>
-            <IAvsHumanCard
-              percentualIA={displayedData.kpis.percentualIA}
-              percentualHumano={displayedData.kpis.percentualHumano}
-              isLoading={isLoading}
-            />
-          </div>
+      {/* KPI Cards - Row 1 */}
+      <div className="kpi-grid-6">
+        <KPICard
+          title="Total de Leads"
+          subtitle={getAgentContextSubtitle('Contatos únicos')}
+          value={displayedData.kpis.totalLeads}
+          icon={Users}
+          iconColor="text-primary"
+          iconBgColor="bg-primary/10"
+          isLoading={isLoading}
+        />
+        <KPICard
+          title="Conversas Ativas"
+          subtitle={getAgentContextSubtitle('Em andamento')}
+          value={displayedData.kpis.conversasAtivas}
+          icon={MessageSquare}
+          iconColor="text-info"
+          iconBgColor="bg-info/10"
+          isLoading={isLoading}
+        />
+        <KPICard
+          title="Agendamentos"
+          subtitle={selectedAgentFromTable 
+            ? `Dados de ${selectedAgentFromTable}` 
+            : (isAdmin ? (selectedAgent !== 'all' ? 'Agente selecionado' : 'Visão geral') : 'Seus agendamentos')}
+          value={totalAppointments}
+          icon={CalendarCheck}
+          iconColor="text-success"
+          iconBgColor="bg-success/10"
+          isLoading={isLoading}
+        />
+        <KPICard
+          title="Atendimentos IA"
+          subtitle={getAgentContextSubtitle('Via automação')}
+          value={aiServiceCount}
+          icon={Bot}
+          iconColor="text-info"
+          iconBgColor="bg-info/10"
+          isLoading={isLoading}
+        />
+        <KPICard
+          title="Taxa de Transbordo"
+          subtitle={getAgentContextSubtitle('IA → Humano')}
+          value={displayedData.kpis.taxaTransbordo}
+          icon={ArrowRightLeft}
+          iconColor="text-warning"
+          iconBgColor="bg-warning/10"
+          isLoading={isLoading}
+        />
+      </div>
 
-          {/* Charts Section */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <HourlyPeakChart data={displayedData.picoPorHora} isLoading={isLoading} />
-            <BacklogCard data={displayedData.backlog} isLoading={isLoading} />
-          </div>
-
-          {/* Agent Performance Table */}
-          <AgentPerformanceTable 
-            data={data.agentes} 
+      {/* KPI Cards - Row 2 (Time metrics + IA vs Human) */}
+      <div className="chart-grid">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <KPICard
+            title="Tempo Médio Primeira Resposta"
+            subtitle={getAgentContextSubtitle('Primeira resposta após mensagem do lead')}
+            value={displayedData.kpis.tempoMedioPrimeiraResposta}
+            icon={Clock}
+            iconColor="text-primary"
+            iconBgColor="bg-primary/10"
             isLoading={isLoading}
-            selectedAgentName={selectedAgentFromTable}
-            onAgentSelect={setSelectedAgentFromTable}
+            className="min-w-0"
           />
+          <KPICard
+            title="Tempo Médio de Resolução"
+            subtitle={getAgentContextSubtitle('Tempo médio até finalizar atendimento')}
+            value={displayedData.kpis.tempoMedioResolucao}
+            icon={Clock}
+            iconColor="text-success"
+            iconBgColor="bg-success/10"
+            isLoading={isLoading}
+          />
+        </div>
+        <IAvsHumanCard
+          percentualIA={displayedData.kpis.percentualIA}
+          percentualHumano={displayedData.kpis.percentualHumano}
+          isLoading={isLoading}
+        />
+      </div>
 
-          {/* Quality & Conversion Cards */}
-          <QualityCards data={displayedData.qualidade} isLoading={isLoading} />
+      {/* Charts Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <HourlyPeakChart data={displayedData.picoPorHora} isLoading={isLoading} />
+        <BacklogCard data={displayedData.backlog} isLoading={isLoading} />
+      </div>
+
+      {/* Agent Performance Table */}
+      <AgentPerformanceTable 
+        data={agentPerformanceData} 
+        isLoading={isLoading}
+        selectedAgentName={selectedAgentFromTable}
+        onAgentSelect={setSelectedAgentFromTable}
+      />
+
+      {/* Quality & Conversion Cards */}
+      <QualityCards data={displayedData.qualidade} isLoading={isLoading} />
     </div>
   );
 }

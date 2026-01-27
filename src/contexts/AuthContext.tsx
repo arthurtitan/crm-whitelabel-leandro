@@ -21,6 +21,7 @@ interface Account {
   status: 'active' | 'paused' | 'cancelled';
   chatwoot_base_url?: string;
   chatwoot_account_id?: string;
+  chatwoot_api_key?: string;
 }
 
 interface AuthState {
@@ -105,7 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (role !== 'super_admin' && profile.account_id) {
         const { data: accountData, error: accountError } = await supabase
           .from('accounts')
-          .select('id, nome, status, chatwoot_base_url, chatwoot_account_id')
+          .select('id, nome, status, chatwoot_base_url, chatwoot_account_id, chatwoot_api_key')
           .eq('id', profile.account_id)
           .maybeSingle();
 
@@ -116,6 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             status: accountData.status as 'active' | 'paused' | 'cancelled',
             chatwoot_base_url: accountData.chatwoot_base_url || undefined,
             chatwoot_account_id: accountData.chatwoot_account_id || undefined,
+            chatwoot_api_key: accountData.chatwoot_api_key || undefined,
           };
 
           if (accountData.status === 'paused') {
