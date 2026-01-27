@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { toast } from 'sonner';
@@ -44,8 +44,9 @@ interface AuthContextType extends AuthState {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Simplified timeout - 5 seconds is enough for normal connections
-const HYDRATION_TIMEOUT_MS = 5000;
+// Hydration timeout: precisa ser tolerante em redes mais lentas.
+// (o problema real era re-hidratação repetida; mesmo assim, 12s evita falsos timeouts)
+const HYDRATION_TIMEOUT_MS = 12000;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [authState, setAuthState] = useState<AuthState>({
@@ -57,6 +58,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
   const [originalUser, setOriginalUser] = useState<User | null>(null);
   const [isImpersonating, setIsImpersonating] = useState(false);
+
+  // Evita re-hidratação em eventos repetidos (ex.: recuperação/refresh de sessão disparando SIGNED_IN)
+  const hydratedUserIdRef = useRef<string | null>(null);
+  const hydratingRef = useRef(false);
 
   const clearAuthError = useCallback(() => {
     setAuthState(prev => ({ ...prev, authError: null }));
@@ -167,12 +172,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         authError: null,
       });
 
+      hydratedUserIdRef.current = supabaseUser.id;
+
       return true;
     } catch (error: any) {
       console.error('[Auth] Hydration failed:', error.message);
       
       // Sign out to prevent half-logged state
       await supabase.auth.signOut();
+
+      hydratedUserIdRef.current = null;
       
       setAuthState({
         user: null,
@@ -189,19 +198,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Initialize auth state
   useEffect(() => {
     let mounted = true;
-    let isHydrating = false;
 
     const handleAuthChange = async (event: string, session: any) => {
       if (!mounted) return;
       console.log('[Auth] Event:', event);
 
-      if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
-        if (isHydrating) return;
-        isHydrating = true;
+      // Sessão válida: hidratar apenas se ainda não hidratamos este user_id
+      if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') && session?.user) {
+        if (hydratedUserIdRef.current === session.user.id) {
+          // Já hidratado — não setar loading (isso causava “voltar para carregando” ao navegar)
+          return;
+        }
+        if (hydratingRef.current) return;
+        hydratingRef.current = true;
         setAuthState(prev => ({ ...prev, isLoading: true, authError: null }));
         await hydrateUser(session.user);
-        isHydrating = false;
+        hydratingRef.current = false;
       } else if (event === 'SIGNED_OUT') {
+        hydratedUserIdRef.current = null;
+        hydratingRef.current = false;
         setAuthState({
           user: null,
           account: null,
@@ -212,6 +227,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setOriginalUser(null);
         setIsImpersonating(false);
       } else if (event === 'INITIAL_SESSION' && !session) {
+        hydratedUserIdRef.current = null;
+        hydratingRef.current = false;
         setAuthState({
           user: null,
           account: null,
@@ -224,24 +241,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Set up auth listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(handleAuthChange);
-
-    // Fallback: check existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user && mounted && !isHydrating) {
-        isHydrating = true;
-        hydrateUser(session.user).then(() => {
-          isHydrating = false;
-        });
-      } else if (!session && mounted) {
-        setAuthState(prev => prev.isLoading ? {
-          user: null,
-          account: null,
-          isAuthenticated: false,
-          isLoading: false,
-          authError: null,
-        } : prev);
-      }
-    });
 
     return () => {
       mounted = false;
@@ -307,6 +306,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await supabase.auth.signOut();
     } finally {
+      hydratedUserIdRef.current = null;
+      hydratingRef.current = false;
       setAuthState({
         user: null,
         account: null,
