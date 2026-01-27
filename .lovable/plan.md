@@ -1,226 +1,146 @@
 
-# Plano de Correção Completa: Sistema de Autenticação e Chatwoot
+# Plano: Exclusão Real de Usuários via Edge Function
 
-## Problemas Identificados
+## Problema Identificado
 
-### 1. Login Travando na Tela "Carregando seu perfil..."
-**Causa Raiz:**
-Através dos logs de console e testes no browser, identifico que:
-- A hidratação do usuário está atingindo timeout de 12 segundos
-- Quando a sessão já existe (INITIAL_SESSION ou TOKEN_REFRESHED), o sistema tenta re-hidratar mas falha ou demora excessivamente
-- O `fetchWithTimeout` usando `Promise.race` não cancela efetivamente a Promise do Supabase - apenas ignora o resultado, causando comportamento inconsistente
+A exclusão de usuários atualmente possui **dois problemas críticos**:
 
-**Log real capturado:**
-```
-[Auth] Event: SIGNED_IN
-[Auth] Hydrating user: eda770a4-79e4-4656-94df-42a23e433f31
-[Auth] Hydration failed: Timeout
-```
+1. **Serviço `usersCloudService.delete()`** (linha 207-218):
+   - Remove apenas o registro da tabela `profiles`
+   - **NÃO** remove o usuário da tabela `auth.users` do Supabase
+   - Resultado: email continua "registrado" no sistema de autenticação
 
-### 2. Chatwoot "Failed to send a request to the Edge Function"
-**Causa Raiz:**
-- A Edge Function `test-chatwoot-connection` estava desligada (cold start)
-- Após deployment, ela funciona corretamente (testei e retornou dados)
+2. **Página `SuperAdminUsersPage.tsx`** (linha 348-379):
+   - Função `handleConfirmDelete` apenas remove o usuário da lista local em memória
+   - Não chama nenhum serviço real de exclusão
+   - Resultado: usuário "some" da tela mas persiste no banco
 
 ---
 
-## Mudanças Planejadas
+## Solução Proposta
 
-### Arquivo 1: `src/contexts/AuthContext.tsx`
+### 1. Criar Edge Function `delete-user`
 
-**Mudança Principal:** Simplificar drasticamente o fluxo de hidratação e remover timeout problemático.
+Nova função em `supabase/functions/delete-user/index.ts` que:
 
-**Antes (problemático):**
-```typescript
-const fetchWithTimeout = async <T,>(promise: Promise<T>, timeoutMs: number) => {
-  const timeout = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error('Timeout')), timeoutMs)
-  );
-  return Promise.race([promise, timeout]);
-};
+- Recebe o `user_id` a ser excluído
+- Valida a senha do Super Admin (segurança)
+- Usa `supabase.auth.admin.deleteUser(userId)` para remover completamente
+- A exclusão em cascata remove automaticamente `profiles` e `user_roles`
+
+```text
+POST /functions/v1/delete-user
+Body: { user_id: string, admin_password: string }
+Response: { success: boolean, error?: string }
 ```
 
-**Problemas:**
-1. O timeout de 12s é muito longo para UX, mas às vezes não é suficiente
-2. `Promise.race` não cancela a query real do Supabase
-3. A Promise original continua rodando e pode resolver após o timeout
+### 2. Atualizar Serviço `users.cloud.service.ts`
 
-**Depois (simples e robusto):**
-```typescript
-// Remover fetchWithTimeout completamente
-// Confiar no timeout nativo do Supabase SDK (60s por padrão)
-// Se falhar, o erro será tratado normalmente
-```
+Modificar o método `delete()` para:
+- Aceitar senha do admin como parâmetro
+- Chamar a Edge Function `delete-user` via fetch
+- Tratar erros específicos (senha inválida, usuário não encontrado, etc.)
 
-**Fluxo de Hidratação Simplificado:**
-1. Fazer fetch paralelo de `profiles` e `user_roles` diretamente
-2. Se houver erro de rede, o SDK do Supabase retornará erro
-3. Mostrar erro claro ao usuário em vez de timeout genérico
-4. Remover refs de concorrência desnecessários
+### 3. Integrar na Página `SuperAdminUsersPage.tsx`
 
-**Código Novo para `hydrateUser`:**
-```typescript
-const hydrateUser = useCallback(async (supabaseUser: SupabaseUser): Promise<boolean> => {
-  console.log('[Auth] Hydrating user:', supabaseUser.id);
+Modificar `handleConfirmDelete` para:
+- Chamar `usersCloudService.delete(userId, password)`
+- Tratar erros de senha inválida (mostrar mensagem, não fechar modal)
+- Recarregar lista de usuários após sucesso
 
-  try {
-    // Fetch profile and role in parallel - sem timeout artificial
-    const [profileResult, roleResult] = await Promise.all([
-      supabase
-        .from('profiles')
-        .select('user_id, email, nome, status, permissions, account_id, chatwoot_agent_id')
-        .eq('user_id', supabaseUser.id)
-        .maybeSingle(),
-      supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', supabaseUser.id)
-        .maybeSingle(),
-    ]);
+---
 
-    // ... resto da lógica igual
-  } catch (error: any) {
-    // Tratar erro real, não timeout artificial
-  }
-}, []);
-```
+## Fluxo de Exclusão
 
-**Mudança no Listener de Auth:**
-```typescript
-const handleAuthChange = async (event: string, session: any) => {
-  if (!mounted) return;
-  console.log('[Auth] Event:', event);
-
-  if (session?.user) {
-    // Hidratar apenas se não temos usuário OU se o ID mudou
-    if (!authState.user || authState.user.id !== session.user.id) {
-      setAuthState(prev => ({ ...prev, isLoading: true }));
-      await hydrateUser(session.user);
-    }
-    // Se já está hidratado com mesmo ID, não fazer nada
-  } else if (event === 'SIGNED_OUT' || !session) {
-    // Limpar estado
-    setAuthState({
-      user: null,
-      account: null,
-      isAuthenticated: false,
-      isLoading: false,
-      authError: null,
-    });
-  }
-};
-```
-
-### Arquivo 2: `src/pages/LoginPage.tsx`
-
-**Mudança:** Remover o timeout de 15s para o login e simplificar o fluxo.
-
-**Antes:**
-```typescript
-const timeoutPromise = new Promise<{ success: false; error: string }>((resolve) => {
-  setTimeout(() => {
-    console.warn('[LoginPage] SignIn timeout reached');
-    resolve({ success: false, error: 'Tempo excedido...' });
-  }, SIGNIN_TIMEOUT_MS);
-});
-
-const result = await Promise.race([login(email, password), timeoutPromise]);
-```
-
-**Depois:**
-```typescript
-const result = await login(email, password);
-// Sem timeout artificial - o SDK do Supabase tem seu próprio timeout
-```
-
-### Arquivo 3: `src/pages/NotFound.tsx`
-
-**Mudança:** Trocar `<a href="/">` por `<Link to="/">` para evitar reload completo.
-
-**Antes:**
-```tsx
-<a href="/" className="text-primary underline hover:text-primary/90">
-  Return to Home
-</a>
-```
-
-**Depois:**
-```tsx
-<Link to="/login" className="text-primary underline hover:text-primary/90">
-  Voltar para o Login
-</Link>
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│                      Super Admin                                │
+│                          │                                      │
+│    Clica "Excluir" → Modal pede senha → Confirma exclusão       │
+└─────────────────────────────────────────────────────────────────┘
+                           │
+                           v
+┌─────────────────────────────────────────────────────────────────┐
+│                   Frontend (React)                              │
+│                          │                                      │
+│     usersCloudService.delete(userId, password)                  │
+│          │                                                      │
+│          v                                                      │
+│     fetch('/functions/v1/delete-user', { user_id, password })   │
+└─────────────────────────────────────────────────────────────────┘
+                           │
+                           v
+┌─────────────────────────────────────────────────────────────────┐
+│              Edge Function (delete-user)                        │
+│                          │                                      │
+│  1. Validar JWT do Super Admin                                  │
+│  2. Verificar senha do admin (opcional - pode confiar no JWT)   │
+│  3. supabase.auth.admin.deleteUser(user_id)                     │
+│     └── Cascata remove: profiles, user_roles                    │
+│  4. Retornar { success: true }                                  │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Resumo das Correções
+## Arquivos a Criar/Modificar
 
-| Problema | Causa | Solução |
-|----------|-------|---------|
-| Login trava em "Carregando perfil" | Timeout artificial de 12s interferindo | Remover timeout, confiar no SDK |
-| Re-hidratação desnecessária | Verificação por ref não funciona bem | Verificar pelo state diretamente |
-| Navegação recarrega tudo | Algumas tags `<a>` em vez de `<Link>` | Trocar para `<Link>` do React Router |
-| Chatwoot "Failed to send" | Edge Function não estava ativa | Já corrigido via deploy |
+| Arquivo | Ação |
+|---------|------|
+| `supabase/functions/delete-user/index.ts` | **CRIAR** - Edge Function para exclusão |
+| `src/services/users.cloud.service.ts` | **MODIFICAR** - Chamar Edge Function |
+| `src/pages/super-admin/SuperAdminUsersPage.tsx` | **MODIFICAR** - Integrar serviço real |
 
 ---
 
 ## Detalhes Técnicos
 
-### Por que o timeout era problemático
+### Edge Function `delete-user`
 
-O padrão `Promise.race([fetch, timeout])` tem um problema fundamental:
-
-1. Se o timeout "ganha", a Promise do fetch continua executando
-2. Se o fetch completar depois, pode setar estado em momento inesperado
-3. O Supabase SDK já tem retry/timeout interno configurado
-
-### Nova Arquitetura de Hidratação
-
-```text
-SIGNED_IN event
-    |
-    v
-authState.user?.id === session.user.id ?
-    |                     |
-   YES                   NO
-    |                     |
-    v                     v
-  (noop)          setAuthState(loading)
-                          |
-                          v
-                  Promise.all([profile, role])
-                          |
-                     success?
-                    /      \
-                  YES       NO
-                   |         |
-                   v         v
-              setAuthState  signOut + 
-              (hydrated)    setAuthState(error)
+```typescript
+// Estrutura esperada:
+serve(async (req) => {
+  // 1. Validar método e CORS
+  // 2. Extrair user_id do body
+  // 3. Validar que não é o próprio usuário logado
+  // 4. supabase.auth.admin.deleteUser(user_id)
+  // 5. Retornar sucesso ou erro
+});
 ```
 
-### Arquivos Modificados
+### Serviço Atualizado
 
-1. `src/contexts/AuthContext.tsx` - Simplificar hidratação
-2. `src/pages/LoginPage.tsx` - Remover timeout artificial
-3. `src/pages/NotFound.tsx` - Usar Link do React Router
+```typescript
+async delete(userId: string, adminPassword: string): Promise<void> {
+  const session = await supabase.auth.getSession();
+  
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/delete-user`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ user_id: userId, password: adminPassword }),
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error);
+  }
+}
+```
+
+### Tratamento de Erros na Página
+
+- Senha incorreta → Mostrar erro no modal, não fechar
+- Usuário não encontrado → Toast de erro
+- Sucesso → Fechar modal, atualizar lista, toast de sucesso
 
 ---
 
-## Resultados Esperados
+## Segurança
 
-1. Login resolve em ~1-3 segundos (tempo real de rede)
-2. Sem timeouts artificiais causando falsos erros
-3. Navegação entre páginas é instantânea (sem re-hidratação)
-4. Erros reais do banco/rede são mostrados claramente
-5. Edge Function do Chatwoot já está funcionando
-
----
-
-## Validação Pós-Implementação
-
-1. Login como Super Admin - deve funcionar em segundos
-2. Navegar para Contas, Usuários - sem tela de loading
-3. Testar conexão Chatwoot - deve retornar agentes/inboxes
-4. Logout e login novamente - fluxo limpo
-5. Refresh da página (F5) - sessão mantida sem travamento
+- Edge Function usa `SUPABASE_SERVICE_ROLE_KEY` para ter permissão de admin
+- JWT do usuário é validado para garantir que é um Super Admin autenticado
+- Verificação adicional de senha para ações destrutivas
+- Não é possível excluir a si mesmo (validação no backend)
