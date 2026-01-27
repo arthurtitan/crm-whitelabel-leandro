@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { accountsCloudService, Account } from '@/services/accounts.cloud.service';
+import { usersCloudService } from '@/services/users.cloud.service';
+import { ChatwootAgent } from '@/types/crm';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -49,6 +51,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Building2,
   Plus,
@@ -64,6 +68,9 @@ import {
   CheckCircle2,
   XCircle,
   RefreshCw,
+  User,
+  Shield,
+  ArrowRight,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -75,7 +82,7 @@ type Language = 'pt' | 'en';
 type ConnectionStatus = 'idle' | 'loading' | 'success' | 'error';
 
 interface ChatwootConnectionResult {
-  agents: Array<{ id: number; name: string; email: string; role: string }>;
+  agents: ChatwootAgent[];
   inboxes: Array<{ id: number; name: string; channel_type: string }>;
   labels: Array<{ id: number; title: string; color: string }>;
 }
@@ -120,6 +127,10 @@ export default function SuperAdminAccountsPage() {
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [connectionResult, setConnectionResult] = useState<ChatwootConnectionResult | null>(null);
 
+  // Agent import state
+  const [selectedAgentIds, setSelectedAgentIds] = useState<number[]>([]);
+  const [importingAgents, setImportingAgents] = useState(false);
+
   // Load accounts from database
   useEffect(() => {
     loadAccounts();
@@ -147,6 +158,7 @@ export default function SuperAdminAccountsPage() {
     setConnectionStatus('loading');
     setConnectionError(null);
     setConnectionResult(null);
+    setSelectedAgentIds([]);
     
     const result = await accountsCloudService.testChatwootConnection(
       formData.chatwootBaseUrl,
@@ -156,8 +168,16 @@ export default function SuperAdminAccountsPage() {
 
     if (result.success) {
       setConnectionStatus('success');
+      // Map agents to ChatwootAgent type with proper role typing
+      const agents: ChatwootAgent[] = (result.agents || []).map(a => ({
+        id: a.id,
+        name: a.name,
+        email: a.email,
+        role: (a.role === 'administrator' ? 'administrator' : 'agent') as 'administrator' | 'agent',
+        availability_status: undefined,
+      }));
       setConnectionResult({
-        agents: result.agents || [],
+        agents,
         inboxes: result.inboxes || [],
         labels: result.labels || [],
       });
@@ -169,7 +189,25 @@ export default function SuperAdminAccountsPage() {
     }
   };
 
-  const handleCreate = async () => {
+  const toggleAgentSelection = (agentId: number) => {
+    setSelectedAgentIds(prev => 
+      prev.includes(agentId) 
+        ? prev.filter(id => id !== agentId)
+        : [...prev, agentId]
+    );
+  };
+
+  const selectAllAgents = () => {
+    if (connectionResult?.agents) {
+      setSelectedAgentIds(connectionResult.agents.map(a => a.id));
+    }
+  };
+
+  const clearAgentSelection = () => {
+    setSelectedAgentIds([]);
+  };
+
+  const createAccountWithAgents = async (importAgents: boolean) => {
     if (!formData.nome.trim()) {
       toast.error('Nome é obrigatório');
       return;
@@ -177,12 +215,50 @@ export default function SuperAdminAccountsPage() {
 
     try {
       setIsSaving(true);
-      await accountsCloudService.create({
+      setImportingAgents(importAgents && selectedAgentIds.length > 0);
+      
+      // 1. Create the account
+      const newAccount = await accountsCloudService.create({
         nome: formData.nome,
         chatwoot_base_url: formData.chatwootEnabled ? formData.chatwootBaseUrl : undefined,
         chatwoot_account_id: formData.chatwootEnabled ? formData.chatwootAccountId : undefined,
         chatwoot_api_key: formData.chatwootEnabled ? formData.chatwootApiKey : undefined,
       });
+      
+      // 2. Import selected agents as users
+      if (importAgents && selectedAgentIds.length > 0 && connectionResult?.agents) {
+        const selectedAgents = connectionResult.agents.filter(a => selectedAgentIds.includes(a.id));
+        let successCount = 0;
+        let failCount = 0;
+        
+        for (const agent of selectedAgents) {
+          try {
+            // Generate a temporary password (user will need to reset)
+            const tempPassword = `Gleps${Date.now().toString(36)}!`;
+            
+            await usersCloudService.create({
+              email: agent.email,
+              nome: agent.name,
+              password: tempPassword,
+              role: agent.role === 'administrator' ? 'admin' : 'agent',
+              account_id: newAccount.id,
+              chatwoot_agent_id: agent.id,
+              permissions: ['dashboard', 'kanban', 'leads', 'agenda'],
+            });
+            successCount++;
+          } catch (err: any) {
+            console.error(`Failed to import agent ${agent.email}:`, err);
+            failCount++;
+          }
+        }
+        
+        if (successCount > 0) {
+          toast.success(`${successCount} usuário(s) importado(s) com sucesso!`);
+        }
+        if (failCount > 0) {
+          toast.warning(`${failCount} usuário(s) não puderam ser importados (possivelmente já existem).`);
+        }
+      }
       
       await loadAccounts();
       setIsCreateOpen(false);
@@ -200,6 +276,8 @@ export default function SuperAdminAccountsPage() {
     setConnectionStatus('idle');
     setConnectionError(null);
     setConnectionResult(null);
+    setSelectedAgentIds([]);
+    setImportingAgents(false);
   };
 
   const handleUpdate = async () => {
@@ -396,24 +474,106 @@ export default function SuperAdminAccountsPage() {
                     )}
                     
                     {connectionStatus === 'success' && connectionResult && (
-                      <div className="rounded-md bg-emerald-500/10 border border-emerald-500/20 p-3 space-y-2">
-                        <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
-                          ✓ Conexão estabelecida!
-                        </p>
-                        <div className="grid grid-cols-3 gap-2 text-xs">
-                          <div className="text-center p-2 rounded bg-background">
-                            <div className="font-bold text-lg text-foreground">{connectionResult.agents.length}</div>
-                            <div className="text-muted-foreground">Agentes</div>
-                          </div>
-                          <div className="text-center p-2 rounded bg-background">
-                            <div className="font-bold text-lg text-foreground">{connectionResult.inboxes.length}</div>
-                            <div className="text-muted-foreground">Canais</div>
-                          </div>
-                          <div className="text-center p-2 rounded bg-background">
-                            <div className="font-bold text-lg text-foreground">{connectionResult.labels.length}</div>
-                            <div className="text-muted-foreground">Etiquetas</div>
+                      <div className="space-y-4">
+                        {/* Connection stats */}
+                        <div className="rounded-md bg-primary/5 border border-primary/20 p-3 space-y-2">
+                          <p className="text-sm font-medium text-primary">
+                            ✓ Conexão estabelecida!
+                          </p>
+                          <div className="grid grid-cols-3 gap-2 text-xs">
+                            <div className="text-center p-2 rounded bg-background">
+                              <div className="font-bold text-lg text-foreground">{connectionResult.agents.length}</div>
+                              <div className="text-muted-foreground">Agentes</div>
+                            </div>
+                            <div className="text-center p-2 rounded bg-background">
+                              <div className="font-bold text-lg text-foreground">{connectionResult.inboxes.length}</div>
+                              <div className="text-muted-foreground">Canais</div>
+                            </div>
+                            <div className="text-center p-2 rounded bg-background">
+                              <div className="font-bold text-lg text-foreground">{connectionResult.labels.length}</div>
+                              <div className="text-muted-foreground">Etiquetas</div>
+                            </div>
                           </div>
                         </div>
+
+                        {/* Agent import section */}
+                        {connectionResult.agents.length > 0 && (
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <Users className="w-4 h-4" />
+                                <span>Importar agentes como usuários</span>
+                              </div>
+                              <div className="flex gap-2">
+                                <Button variant="ghost" size="sm" onClick={selectAllAgents}>
+                                  Todos
+                                </Button>
+                                <Button variant="ghost" size="sm" onClick={clearAgentSelection}>
+                                  Limpar
+                                </Button>
+                              </div>
+                            </div>
+
+                            <ScrollArea className="h-[180px] rounded-md border">
+                              <div className="p-2 space-y-1">
+                                {connectionResult.agents.map((agent) => {
+                                  const isSelected = selectedAgentIds.includes(agent.id);
+                                  return (
+                                    <div
+                                      key={agent.id}
+                                      className={`flex items-center gap-3 p-2.5 rounded-lg cursor-pointer transition-colors ${
+                                        isSelected 
+                                          ? 'bg-primary/10 border border-primary/20' 
+                                          : 'hover:bg-muted/50 border border-transparent'
+                                      }`}
+                                      onClick={() => toggleAgentSelection(agent.id)}
+                                    >
+                                      <Checkbox 
+                                        checked={isSelected} 
+                                        onCheckedChange={() => toggleAgentSelection(agent.id)}
+                                      />
+                                      
+                                      {/* Avatar */}
+                                      <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center text-xs font-medium">
+                                        {agent.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                                      </div>
+
+                                      {/* Info */}
+                                      <div className="flex-1 min-w-0">
+                                        <span className="font-medium text-sm truncate block">{agent.name}</span>
+                                        <span className="text-xs text-muted-foreground truncate block">
+                                          {agent.email}
+                                        </span>
+                                      </div>
+
+                                      {/* Role Badge */}
+                                      {agent.role === 'administrator' ? (
+                                        <Badge variant="secondary" className="gap-1 text-xs">
+                                          <Shield className="w-3 h-3" />
+                                          Admin
+                                        </Badge>
+                                      ) : (
+                                        <Badge variant="outline" className="gap-1 text-xs">
+                                          <User className="w-3 h-3" />
+                                          Agente
+                                        </Badge>
+                                      )}
+
+                                      {/* Selection indicator */}
+                                      {isSelected && (
+                                        <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </ScrollArea>
+
+                            <p className="text-xs text-muted-foreground">
+                              {selectedAgentIds.length} agente(s) selecionado(s) para importação
+                            </p>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -425,10 +585,37 @@ export default function SuperAdminAccountsPage() {
               <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
                 Cancelar
               </Button>
-              <Button onClick={handleCreate} disabled={!formData.nome.trim() || isSaving}>
-                {isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Criar Conta
-              </Button>
+              
+              {/* Show different buttons based on connection status */}
+              {connectionStatus === 'success' && connectionResult && connectionResult.agents.length > 0 ? (
+                <>
+                  <Button 
+                    variant="secondary"
+                    onClick={() => createAccountWithAgents(false)} 
+                    disabled={!formData.nome.trim() || isSaving}
+                  >
+                    {isSaving && !importingAgents && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                    Criar Sem Importar
+                  </Button>
+                  <Button 
+                    onClick={() => createAccountWithAgents(true)} 
+                    disabled={!formData.nome.trim() || isSaving || selectedAgentIds.length === 0}
+                    className="gap-2"
+                  >
+                    {isSaving && importingAgents && <Loader2 className="w-4 h-4 animate-spin" />}
+                    Criar e Importar ({selectedAgentIds.length})
+                    <ArrowRight className="w-4 h-4" />
+                  </Button>
+                </>
+              ) : (
+                <Button 
+                  onClick={() => createAccountWithAgents(false)} 
+                  disabled={!formData.nome.trim() || isSaving}
+                >
+                  {isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  Criar Conta
+                </Button>
+              )}
             </DialogFooter>
           </DialogContent>
         </Dialog>
