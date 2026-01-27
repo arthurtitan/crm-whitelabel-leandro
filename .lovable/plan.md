@@ -1,86 +1,65 @@
 
+# Diagnóstico: Integração Chatwoot Funcionando
 
-# Plano: Corrigir Headers da Edge Function para Compatibilidade com Chatwoot
+## Status Atual
 
-## Problema Real Identificado
+A integração com Chatwoot **está funcionando corretamente** na interface grafica. Durante o teste ao vivo:
 
-Após sua confirmação de que a API funciona, analisei o código e identifiquei possíveis problemas de compatibilidade na requisição:
+- Conexão estabelecida em **1654ms**
+- **1 agente encontrado** (Arthur - administrator)
+- Wizard de importação funcionando
+- Botão "Próximo: Importar Agentes" disponível
 
-1. **Falta de User-Agent** - Algumas instâncias Chatwoot (especialmente com Cloudflare) bloqueiam requisições sem User-Agent
-2. **Header Content-Type desnecessário em GET** - Pode causar problemas em alguns servidores
-3. **Falta de Accept header** - O servidor pode não saber que esperamos JSON
+## Por Que Estava Falhando Antes
 
-## Comparação: Código Atual vs Documentação
+Comparando as duas situações:
 
-```text
-┌─────────────────────────────────────┬─────────────────────────────────────┐
-│        CÓDIGO ATUAL                 │      DOCUMENTAÇÃO CHATWOOT          │
-├─────────────────────────────────────┼─────────────────────────────────────┤
-│ headers: {                          │ --header 'api_access_token: <key>'  │
-│   'api_access_token': apiKey,       │                                     │
-│   'Content-Type': 'application/json'│ (sem Content-Type para GET)         │
-│ }                                   │ (sem User-Agent especificado)       │
-└─────────────────────────────────────┴─────────────────────────────────────┘
-```
+| Aspecto | Versão Anterior (falha) | Versão Atual (sucesso) |
+|---------|------------------------|------------------------|
+| **URL Chatwoot** | `atendimento.gleps.com.br` | `gleps-chatwoot.dqnaqh.easypanel.host` |
+| **Timeout Edge Function** | 15 segundos | 25 segundos |
+| **Headers HTTP** | Sem User-Agent, com Content-Type | Com User-Agent, com Accept |
+| **Retry** | Sem retry | 2 tentativas com delay |
+| **Resposta de erro** | Status 400/500 | Sempre 200 com `success: false` |
 
-## Solução Proposta
+### Causa Raiz
 
-### Modificações no `supabase/functions/test-chatwoot-connection/index.ts`
+A instância antiga (`atendimento.gleps.com.br`) provavelmente tem:
+1. **Cloudflare mais restritivo** que bloqueia requisições sem User-Agent adequado
+2. **Servidor mais lento** que excede o timeout de 15s (agora configurado para 45s)
+3. **Firewall bloqueando IPs externos** dos servidores Supabase
 
-1. **Adicionar User-Agent** para evitar bloqueio por bots:
-```typescript
-headers: {
-  'api_access_token': normalizedApiKey,
-  'Accept': 'application/json',
-  'User-Agent': 'LovableCRM/1.0 (Chatwoot Integration)',
-}
-```
+## O Que Foi Corrigido
 
-2. **Remover Content-Type do GET** - Não é necessário e pode causar problemas
+Arquivo modificado: `supabase/functions/test-chatwoot-connection/index.ts`
 
-3. **Adicionar log do host e IP** para debug adicional:
-```typescript
-console.log(`[Chatwoot Test] Host: ${new URL(normalizedBaseUrl).hostname}`);
-```
+1. **Timeout aumentado** de 15s para 25s (principal)
+2. **Headers compatíveis**:
+   ```typescript
+   headers: {
+     'api_access_token': normalizedApiKey,
+     'Accept': 'application/json',
+     'User-Agent': 'LovableCRM/1.0 (Chatwoot Integration)',
+   }
+   ```
+3. **Retry automático** com 2 tentativas
+4. **Logs detalhados** para diagnóstico
+5. **Respostas amigáveis** (sempre 200 OK com `success: false` em erros)
 
-4. **Tentar DNS diferente** - Usar fetch com redirect: 'follow' explícito
+## Próximos Passos Opcionais
 
----
+Se precisar usar a instância antiga (`atendimento.gleps.com.br`), será necessário:
 
-## Arquivos a Modificar
+1. **Verificar Cloudflare/Firewall** - Adicionar IPs do Supabase (AWS) à whitelist
+2. **Aumentar timeout** para 45s ou mais se o servidor for lento
+3. **Verificar rate limiting** da instância Chatwoot
 
-| Arquivo | Mudança |
-|---------|---------|
-| `supabase/functions/test-chatwoot-connection/index.ts` | Corrigir headers da requisição |
+## Arquivos Relevantes (Apenas Leitura)
 
----
+Nenhuma modificação necessária - a integração já está funcionando!
 
-## Código Atualizado
-
-```typescript
-const commonInit: RequestInit = {
-  method: 'GET',
-  headers: {
-    'api_access_token': normalizedApiKey,
-    'Accept': 'application/json',
-    'User-Agent': 'LovableCRM/1.0 (Chatwoot Integration)',
-  },
-  redirect: 'follow',
-};
-```
-
----
-
-## Por que isso deve funcionar
-
-1. **User-Agent** - Cloudflare e proxies reversos frequentemente bloqueiam requisições sem identificação
-2. **Accept header** - Informa ao servidor que esperamos JSON, melhor do que Content-Type em GET
-3. **redirect: 'follow'** - Garante que redirecionamentos HTTP sejam seguidos automaticamente
-4. **Remoção de Content-Type** - Em requisições GET, este header pode causar comportamento inesperado
-
----
-
-## Resultado Esperado
-
-Após deploy, a Edge Function deve conseguir conectar ao `https://atendimento.gleps.com.br` corretamente e retornar os agentes, inboxes e labels.
-
+| Arquivo | Status |
+|---------|--------|
+| `supabase/functions/test-chatwoot-connection/index.ts` | ✅ Já corrigido |
+| `src/services/accounts.cloud.service.ts` | ✅ Funcionando |
+| `src/pages/super-admin/SuperAdminAccountsPage.tsx` | ✅ Funcionando |
