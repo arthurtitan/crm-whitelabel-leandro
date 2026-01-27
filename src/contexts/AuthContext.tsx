@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode, useRef } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { toast } from 'sonner';
@@ -44,10 +44,6 @@ interface AuthContextType extends AuthState {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Hydration timeout: precisa ser tolerante em redes mais lentas.
-// (o problema real era re-hidratação repetida; mesmo assim, 12s evita falsos timeouts)
-const HYDRATION_TIMEOUT_MS = 12000;
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [authState, setAuthState] = useState<AuthState>({
     user: null,
@@ -59,52 +55,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [originalUser, setOriginalUser] = useState<User | null>(null);
   const [isImpersonating, setIsImpersonating] = useState(false);
 
-  // Evita re-hidratação em eventos repetidos (ex.: recuperação/refresh de sessão disparando SIGNED_IN)
-  const hydratedUserIdRef = useRef<string | null>(null);
-  const hydratingRef = useRef(false);
-
   const clearAuthError = useCallback(() => {
     setAuthState(prev => ({ ...prev, authError: null }));
   }, []);
 
-  // Simple fetch with timeout using Promise.race
-  const fetchWithTimeout = useCallback(async <T,>(
-    promiseOrBuilder: Promise<T> | PromiseLike<T>,
-    timeoutMs: number
-  ): Promise<T> => {
-    const promise = Promise.resolve(promiseOrBuilder);
-    const timeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Timeout')), timeoutMs)
-    );
-    return Promise.race([promise, timeout]);
-  }, []);
-
-  // Hydrate user data - simplified linear flow
+  // Hydrate user data - simplified without artificial timeout
   const hydrateUser = useCallback(async (supabaseUser: SupabaseUser): Promise<boolean> => {
     console.log('[Auth] Hydrating user:', supabaseUser.id);
 
     try {
-      // Fetch profile and role in parallel
-      const [profileResult, roleResult] = await fetchWithTimeout(
-        Promise.all([
-          supabase
-            .from('profiles')
-            .select('user_id, email, nome, status, permissions, account_id, chatwoot_agent_id')
-            .eq('user_id', supabaseUser.id)
-            .maybeSingle(),
-          supabase
-            .from('user_roles')
-            .select('role')
-            .eq('user_id', supabaseUser.id)
-            .maybeSingle(),
-        ]),
-        HYDRATION_TIMEOUT_MS
-      );
+      // Fetch profile and role in parallel - no artificial timeout
+      const [profileResult, roleResult] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('user_id, email, nome, status, permissions, account_id, chatwoot_agent_id')
+          .eq('user_id', supabaseUser.id)
+          .maybeSingle(),
+        supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', supabaseUser.id)
+          .maybeSingle(),
+      ]);
 
       const { data: profile, error: profileError } = profileResult;
       const { data: userRole, error: roleError } = roleResult;
 
       if (profileError) {
+        console.error('[Auth] Profile error:', profileError);
         throw new Error('Erro ao carregar perfil');
       }
 
@@ -125,16 +103,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Fetch account only for non-super_admin users
       let account: Account | null = null;
       if (role !== 'super_admin' && profile.account_id) {
-        const accountQuery = supabase
+        const { data: accountData, error: accountError } = await supabase
           .from('accounts')
           .select('id, nome, status, chatwoot_base_url, chatwoot_account_id')
           .eq('id', profile.account_id)
           .maybeSingle();
-
-        const { data: accountData, error: accountError } = await fetchWithTimeout(
-          accountQuery,
-          HYDRATION_TIMEOUT_MS
-        );
 
         if (!accountError && accountData) {
           account = {
@@ -172,16 +145,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         authError: null,
       });
 
-      hydratedUserIdRef.current = supabaseUser.id;
-
       return true;
     } catch (error: any) {
       console.error('[Auth] Hydration failed:', error.message);
       
       // Sign out to prevent half-logged state
       await supabase.auth.signOut();
-
-      hydratedUserIdRef.current = null;
       
       setAuthState({
         user: null,
@@ -193,7 +162,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       return false;
     }
-  }, [fetchWithTimeout]);
+  }, []);
 
   // Initialize auth state
   useEffect(() => {
@@ -203,20 +172,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!mounted) return;
       console.log('[Auth] Event:', event);
 
-      // Sessão válida: hidratar apenas se ainda não hidratamos este user_id
       if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') && session?.user) {
-        if (hydratedUserIdRef.current === session.user.id) {
-          // Já hidratado — não setar loading (isso causava “voltar para carregando” ao navegar)
+        // Only hydrate if we don't have the user OR if the user ID changed
+        const currentUserId = authState.user?.id;
+        if (currentUserId === session.user.id && authState.isAuthenticated) {
+          console.log('[Auth] Already hydrated, skipping');
           return;
         }
-        if (hydratingRef.current) return;
-        hydratingRef.current = true;
+        
         setAuthState(prev => ({ ...prev, isLoading: true, authError: null }));
         await hydrateUser(session.user);
-        hydratingRef.current = false;
       } else if (event === 'SIGNED_OUT') {
-        hydratedUserIdRef.current = null;
-        hydratingRef.current = false;
         setAuthState({
           user: null,
           account: null,
@@ -227,8 +193,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setOriginalUser(null);
         setIsImpersonating(false);
       } else if (event === 'INITIAL_SESSION' && !session) {
-        hydratedUserIdRef.current = null;
-        hydratingRef.current = false;
         setAuthState({
           user: null,
           account: null,
@@ -246,7 +210,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [hydrateUser]);
+  }, [hydrateUser, authState.user?.id, authState.isAuthenticated]);
 
   // Login - just authenticates, hydration follows via listener
   const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
@@ -306,8 +270,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await supabase.auth.signOut();
     } finally {
-      hydratedUserIdRef.current = null;
-      hydratingRef.current = false;
       setAuthState({
         user: null,
         account: null,

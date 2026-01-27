@@ -40,9 +40,6 @@ function getSmartDefaultRoute(user: { role: string; permissions?: string[] }): s
   return '/admin'; // Fallback
 }
 
-// Login timeout for the signIn call only (not hydration)
-const SIGNIN_TIMEOUT_MS = 15000;
-
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -83,18 +80,8 @@ export default function LoginPage() {
     console.log('[LoginPage] Starting login attempt for:', email);
     
     try {
-      // Race between login and timeout (only for the signIn call)
-      const timeoutPromise = new Promise<{ success: false; error: string }>((resolve) => {
-        setTimeout(() => {
-          console.warn('[LoginPage] SignIn timeout reached');
-          resolve({ success: false, error: 'Tempo excedido ao conectar. Verifique sua conexão e tente novamente.' });
-        }, SIGNIN_TIMEOUT_MS);
-      });
-      
-      const result = await Promise.race([
-        login(email, password),
-        timeoutPromise
-      ]);
+      // Direct login - no artificial timeout
+      const result = await login(email, password);
       
       if (!result.success) {
         console.error('[LoginPage] Login failed:', result.error);
