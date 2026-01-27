@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { mockUsers, mockAccounts } from '@/data/mockData';
+import { mockUsers } from '@/data/mockData';
+import { accountsCloudService, Account } from '@/services/accounts.cloud.service';
 import { User, UserRole, UserStatus } from '@/types/crm';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -81,9 +82,28 @@ import { toast } from 'sonner';
 
 export default function SuperAdminUsersPage() {
   const [users, setUsers] = useState<User[]>(mockUsers);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [accountsLoading, setAccountsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<UserRole | 'all'>('all');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+
+  // Load accounts from database on mount
+  useEffect(() => {
+    const loadAccounts = async () => {
+      try {
+        setAccountsLoading(true);
+        const data = await accountsCloudService.list();
+        setAccounts(data);
+      } catch (error: any) {
+        console.error('Error loading accounts:', error);
+        toast.error('Erro ao carregar contas');
+      } finally {
+        setAccountsLoading(false);
+      }
+    };
+    loadAccounts();
+  }, []);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [editFormData, setEditFormData] = useState({
     nome: '',
@@ -146,7 +166,7 @@ export default function SuperAdminUsersPage() {
 
   const getAccountName = (accountId: string | null) => {
     if (!accountId) return 'Global';
-    const account = mockAccounts.find((a) => a.id === accountId);
+    const account = accounts.find((a) => a.id === accountId);
     return account?.nome || 'Desconhecido';
   };
 
@@ -426,11 +446,17 @@ export default function SuperAdminUsersPage() {
                         <SelectValue placeholder="Selecione" />
                       </SelectTrigger>
                       <SelectContent>
-                        {mockAccounts.map((acc) => (
-                          <SelectItem key={acc.id} value={acc.id}>
-                            {acc.nome}
-                          </SelectItem>
-                        ))}
+                        {accountsLoading ? (
+                          <SelectItem value="_loading" disabled>Carregando...</SelectItem>
+                        ) : accounts.length === 0 ? (
+                          <SelectItem value="_empty" disabled>Nenhuma conta encontrada</SelectItem>
+                        ) : (
+                          accounts.map((acc) => (
+                            <SelectItem key={acc.id} value={acc.id}>
+                              {acc.nome}
+                            </SelectItem>
+                          ))
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -799,11 +825,17 @@ export default function SuperAdminUsersPage() {
                       <SelectValue placeholder="Selecione uma conta" />
                     </SelectTrigger>
                     <SelectContent>
-                      {mockAccounts.map((acc) => (
-                        <SelectItem key={acc.id} value={acc.id}>
-                          {acc.nome}
-                        </SelectItem>
-                      ))}
+                      {accountsLoading ? (
+                        <SelectItem value="_loading" disabled>Carregando...</SelectItem>
+                      ) : accounts.length === 0 ? (
+                        <SelectItem value="_empty" disabled>Nenhuma conta encontrada</SelectItem>
+                      ) : (
+                        accounts.map((acc) => (
+                          <SelectItem key={acc.id} value={acc.id}>
+                            {acc.nome}
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
