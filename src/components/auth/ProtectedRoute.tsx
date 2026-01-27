@@ -2,7 +2,8 @@ import { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/hooks/usePermissions';
-import { UserRole } from '@/types/crm';
+
+type UserRole = 'super_admin' | 'admin' | 'agent';
 
 interface ProtectedRouteProps {
   children: ReactNode;
