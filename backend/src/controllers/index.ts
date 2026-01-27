@@ -10,3 +10,4 @@ export { financeController } from './finance.controller';
 export { insightsController } from './insights.controller';
 export { calendarController } from './calendar.controller';
 export { eventController } from './event.controller';
+export { chatwootController } from './chatwoot.controller';

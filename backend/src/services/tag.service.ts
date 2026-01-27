@@ -3,6 +3,8 @@ import { TagType } from '@prisma/client';
 import { NotFoundError, ValidationError, ErrorCodes } from '../utils/errors';
 import { slugify } from '../utils/helpers';
 import { eventService } from './event.service';
+import { chatwootService } from './chatwoot.service';
+import { logger } from '../utils/logger';
 
 export interface CreateTagInput {
   accountId: string;
@@ -132,6 +134,31 @@ class TagService {
       },
     });
 
+    // Sync stage tags with Chatwoot labels
+    if (input.type === 'stage') {
+      try {
+        const account = await prisma.account.findUnique({ where: { id: input.accountId } });
+        
+        if (account?.chatwootApiKey && account?.chatwootBaseUrl && account?.chatwootAccountId) {
+          const label = await chatwootService.createLabel(input.accountId, {
+            title: input.name,
+            color: input.color || '#6366F1',
+          });
+          
+          // Update tag with Chatwoot label ID
+          await prisma.tag.update({
+            where: { id: tag.id },
+            data: { chatwootLabelId: label.id },
+          });
+          
+          logger.info('Tag synced to Chatwoot label', { tagId: tag.id, labelId: label.id });
+        }
+      } catch (error) {
+        logger.warn('Failed to sync tag with Chatwoot', { tagId: tag.id, error });
+        // Don't fail the operation, just log the error
+      }
+    }
+
     // Record in tag history
     await prisma.tagHistory.create({
       data: {
@@ -161,7 +188,7 @@ class TagService {
    * Update a tag
    */
   async update(id: string, input: UpdateTagInput, accountId: string, updatedById?: string) {
-    await this.getById(id, accountId);
+    const existingTag = await this.getById(id, accountId);
 
     const tag = await prisma.tag.update({
       where: { id },
@@ -170,6 +197,19 @@ class TagService {
         color: input.color,
       },
     });
+
+    // Sync with Chatwoot if tag has a linked label
+    if (existingTag.chatwootLabelId) {
+      try {
+        await chatwootService.updateLabel(accountId, existingTag.chatwootLabelId, {
+          title: input.name,
+          color: input.color,
+        });
+        logger.info('Tag update synced to Chatwoot', { tagId: id, labelId: existingTag.chatwootLabelId });
+      } catch (error) {
+        logger.warn('Failed to sync tag update with Chatwoot', { tagId: id, error });
+      }
+    }
 
     await eventService.create({
       eventType: 'funnel.stage.updated',
@@ -197,6 +237,16 @@ class TagService {
 
     if (leadsCount > 0) {
       throw new ValidationError(ErrorCodes.TAG_HAS_LEADS);
+    }
+
+    // Delete Chatwoot label if linked
+    if (tag.chatwootLabelId) {
+      try {
+        await chatwootService.deleteLabel(accountId, tag.chatwootLabelId);
+        logger.info('Chatwoot label deleted', { tagId: id, labelId: tag.chatwootLabelId });
+      } catch (error) {
+        logger.warn('Failed to delete Chatwoot label', { tagId: id, error });
+      }
     }
 
     await prisma.tag.delete({ where: { id } });

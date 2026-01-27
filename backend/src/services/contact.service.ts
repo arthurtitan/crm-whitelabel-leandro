@@ -4,6 +4,8 @@ import { PaginationParams } from '../types';
 import { NotFoundError, ValidationError, ErrorCodes } from '../utils/errors';
 import { getPaginationMeta } from '../utils/helpers';
 import { eventService } from './event.service';
+import { chatwootService } from './chatwoot.service';
+import { logger } from '../utils/logger';
 
 export interface CreateContactInput {
   accountId: string;
@@ -403,6 +405,15 @@ class ContactService {
       entityId: id,
       payload: { tagId, tagName: tag.name, source },
     });
+
+    // Sync to Chatwoot if this is a stage change from Kanban
+    if (tag.type === 'stage' && source === 'kanban') {
+      try {
+        await chatwootService.syncLeadStageToConversation(id, tag.name, accountId);
+      } catch (error) {
+        logger.warn('Failed to sync stage change to Chatwoot', { contactId: id, tagId, error });
+      }
+    }
 
     return this.getById(id, accountId);
   }

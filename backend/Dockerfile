@@ -1,3 +1,7 @@
+# ============================================
+# GLEPS CRM Backend - Dockerfile
+# ============================================
+
 # Build stage
 FROM node:20-alpine AS builder
 
@@ -19,22 +23,27 @@ RUN npx prisma generate
 # Build TypeScript
 RUN npm run build
 
+# ============================================
 # Production stage
+# ============================================
 FROM node:20-alpine AS production
 
 WORKDIR /app
 
-# Create non-root user
+# Create non-root user for security
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
 
 # Copy package files and install production dependencies
 COPY package*.json ./
 COPY prisma ./prisma/
-RUN npm ci --only=production
 
-# Generate Prisma client
-RUN npx prisma generate
+RUN npm ci --only=production && \
+    npx prisma generate
+
+# Copy migration script
+COPY scripts ./scripts/
+RUN chmod +x scripts/*.sh
 
 # Copy built application
 COPY --from=builder /app/dist ./dist

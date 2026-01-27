@@ -1,0 +1,541 @@
+import { Request, Response, NextFunction } from 'express';
+import crypto from 'crypto';
+import { chatwootService } from '../services/chatwoot.service';
+import { contactService } from '../services/contact.service';
+import { eventService } from '../services/event.service';
+import { prisma } from '../config/database';
+import { env } from '../config/env';
+import { logger } from '../utils/logger';
+import { AuthRequest } from '../middlewares/auth.middleware';
+import { ChatwootWebhookEvent } from '../types/chatwoot.types';
+
+class ChatwootController {
+  // ============================================
+  // Webhook Handler
+  // ============================================
+
+  /**
+   * POST /api/chatwoot/webhook
+   * Handle incoming webhook events from Chatwoot
+   */
+  async handleWebhook(req: Request, res: Response, next: NextFunction) {
+    try {
+      // Validate webhook signature if secret is configured
+      if (env.CHATWOOT_WEBHOOK_SECRET) {
+        const isValid = validateWebhookSignature(req, env.CHATWOOT_WEBHOOK_SECRET);
+        if (!isValid) {
+          logger.warn('Invalid Chatwoot webhook signature');
+          return res.status(401).json({ error: 'Invalid signature' });
+        }
+      }
+
+      const event: ChatwootWebhookEvent = req.body;
+      
+      logger.info('Chatwoot webhook received', {
+        event: event.event,
+        accountId: event.account?.id,
+        conversationId: event.conversation?.id,
+      });
+
+      // Find the CRM account linked to this Chatwoot account
+      const account = await prisma.account.findFirst({
+        where: { chatwootAccountId: String(event.account?.id) },
+      });
+
+      if (!account) {
+        logger.warn('No CRM account found for Chatwoot account', { chatwootAccountId: event.account?.id });
+        return res.json({ received: true, processed: false, reason: 'Unknown account' });
+      }
+
+      // Process event based on type
+      switch (event.event) {
+        case 'conversation_created':
+          await handleConversationCreated(account.id, event);
+          break;
+
+        case 'conversation_updated':
+          await handleConversationUpdated(account.id, event);
+          break;
+
+        case 'conversation_status_changed':
+          await handleStatusChanged(account.id, event);
+          break;
+
+        case 'message_created':
+          await handleMessageCreated(account.id, event);
+          break;
+
+        case 'contact_created':
+          await handleContactCreated(account.id, event);
+          break;
+
+        case 'contact_updated':
+          await handleContactUpdated(account.id, event);
+          break;
+
+        default:
+          logger.debug('Unhandled webhook event type', { event: event.event });
+      }
+
+      res.json({ received: true, processed: true });
+    } catch (error) {
+      logger.error('Webhook processing error', { error });
+      // Always return 200 to prevent webhook retries
+      res.json({ received: true, processed: false, error: 'Processing error' });
+    }
+  }
+
+  // ============================================
+  // API Endpoints (Authenticated)
+  // ============================================
+
+  /**
+   * GET /api/chatwoot/test-connection
+   * Test Chatwoot connection for the user's account
+   */
+  async testConnection(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const accountId = req.user!.accountId!;
+      const result = await chatwootService.testConnection(accountId);
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/chatwoot/test-connection
+   * Test Chatwoot connection with provided credentials
+   */
+  async testConnectionWithCredentials(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { baseUrl, accountId: chatwootAccountId, apiKey } = req.body;
+      
+      if (!baseUrl || !chatwootAccountId || !apiKey) {
+        return res.status(400).json({ error: 'URL, Account ID e API Key são obrigatórios' });
+      }
+
+      const result = await chatwootService.testConnectionWithCredentials(baseUrl, chatwootAccountId, apiKey);
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/chatwoot/agents
+   * Get agents for the user's account
+   */
+  async getAgents(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const accountId = req.user!.accountId!;
+      const agents = await chatwootService.getAgents(accountId);
+      res.json(agents);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/chatwoot/agents/fetch
+   * Fetch agents with provided credentials (for import during setup)
+   */
+  async fetchAgentsWithCredentials(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { baseUrl, accountId: chatwootAccountId, apiKey } = req.body;
+      
+      if (!baseUrl || !chatwootAccountId || !apiKey) {
+        return res.status(400).json({ error: 'URL, Account ID e API Key são obrigatórios' });
+      }
+
+      const agents = await chatwootService.getAgentsWithCredentials(baseUrl, chatwootAccountId, apiKey);
+      res.json(agents);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/chatwoot/inboxes
+   * Get inboxes (channels) for the user's account
+   */
+  async getInboxes(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const accountId = req.user!.accountId!;
+      const inboxes = await chatwootService.getInboxes(accountId);
+      res.json(inboxes);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/chatwoot/labels
+   * Get labels for the user's account
+   */
+  async getLabels(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const accountId = req.user!.accountId!;
+      const labels = await chatwootService.getLabels(accountId);
+      res.json(labels);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/chatwoot/labels
+   * Create a new label
+   */
+  async createLabel(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const accountId = req.user!.accountId!;
+      const { title, description, color, show_on_sidebar } = req.body;
+      
+      if (!title) {
+        return res.status(400).json({ error: 'Título é obrigatório' });
+      }
+
+      const label = await chatwootService.createLabel(accountId, {
+        title,
+        description,
+        color,
+        show_on_sidebar,
+      });
+      
+      res.status(201).json(label);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * PATCH /api/chatwoot/labels/:labelId
+   * Update a label
+   */
+  async updateLabel(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const accountId = req.user!.accountId!;
+      const labelId = parseInt(req.params.labelId, 10);
+      const { title, description, color, show_on_sidebar } = req.body;
+
+      const label = await chatwootService.updateLabel(accountId, labelId, {
+        title,
+        description,
+        color,
+        show_on_sidebar,
+      });
+      
+      res.json(label);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * DELETE /api/chatwoot/labels/:labelId
+   * Delete a label
+   */
+  async deleteLabel(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const accountId = req.user!.accountId!;
+      const labelId = parseInt(req.params.labelId, 10);
+
+      await chatwootService.deleteLabel(accountId, labelId);
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/chatwoot/metrics
+   * Get overall metrics from Chatwoot
+   */
+  async getMetrics(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const accountId = req.user!.accountId!;
+      const metrics = await chatwootService.getAccountMetrics(accountId);
+      res.json(metrics);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/chatwoot/metrics/agents
+   * Get agent performance metrics
+   */
+  async getAgentMetrics(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const accountId = req.user!.accountId!;
+      const { since, until } = req.query;
+      
+      const dateRange = {
+        since: since as string | undefined,
+        until: until as string | undefined,
+      };
+
+      const metrics = await chatwootService.getAgentMetrics(accountId, dateRange);
+      res.json(metrics);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/chatwoot/metrics/conversations
+   * Get conversation metrics
+   */
+  async getConversationMetrics(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const accountId = req.user!.accountId!;
+      const { since, until } = req.query;
+      
+      const dateRange = {
+        since: since as string | undefined,
+        until: until as string | undefined,
+      };
+
+      const metrics = await chatwootService.getConversationMetrics(accountId, dateRange);
+      res.json(metrics);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/chatwoot/conversations
+   * Get conversations with filters
+   */
+  async getConversations(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const accountId = req.user!.accountId!;
+      const { status, inbox_id, assignee_type, page, labels } = req.query;
+      
+      const conversations = await chatwootService.getConversations(accountId, {
+        status: status as any,
+        inbox_id: inbox_id ? parseInt(inbox_id as string, 10) : undefined,
+        assignee_type: assignee_type as any,
+        page: page ? parseInt(page as string, 10) : undefined,
+        labels: labels ? (labels as string).split(',') : undefined,
+      });
+      
+      res.json(conversations);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/chatwoot/sync-labels
+   * Sync all stage tags to Chatwoot labels
+   */
+  async syncLabels(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const accountId = req.user!.accountId!;
+      
+      // Get all stage tags
+      const tags = await prisma.tag.findMany({
+        where: { accountId, type: 'stage', ativo: true },
+      });
+
+      const results = await Promise.all(
+        tags.map(async (tag) => {
+          const labelId = await chatwootService.syncTagToLabel(tag.id, accountId);
+          return { tagId: tag.id, tagName: tag.name, labelId, synced: !!labelId };
+        })
+      );
+
+      res.json({
+        message: 'Sincronização concluída',
+        results,
+        synced: results.filter(r => r.synced).length,
+        failed: results.filter(r => !r.synced).length,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+}
+
+// ============================================
+// Webhook Helper Functions
+// ============================================
+
+function validateWebhookSignature(req: Request, secret: string): boolean {
+  const signature = req.headers['x-chatwoot-signature'] as string;
+  if (!signature) return false;
+
+  const payload = JSON.stringify(req.body);
+  const expected = crypto
+    .createHmac('sha256', secret)
+    .update(payload)
+    .digest('hex');
+
+  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+}
+
+async function handleConversationCreated(accountId: string, event: ChatwootWebhookEvent) {
+  if (!event.conversation || !event.conversation.contact_id) return;
+
+  const contact = event.conversation.meta?.sender;
+  
+  // Find or create contact
+  const contactId = await chatwootService.findOrCreateContactFromChatwoot(
+    accountId,
+    event.conversation.contact_id,
+    event.conversation.id,
+    {
+      name: contact?.name,
+      phone_number: contact?.phone_number,
+      email: contact?.email,
+    }
+  );
+
+  // Record event
+  await eventService.create({
+    eventType: 'chatwoot.conversation.created',
+    accountId,
+    actorType: 'external',
+    entityType: 'contact',
+    entityId: contactId,
+    channel: 'chatwoot',
+    payload: {
+      conversationId: event.conversation.id,
+      inboxId: event.conversation.inbox_id,
+      status: event.conversation.status,
+    },
+  });
+}
+
+async function handleConversationUpdated(accountId: string, event: ChatwootWebhookEvent) {
+  if (!event.conversation) return;
+
+  // Check if labels were changed
+  const labels = event.conversation.labels || [];
+  
+  // Find the contact
+  const contact = await prisma.contact.findFirst({
+    where: {
+      accountId,
+      chatwootConversationId: event.conversation.id,
+    },
+  });
+
+  if (!contact) {
+    logger.debug('Contact not found for conversation update', {
+      conversationId: event.conversation.id,
+    });
+    return;
+  }
+
+  // Get all stage tags that match the labels
+  const matchingTags = await prisma.tag.findMany({
+    where: {
+      accountId,
+      type: 'stage',
+      name: { in: labels },
+    },
+  });
+
+  // Apply the first matching stage tag (Kanban only allows one stage)
+  if (matchingTags.length > 0) {
+    const targetTag = matchingTags[0];
+    
+    await contactService.applyTag(
+      contact.id,
+      accountId,
+      targetTag.id,
+      'chatwoot'
+    );
+
+    logger.info('Lead moved via Chatwoot label', {
+      contactId: contact.id,
+      tagId: targetTag.id,
+      tagName: targetTag.name,
+    });
+  }
+
+  // Record event
+  await eventService.create({
+    eventType: 'chatwoot.conversation.updated',
+    accountId,
+    actorType: 'external',
+    entityType: 'contact',
+    entityId: contact.id,
+    channel: 'chatwoot',
+    payload: {
+      conversationId: event.conversation.id,
+      labels,
+    },
+  });
+}
+
+async function handleStatusChanged(accountId: string, event: ChatwootWebhookEvent) {
+  if (!event.conversation) return;
+
+  // Record event for metrics/dashboard
+  await eventService.create({
+    eventType: 'chatwoot.conversation.status_changed',
+    accountId,
+    actorType: 'external',
+    channel: 'chatwoot',
+    payload: {
+      conversationId: event.conversation.id,
+      status: event.conversation.status,
+      previousStatus: event.changed_attributes?.[0]?.previous_value,
+    },
+  });
+}
+
+async function handleMessageCreated(accountId: string, event: ChatwootWebhookEvent) {
+  if (!event.message || !event.conversation) return;
+
+  // Only log for audit, don't create events for every message
+  logger.debug('Message received', {
+    conversationId: event.conversation.id,
+    messageType: event.message.message_type,
+    senderType: event.message.sender_type,
+  });
+}
+
+async function handleContactCreated(accountId: string, event: ChatwootWebhookEvent) {
+  if (!event.contact) return;
+
+  await chatwootService.findOrCreateContactFromChatwoot(
+    accountId,
+    event.contact.id,
+    undefined,
+    {
+      name: event.contact.name,
+      phone_number: event.contact.phone_number,
+      email: event.contact.email,
+    }
+  );
+}
+
+async function handleContactUpdated(accountId: string, event: ChatwootWebhookEvent) {
+  if (!event.contact) return;
+
+  // Find and update contact
+  const contact = await prisma.contact.findFirst({
+    where: {
+      accountId,
+      chatwootContactId: event.contact.id,
+    },
+  });
+
+  if (contact) {
+    await prisma.contact.update({
+      where: { id: contact.id },
+      data: {
+        nome: event.contact.name || contact.nome,
+        telefone: event.contact.phone_number || contact.telefone,
+        email: event.contact.email?.toLowerCase() || contact.email,
+      },
+    });
+  }
+}
+
+export const chatwootController = new ChatwootController();

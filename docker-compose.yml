@@ -7,18 +7,20 @@ services:
     container_name: gleps_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: gleps
-      POSTGRES_PASSWORD: gleps_secret
-      POSTGRES_DB: gleps_crm
+      POSTGRES_USER: ${DB_USER:-gleps}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-gleps_secret}
+      POSTGRES_DB: ${DB_NAME:-gleps_crm}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5432}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U gleps -d gleps_crm"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-gleps} -d ${DB_NAME:-gleps_crm}"]
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - gleps_network
 
   # Backend API
   backend:
@@ -28,22 +30,23 @@ services:
     container_name: gleps_backend
     restart: unless-stopped
     environment:
-      NODE_ENV: production
+      NODE_ENV: ${NODE_ENV:-production}
       PORT: 3000
-      API_URL: http://localhost:3000
+      API_URL: ${API_URL:-http://localhost:3000}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
-      DATABASE_URL: postgresql://gleps:gleps_secret@postgres:5432/gleps_crm?schema=public
+      DATABASE_URL: postgresql://${DB_USER:-gleps}:${DB_PASSWORD:-gleps_secret}@postgres:5432/${DB_NAME:-gleps_crm}?schema=public
       JWT_SECRET: ${JWT_SECRET:-your-production-jwt-secret-min-32-characters}
-      JWT_EXPIRES_IN: 1h
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
       REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET:-your-production-refresh-secret-min-32}
-      REFRESH_TOKEN_EXPIRES_IN: 7d
-      BCRYPT_SALT_ROUNDS: 12
-      RATE_LIMIT_WINDOW_MS: 900000
-      RATE_LIMIT_MAX: 100
+      REFRESH_TOKEN_EXPIRES_IN: ${REFRESH_TOKEN_EXPIRES_IN:-7d}
+      BCRYPT_SALT_ROUNDS: ${BCRYPT_SALT_ROUNDS:-12}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-900000}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-100}
+      CHATWOOT_WEBHOOK_SECRET: ${CHATWOOT_WEBHOOK_SECRET:-}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
-      LOG_LEVEL: info
+      LOG_LEVEL: ${LOG_LEVEL:-info}
     ports:
       - "3000:3000"
     depends_on:
@@ -54,24 +57,28 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    networks:
+      - gleps_network
 
   # Frontend (Production Build)
   frontend:
     build:
       context: .
       dockerfile: Dockerfile.frontend
+      args:
+        VITE_API_URL: ${API_URL:-http://localhost:3000}
     container_name: gleps_frontend
     restart: unless-stopped
-    environment:
-      VITE_API_URL: ${API_URL:-http://localhost:3000}
     ports:
       - "8080:80"
     depends_on:
       - backend
+    networks:
+      - gleps_network
 
 volumes:
   postgres_data:
 
 networks:
-  default:
-    name: gleps_network
+  gleps_network:
+    driver: bridge
