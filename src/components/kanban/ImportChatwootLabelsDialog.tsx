@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -35,20 +35,29 @@ export function ImportChatwootLabelsDialog({
   const [error, setError] = useState<string | null>(null);
 
   const fetchLabels = async () => {
+    console.log('[ImportLabels] Starting fetch for account:', accountId);
     setStep('loading');
     setError(null);
 
     try {
       const fetchedLabels = await tagsCloudService.fetchChatwootLabels(accountId);
+      console.log('[ImportLabels] Fetched labels:', fetchedLabels.length);
       setLabels(fetchedLabels);
       setSelectedLabels(new Set(fetchedLabels.map(l => l.id)));
       setStep('select');
     } catch (err) {
-      console.error('Error fetching labels:', err);
+      console.error('[ImportLabels] Error fetching labels:', err);
       setError(err instanceof Error ? err.message : 'Erro ao buscar labels');
       setStep('select');
     }
   };
+
+  // Fetch labels when dialog opens
+  useEffect(() => {
+    if (open && step === 'loading') {
+      fetchLabels();
+    }
+  }, [open]);
 
   const handleImport = async () => {
     setStep('importing');
@@ -79,9 +88,8 @@ export function ImportChatwootLabelsDialog({
   };
 
   const handleOpenChange = (newOpen: boolean) => {
-    if (newOpen) {
-      fetchLabels();
-    } else {
+    if (!newOpen) {
+      // Reset state when closing
       setStep('loading');
       setLabels([]);
       setSelectedLabels(new Set());
