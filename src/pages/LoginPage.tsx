@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -47,11 +47,17 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   
-  const { login } = useAuth();
+  const { login, user, isAuthenticated, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   
-  const from = location.state?.from?.pathname || '/';
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (!authLoading && isAuthenticated && user) {
+      const targetRoute = getSmartDefaultRoute({ role: user.role, permissions: user.permissions });
+      navigate(targetRoute, { replace: true });
+    }
+  }, [isAuthenticated, user, authLoading, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,36 +68,10 @@ export default function LoginPage() {
     
     setIsLoading(false);
     
-    if (result.success) {
-      // Fetch the user data to determine correct route
-      const { data: { user: supabaseUser } } = await (await import('@/integrations/supabase/client')).supabase.auth.getUser();
-      
-      if (supabaseUser) {
-        // Get user role to determine route
-        const { supabase } = await import('@/integrations/supabase/client');
-        const { data: userRole } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', supabaseUser.id)
-          .maybeSingle();
-        
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('permissions')
-          .eq('user_id', supabaseUser.id)
-          .maybeSingle();
-        
-        const role = userRole?.role || 'agent';
-        const permissions = profile?.permissions || ['dashboard'];
-        
-        const targetRoute = getSmartDefaultRoute({ role, permissions });
-        navigate(targetRoute, { replace: true });
-      } else {
-        navigate('/admin', { replace: true });
-      }
-    } else {
+    if (!result.success) {
       setError(result.error || 'Erro ao fazer login');
     }
+    // Navigation is handled by the useEffect above when user state updates
   };
 
 
