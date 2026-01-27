@@ -202,19 +202,36 @@ export const usersCloudService = {
   },
 
   /**
-   * Delete user
+   * Delete user completely via Edge Function
+   * This removes the user from auth.users (which cascades to profiles and user_roles)
    */
-  async delete(userId: string): Promise<void> {
-    // Note: This will cascade delete the profile due to the FK constraint
-    // In production, you'd want to use an admin function to delete from auth.users
-    const { error } = await supabase
-      .from('profiles')
-      .delete()
-      .eq('user_id', userId);
+  async delete(userId: string, adminPassword: string): Promise<void> {
+    const { data: sessionData } = await supabase.auth.getSession();
+    
+    if (!sessionData.session) {
+      throw new Error('Não autenticado');
+    }
 
-    if (error) {
-      console.error('Error deleting user:', error);
-      throw new Error(error.message);
+    const response = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-user`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sessionData.session.access_token}`,
+        },
+        body: JSON.stringify({
+          user_id: userId,
+          password: adminPassword,
+        }),
+      }
+    );
+
+    const result = await response.json();
+
+    if (!response.ok || result.error) {
+      console.error('Error deleting user:', result.error);
+      throw new Error(result.error || 'Erro ao excluir usuário');
     }
   },
 };

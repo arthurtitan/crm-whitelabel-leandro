@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.set-user-password]
 verify_jwt = false
+
+[functions.delete-user]
+verify_jwt = false

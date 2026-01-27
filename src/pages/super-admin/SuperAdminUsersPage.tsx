@@ -350,32 +350,32 @@ export default function SuperAdminUsersPage() {
     
     setDeleteLoading(true);
     
-    /**
-     * TODO: Backend Integration
-     * Endpoint: POST /functions/v1/verify-admin-password
-     * Headers: { Authorization: Bearer {jwt} }
-     * Body: { password: string }
-     * Response: { valid: boolean, error?: string }
-     */
-    
-    // Mock: simulates validation (accepts any password with 6+ characters)
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    const isPasswordValid = deletePassword.length >= 6;
-    
-    if (!isPasswordValid) {
-      toast.error('Senha incorreta. Tente novamente.');
+    try {
+      // Call the real delete service with password verification
+      await usersCloudService.delete(userToDelete.user_id, deletePassword);
+      
+      // Remove from local state on success
+      setUsers(users.filter((u) => u.id !== userToDelete.id));
+      setDeleteConfirmOpen(false);
+      setUserToDelete(null);
+      setDeletePassword('');
+      toast.success('Usuário excluído com sucesso!');
+    } catch (error: any) {
+      const errorMsg = error.message || 'Erro ao excluir usuário';
+      
+      // Keep modal open for password errors so user can retry
+      if (errorMsg.includes('Senha incorreta') || errorMsg.includes('password')) {
+        toast.error('Senha incorreta. Tente novamente.');
+      } else {
+        toast.error(errorMsg);
+        // Close modal for other errors
+        setDeleteConfirmOpen(false);
+        setUserToDelete(null);
+        setDeletePassword('');
+      }
+    } finally {
       setDeleteLoading(false);
-      return;
     }
-    
-    // Execute deletion
-    setUsers(users.filter((u) => u.id !== userToDelete.id));
-    setDeleteConfirmOpen(false);
-    setUserToDelete(null);
-    setDeletePassword('');
-    setDeleteLoading(false);
-    toast.success('Usuário excluído com sucesso!');
   };
 
   const handleImpersonate = (user: UserWithRole) => {
