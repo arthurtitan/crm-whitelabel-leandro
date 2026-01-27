@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,21 +40,34 @@ function getSmartDefaultRoute(user: { role: string; permissions?: string[] }): s
   return '/admin'; // Fallback
 }
 
+// Login timeout in milliseconds (15 seconds)
+const LOGIN_TIMEOUT_MS = 15000;
+
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   const { login, user, isAuthenticated, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
+  
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
   
   // Redirect if already authenticated
   useEffect(() => {
     if (!authLoading && isAuthenticated && user) {
       const targetRoute = getSmartDefaultRoute({ role: user.role, permissions: user.permissions });
+      console.log('[LoginPage] User authenticated, redirecting to:', targetRoute);
       navigate(targetRoute, { replace: true });
     }
   }, [isAuthenticated, user, authLoading, navigate]);
@@ -64,16 +77,50 @@ export default function LoginPage() {
     setError('');
     setIsLoading(true);
     
-    const result = await login(email, password);
+    console.log('[LoginPage] Starting login attempt for:', email);
     
-    setIsLoading(false);
+    // Set up timeout to prevent infinite loading
+    const timeoutPromise = new Promise<{ success: false; error: string }>((resolve) => {
+      timeoutRef.current = setTimeout(() => {
+        console.warn('[LoginPage] Login timeout reached');
+        resolve({ success: false, error: 'Tempo excedido ao autenticar. Verifique sua conexão e tente novamente.' });
+      }, LOGIN_TIMEOUT_MS);
+    });
     
-    if (!result.success) {
-      setError(result.error || 'Erro ao fazer login');
+    try {
+      // Race between login and timeout
+      const result = await Promise.race([
+        login(email, password),
+        timeoutPromise
+      ]);
+      
+      // Clear the timeout if login completed first
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      
+      if (!result.success) {
+        console.error('[LoginPage] Login failed:', result.error);
+        setError(result.error || 'Erro ao fazer login');
+      } else {
+        console.log('[LoginPage] Login successful, waiting for auth state update');
+        // Navigation is handled by the useEffect above when user state updates
+      }
+    } catch (err: any) {
+      // Clear the timeout on error
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      
+      console.error('[LoginPage] Unexpected error during login:', err);
+      setError('Erro inesperado ao fazer login. Tente novamente.');
+    } finally {
+      // ALWAYS reset loading state - this is the critical fix
+      setIsLoading(false);
     }
-    // Navigation is handled by the useEffect above when user state updates
   };
-
 
   return (
     <div className="dark min-h-screen flex items-center justify-center bg-background p-4">
@@ -126,6 +173,7 @@ export default function LoginPage() {
                   required
                   autoComplete="email"
                   className="h-11"
+                  disabled={isLoading}
                 />
               </div>
               
@@ -141,11 +189,13 @@ export default function LoginPage() {
                     required
                     autoComplete="current-password"
                     className="h-11 pr-10"
+                    disabled={isLoading}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    disabled={isLoading}
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
