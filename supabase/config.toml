@@ -2,3 +2,9 @@ project_id = "ptcagwncwtuvcuqlwdzj"
 
 [functions.create-user]
 verify_jwt = false
+
+[functions.test-chatwoot-connection]
+verify_jwt = false
+
+[functions.set-user-password]
+verify_jwt = false
