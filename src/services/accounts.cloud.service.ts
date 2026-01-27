@@ -196,6 +196,7 @@ export const accountsCloudService = {
 
   /**
    * Test Chatwoot connection via Edge Function (avoids CORS issues)
+   * Uses manual fetch with custom timeout to avoid SDK limitations
    */
   async testChatwootConnection(
     baseUrl: string, 
@@ -208,38 +209,58 @@ export const accountsCloudService = {
     inboxes?: Array<{ id: number; name: string; channel_type: string }>;
     labels?: Array<{ id: number; title: string; color: string }>;
   }> {
-    try {
-      const normalizedBaseUrl = String(baseUrl || '').trim().replace(/\/$/, '');
-      const normalizedAccountId = String(accountId || '').trim();
-      const normalizedApiKey = String(apiKey || '').trim();
+    const TIMEOUT_MS = 30000; // 30 seconds timeout
+    const normalizedBaseUrl = String(baseUrl || '').trim().replace(/\/$/, '');
+    const normalizedAccountId = String(accountId || '').trim();
+    const normalizedApiKey = String(apiKey || '').trim();
 
-      const { data, error } = await supabase.functions.invoke('test-chatwoot-connection', {
-        body: {
-          baseUrl: normalizedBaseUrl,
-          accountId: normalizedAccountId,
-          apiKey: normalizedApiKey,
-        },
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+    try {
+      // Get current session for auth
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+      console.log('[Chatwoot] Testing connection via fetch...', { 
+        url: `${supabaseUrl}/functions/v1/test-chatwoot-connection`,
+        hasSession: !!session?.access_token 
       });
 
-      if (error) {
-        console.error('[Chatwoot] Edge function error:', error);
-
-        const msg = error.message || 'Erro ao conectar com o servidor';
-        // Common generic error when the request is interrupted or times out.
-        if (/Failed to send a request to the Edge Function/i.test(msg)) {
-          return {
-            success: false,
-            message:
-              'Não foi possível comunicar com o serviço de teste. Tente novamente; se persistir, verifique se a URL está acessível externamente e se sua sessão não expirou.',
-          };
+      const response = await fetch(
+        `${supabaseUrl}/functions/v1/test-chatwoot-connection`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': session?.access_token 
+              ? `Bearer ${session.access_token}` 
+              : `Bearer ${supabaseKey}`,
+            'apikey': supabaseKey,
+          },
+          body: JSON.stringify({
+            baseUrl: normalizedBaseUrl,
+            accountId: normalizedAccountId,
+            apiKey: normalizedApiKey,
+          }),
+          signal: controller.signal,
         }
+      );
 
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[Chatwoot] HTTP error:', response.status, errorText);
         return { 
           success: false, 
-          message: msg,
+          message: `Erro HTTP ${response.status}: ${errorText}`
         };
       }
 
+      const data = await response.json();
+      console.log('[Chatwoot] Response:', data);
+      
       if (data?.success) {
         return {
           success: true,
@@ -256,10 +277,20 @@ export const accountsCloudService = {
       }
     } catch (error: any) {
       console.error('[Chatwoot] Connection test failed:', error);
+      
+      if (error.name === 'AbortError') {
+        return {
+          success: false,
+          message: `Timeout após ${TIMEOUT_MS / 1000}s. O servidor Chatwoot pode estar lento ou inacessível.`,
+        };
+      }
+      
       return { 
         success: false, 
         message: error.message || 'Erro de conexão' 
       };
+    } finally {
+      clearTimeout(timeoutId);
     }
   },
 
