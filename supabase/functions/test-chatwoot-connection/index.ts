@@ -73,14 +73,17 @@ serve(async (req) => {
 
     // Test connection by fetching agents (primary test)
     const agentsUrl = `${normalizedBaseUrl}/api/v1/accounts/${normalizedAccountId}/agents`;
-    console.log(`[Chatwoot Test] Testing connection to: ${normalizedBaseUrl}`);
+    const hostname = new URL(normalizedBaseUrl).hostname;
+    console.log(`[Chatwoot Test] Testing connection to: ${normalizedBaseUrl} (host: ${hostname})`);
 
     const commonInit: RequestInit = {
       method: 'GET',
       headers: {
         'api_access_token': normalizedApiKey,
-        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'User-Agent': 'LovableCRM/1.0 (Chatwoot Integration)',
       },
+      redirect: 'follow',
     };
 
     let agents: any[] = [];
