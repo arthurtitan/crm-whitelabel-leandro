@@ -1,10 +1,9 @@
-import { useMemo, useState, type DragEvent } from 'react';
+import { useMemo, useState, useEffect, useCallback, type DragEvent } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFinance } from '@/contexts/FinanceContext';
-import { useTagContext } from '@/contexts/TagContext';
 import { CreateSaleDialog } from '@/components/finance/CreateSaleDialog';
-import { LeadCard, CreateStageDialog } from '@/components/kanban';
-import { Contact, Tag } from '@/types/crm';
+import { LeadCard, CreateStageDialog, ImportChatwootLabelsDialog } from '@/components/kanban';
+import { Contact } from '@/types/crm';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -17,7 +16,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from '@/components/ui/dialog';
 import {
   DropdownMenu,
@@ -48,25 +46,73 @@ import {
   ChevronLeft,
   ChevronRight,
   Trash2,
+  Download,
+  Loader2,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
+import { tagsCloudService, type Tag as CloudTag, type LeadTag } from '@/services/tags.cloud.service';
+import { supabase } from '@/integrations/supabase/client';
 
 interface KanbanLead extends Contact {
   stage_id: string | null;
 }
 
 export default function AdminKanbanPage() {
-  const { user } = useAuth();
+  const { user, account } = useAuth();
   const { contacts } = useFinance();
-  const { stageTags, getLeadStageTag, applyStageTag, moveStageTag, deleteStageTag } = useTagContext();
 
+  const [stageTags, setStageTags] = useState<CloudTag[]>([]);
+  const [leadTags, setLeadTags] = useState<LeadTag[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedLead, setSelectedLead] = useState<KanbanLead | null>(null);
   const [draggedLead, setDraggedLead] = useState<string | null>(null);
   const [saleContactId, setSaleContactId] = useState<string | null>(null);
-  const [deleteConfirmStage, setDeleteConfirmStage] = useState<Tag | null>(null);
+  const [deleteConfirmStage, setDeleteConfirmStage] = useState<CloudTag | null>(null);
+  const [showImportDialog, setShowImportDialog] = useState(false);
+
+  const accountId = user?.account_id || account?.id;
+
+  // Fetch stage tags and lead_tags from Supabase
+  const fetchData = useCallback(async () => {
+    if (!accountId) {
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+
+      // Fetch stage tags
+      const tags = await tagsCloudService.listStageTags(accountId);
+      setStageTags(tags);
+
+      // Fetch all lead_tags for this account's contacts
+      const { data: leadTagsData } = await supabase
+        .from('lead_tags')
+        .select('*');
+
+      setLeadTags(leadTagsData || []);
+    } catch (error) {
+      console.error('Error fetching kanban data:', error);
+      toast.error('Erro ao carregar etapas');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [accountId]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // Get stage tag for a lead
+  const getLeadStageTag = useCallback((contactId: string): CloudTag | undefined => {
+    const leadTag = leadTags.find(lt => lt.contact_id === contactId);
+    if (!leadTag) return undefined;
+    return stageTags.find(t => t.id === leadTag.tag_id);
+  }, [leadTags, stageTags]);
 
   const leads: KanbanLead[] = useMemo(() => {
     return contacts
@@ -87,46 +133,58 @@ export default function AdminKanbanPage() {
   const handleDragStart = (leadId: string) => setDraggedLead(leadId);
   const handleDragOver = (e: DragEvent<HTMLDivElement>) => e.preventDefault();
 
-  const handleDrop = (stageTagId: string) => {
+  const handleDrop = async (stageTagId: string) => {
     if (!draggedLead) return;
-
-    const result = applyStageTag({
-      contactId: draggedLead,
-      tagId: stageTagId,
-      source: 'kanban',
-      actorType: 'user',
-      actorId: user?.id || null,
-    });
 
     const lead = leads.find((l) => l.id === draggedLead);
     const stage = stageTags.find((s) => s.id === stageTagId);
 
-    if (!result.success) {
-      toast.error(result.error || 'Erro ao mover lead');
-    } else {
+    try {
+      await tagsCloudService.applyStageTag(draggedLead, stageTagId, 'kanban');
       toast.success(`${lead?.nome} movido para ${stage?.name}`);
+      
+      // Refresh lead tags
+      const { data: leadTagsData } = await supabase
+        .from('lead_tags')
+        .select('*');
+      setLeadTags(leadTagsData || []);
+    } catch (error: any) {
+      toast.error(error.message || 'Erro ao mover lead');
     }
 
     setDraggedLead(null);
   };
 
-  const handleMoveStage = (tagId: string, direction: 'left' | 'right') => {
-    const result = moveStageTag(tagId, direction);
-    if (result.success) {
+  const handleMoveStage = async (tagId: string, direction: 'left' | 'right') => {
+    const currentIndex = stageTags.findIndex(t => t.id === tagId);
+    if (currentIndex === -1) return;
+
+    const newIndex = direction === 'left' ? currentIndex - 1 : currentIndex + 1;
+    if (newIndex < 0 || newIndex >= stageTags.length) {
+      toast.error('Não é possível mover nessa direção');
+      return;
+    }
+
+    const adjacentTag = stageTags[newIndex];
+
+    try {
+      await tagsCloudService.swapTagOrder(tagId, adjacentTag.id);
       toast.success('Etapa reordenada!');
-    } else {
-      toast.error(result.error || 'Erro ao reordenar');
+      fetchData();
+    } catch (error: any) {
+      toast.error(error.message || 'Erro ao reordenar');
     }
   };
 
-  const handleDeleteStage = () => {
+  const handleDeleteStage = async () => {
     if (!deleteConfirmStage) return;
 
-    const result = deleteStageTag(deleteConfirmStage.id);
-    if (result.success) {
+    try {
+      await tagsCloudService.deleteTag(deleteConfirmStage.id);
       toast.success(`Etapa "${deleteConfirmStage.name}" excluída!`);
-    } else {
-      toast.error(result.error || 'Erro ao excluir etapa');
+      fetchData();
+    } catch (error: any) {
+      toast.error(error.message || 'Erro ao excluir etapa');
     }
     setDeleteConfirmStage(null);
   };
@@ -144,11 +202,11 @@ export default function AdminKanbanPage() {
   const getOriginBadge = (origem: string | null) => {
     switch (origem) {
       case 'whatsapp':
-        return <Badge variant="secondary" className="text-xs bg-green-500/10 text-green-500">WhatsApp</Badge>;
+        return <Badge variant="secondary" className="text-xs">WhatsApp</Badge>;
       case 'instagram':
-        return <Badge variant="secondary" className="text-xs bg-pink-500/10 text-pink-500">Instagram</Badge>;
+        return <Badge variant="secondary" className="text-xs">Instagram</Badge>;
       case 'site':
-        return <Badge variant="secondary" className="text-xs bg-blue-500/10 text-blue-500">Site</Badge>;
+        return <Badge variant="secondary" className="text-xs">Site</Badge>;
       default:
         return <Badge variant="secondary" className="text-xs">Manual</Badge>;
     }
@@ -159,6 +217,21 @@ export default function AdminKanbanPage() {
     setSelectedLead(null);
   };
 
+  const handleImportComplete = () => {
+    fetchData();
+  };
+
+  // Check if Chatwoot is configured
+  const hasChatwootConfig = Boolean(account?.chatwoot_base_url && account?.chatwoot_account_id && account?.chatwoot_api_key);
+
+  if (isLoading) {
+    return (
+      <div className="page-container h-[calc(100vh-8rem)] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   return (
     <div className="page-container h-[calc(100vh-8rem)]">
       {/* Header */}
@@ -168,6 +241,18 @@ export default function AdminKanbanPage() {
           <p className="text-responsive-sm text-muted-foreground">Gerencie seus leads no funil</p>
         </div>
         <div className="flex flex-col xs:flex-row items-stretch xs:items-center gap-2 sm:gap-3 w-full xs:w-auto">
+          {hasChatwootConfig && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 min-h-[40px] sm:min-h-0"
+              onClick={() => setShowImportDialog(true)}
+            >
+              <Download className="w-4 h-4" />
+              <span className="hidden xs:inline">Importar Labels</span>
+              <span className="xs:hidden">Labels</span>
+            </Button>
+          )}
           <CreateStageDialog
             trigger={
               <Button variant="outline" size="sm" className="gap-2 min-h-[40px] sm:min-h-0">
@@ -189,87 +274,122 @@ export default function AdminKanbanPage() {
         </div>
       </div>
 
-      {/* Kanban Board - Horizontal scroll with snap */}
-      <div className="kanban-container h-[calc(100%-6rem)]">
-        {stageTags.map((stage, index) => {
-          const stageLeads = getLeadsByStage(stage.id);
-          const isFirst = index === 0;
-          const isLast = index === stageTags.length - 1;
+      {/* Empty State */}
+      {stageTags.length === 0 && (
+        <div className="flex flex-col items-center justify-center h-[calc(100%-6rem)] gap-4">
+          <div className="text-center space-y-2">
+            <h2 className="text-xl font-semibold">Nenhuma etapa criada</h2>
+            <p className="text-muted-foreground">
+              {hasChatwootConfig
+                ? 'Importe labels do Chatwoot ou crie etapas manualmente.'
+                : 'Crie sua primeira etapa para começar a usar o Kanban.'}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            {hasChatwootConfig && (
+              <Button variant="outline" onClick={() => setShowImportDialog(true)}>
+                <Download className="w-4 h-4 mr-2" />
+                Importar do Chatwoot
+              </Button>
+            )}
+            <CreateStageDialog
+              trigger={
+                <Button>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Criar Etapa
+                </Button>
+              }
+            />
+          </div>
+        </div>
+      )}
 
-          return (
-            <div
-              key={stage.id}
-              className="kanban-column kanban-column-snap"
-              onDragOver={handleDragOver}
-              onDrop={() => handleDrop(stage.id)}
-            >
-              <Card className="h-full flex flex-col">
-                <CardHeader className="py-3 px-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: stage.color }} />
-                      <CardTitle className="text-sm font-semibold">{stage.name}</CardTitle>
+      {/* Kanban Board - Horizontal scroll with snap */}
+      {stageTags.length > 0 && (
+        <div className="kanban-container h-[calc(100%-6rem)]">
+          {stageTags.map((stage, index) => {
+            const stageLeads = getLeadsByStage(stage.id);
+            const isFirst = index === 0;
+            const isLast = index === stageTags.length - 1;
+
+            return (
+              <div
+                key={stage.id}
+                className="kanban-column kanban-column-snap"
+                onDragOver={handleDragOver}
+                onDrop={() => handleDrop(stage.id)}
+              >
+                <Card className="h-full flex flex-col">
+                  <CardHeader className="py-3 px-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: stage.color }} />
+                        <CardTitle className="text-sm font-semibold">{stage.name}</CardTitle>
+                        {stage.chatwoot_label_id && (
+                          <Badge variant="outline" className="text-xs">Chatwoot</Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Badge variant="secondary" className="text-xs">{stageLeads.length}</Badge>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-7 w-7">
+                              <MoreVertical className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => handleMoveStage(stage.id, 'left')}
+                              disabled={isFirst}
+                            >
+                              <ChevronLeft className="w-4 h-4 mr-2" />
+                              Mover para Esquerda
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => handleMoveStage(stage.id, 'right')}
+                              disabled={isLast}
+                            >
+                              <ChevronRight className="w-4 h-4 mr-2" />
+                              Mover para Direita
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => setDeleteConfirmStage(stage)}
+                              className="text-destructive focus:text-destructive"
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Excluir Etapa
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <Badge variant="secondary" className="text-xs">{stageLeads.length}</Badge>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-7 w-7">
-                            <MoreVertical className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => handleMoveStage(stage.id, 'left')}
-                            disabled={isFirst}
-                          >
-                            <ChevronLeft className="w-4 h-4 mr-2" />
-                            Mover para Esquerda
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleMoveStage(stage.id, 'right')}
-                            disabled={isLast}
-                          >
-                            <ChevronRight className="w-4 h-4 mr-2" />
-                            Mover para Direita
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={() => setDeleteConfirmStage(stage)}
-                            className="text-destructive focus:text-destructive"
-                          >
-                            <Trash2 className="w-4 h-4 mr-2" />
-                            Excluir Etapa
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-2 flex-1 overflow-hidden">
-                  <ScrollArea className="h-full">
-                    <div className="space-y-2 pr-2">
-                      {stageLeads.map((lead) => (
-                        <LeadCard
-                          key={lead.id}
-                          lead={lead}
-                          stage={stage}
-                          isDragging={draggedLead === lead.id}
-                          onClick={() => setSelectedLead(lead)}
-                          onDragStart={() => handleDragStart(lead.id)}
-                        />
-                      ))}
-                      {stageLeads.length === 0 && (
-                        <div className="py-8 text-center text-sm text-muted-foreground">Nenhum lead nesta etapa</div>
-                      )}
-                    </div>
-                  </ScrollArea>
-                </CardContent>
-              </Card>
-            </div>
-          );
-        })}
-      </div>
+                  </CardHeader>
+                  <CardContent className="p-2 flex-1 overflow-hidden">
+                    <ScrollArea className="h-full">
+                      <div className="space-y-2 pr-2">
+                        {stageLeads.map((lead) => (
+                          <LeadCard
+                            key={lead.id}
+                            lead={lead}
+                            stage={stage as any}
+                            isDragging={draggedLead === lead.id}
+                            onClick={() => setSelectedLead(lead)}
+                            onDragStart={() => handleDragStart(lead.id)}
+                          />
+                        ))}
+                        {stageLeads.length === 0 && (
+                          <div className="py-8 text-center text-sm text-muted-foreground">Nenhum lead nesta etapa</div>
+                        )}
+                      </div>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Lead Detail Dialog */}
       <Dialog open={!!selectedLead} onOpenChange={() => setSelectedLead(null)}>
@@ -345,7 +465,12 @@ export default function AdminKanbanPage() {
             <AlertDialogTitle>Excluir Etapa</AlertDialogTitle>
             <AlertDialogDescription>
               Tem certeza que deseja excluir a etapa "{deleteConfirmStage?.name}"?
-              Esta ação também removerá a etiqueta correspondente no Chatwoot.
+              {deleteConfirmStage?.chatwoot_label_id && (
+                <>
+                  <br /><br />
+                  <strong>Nota:</strong> Esta etapa está sincronizada com o Chatwoot. A label não será excluída automaticamente.
+                </>
+              )}
               <br /><br />
               <strong>Atenção:</strong> Etapas com leads não podem ser excluídas.
             </AlertDialogDescription>
@@ -361,6 +486,16 @@ export default function AdminKanbanPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Import Chatwoot Labels Dialog */}
+      {accountId && (
+        <ImportChatwootLabelsDialog
+          accountId={accountId}
+          open={showImportDialog}
+          onOpenChange={setShowImportDialog}
+          onImportComplete={handleImportComplete}
+        />
+      )}
 
       {saleContactId && (
         <CreateSaleDialog preSelectedContactId={saleContactId} onClose={() => setSaleContactId(null)} />
