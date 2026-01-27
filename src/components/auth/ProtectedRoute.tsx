@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -11,6 +11,9 @@ interface ProtectedRouteProps {
   requireSuperAdmin?: boolean;
 }
 
+// Safety timeout to prevent infinite loading
+const LOADING_TIMEOUT_MS = 3000;
+
 export function ProtectedRoute({ 
   children, 
   allowedRoles,
@@ -19,6 +22,24 @@ export function ProtectedRoute({
   const { isAuthenticated, user, isLoading } = useAuth();
   const { canAccessRoute, getFirstAllowedRoute } = usePermissions();
   const location = useLocation();
+  const [loadingTimeout, setLoadingTimeout] = useState(false);
+
+  // Safety timeout - if loading for too long, redirect to login
+  useEffect(() => {
+    if (isLoading) {
+      const timer = setTimeout(() => {
+        console.warn('[ProtectedRoute] Loading timeout, redirecting to login');
+        setLoadingTimeout(true);
+      }, LOADING_TIMEOUT_MS);
+      return () => clearTimeout(timer);
+    }
+    setLoadingTimeout(false);
+  }, [isLoading]);
+
+  // If loading timed out, redirect to login
+  if (loadingTimeout && isLoading) {
+    return <Navigate to="/login" replace />;
+  }
 
   if (isLoading) {
     return (

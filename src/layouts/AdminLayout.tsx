@@ -62,8 +62,8 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     return adminNavItems.filter(item => canAccessRoute(item.href));
   }, [canAccessRoute]);
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate('/login');
   };
 
