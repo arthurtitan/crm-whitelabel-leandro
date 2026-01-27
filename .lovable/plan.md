@@ -1,146 +1,98 @@
 
-# Plano: Exclusão Real de Usuários via Edge Function
+# Plano: Corrigir Timeout na Conexão com Chatwoot
 
 ## Problema Identificado
 
-A exclusão de usuários atualmente possui **dois problemas críticos**:
+A Edge Function `test-chatwoot-connection` está dando timeout após **15 segundos** ao tentar conectar com a instância Chatwoot em `https://atendimento.gleps.com.br`. Os logs confirmam:
 
-1. **Serviço `usersCloudService.delete()`** (linha 207-218):
-   - Remove apenas o registro da tabela `profiles`
-   - **NÃO** remove o usuário da tabela `auth.users` do Supabase
-   - Resultado: email continua "registrado" no sistema de autenticação
+```
+2026-01-27T07:55:24Z INFO Testing Chatwoot connection: https://atendimento.gleps.com.br/api/v1/accounts/1/agents
+2026-01-27T07:55:39Z ERROR AbortError: The signal has been aborted
+```
 
-2. **Página `SuperAdminUsersPage.tsx`** (linha 348-379):
-   - Função `handleConfirmDelete` apenas remove o usuário da lista local em memória
-   - Não chama nenhum serviço real de exclusão
-   - Resultado: usuário "some" da tela mas persiste no banco
+O intervalo de 15 segundos (07:55:24 → 07:55:39) mostra que o timeout está sendo atingido exatamente no limite configurado.
 
----
+## Causas Prováveis
+
+1. **Servidor Chatwoot lento** - A instância pode estar sobrecarregada
+2. **Firewall/Cloudflare** - Proteções podem estar limitando ou atrasando requisições de IPs externos (servidores Supabase)
+3. **Latência geográfica** - Distância entre servidor da Edge Function e servidor Chatwoot
 
 ## Solução Proposta
 
-### 1. Criar Edge Function `delete-user`
+### 1. Aumentar Timeout da Edge Function
 
-Nova função em `supabase/functions/delete-user/index.ts` que:
-
-- Recebe o `user_id` a ser excluído
-- Valida a senha do Super Admin (segurança)
-- Usa `supabase.auth.admin.deleteUser(userId)` para remover completamente
-- A exclusão em cascata remove automaticamente `profiles` e `user_roles`
-
-```text
-POST /functions/v1/delete-user
-Body: { user_id: string, admin_password: string }
-Response: { success: boolean, error?: string }
-```
-
-### 2. Atualizar Serviço `users.cloud.service.ts`
-
-Modificar o método `delete()` para:
-- Aceitar senha do admin como parâmetro
-- Chamar a Edge Function `delete-user` via fetch
-- Tratar erros específicos (senha inválida, usuário não encontrado, etc.)
-
-### 3. Integrar na Página `SuperAdminUsersPage.tsx`
-
-Modificar `handleConfirmDelete` para:
-- Chamar `usersCloudService.delete(userId, password)`
-- Tratar erros de senha inválida (mostrar mensagem, não fechar modal)
-- Recarregar lista de usuários após sucesso
-
----
-
-## Fluxo de Exclusão
-
-```text
-┌─────────────────────────────────────────────────────────────────┐
-│                      Super Admin                                │
-│                          │                                      │
-│    Clica "Excluir" → Modal pede senha → Confirma exclusão       │
-└─────────────────────────────────────────────────────────────────┘
-                           │
-                           v
-┌─────────────────────────────────────────────────────────────────┐
-│                   Frontend (React)                              │
-│                          │                                      │
-│     usersCloudService.delete(userId, password)                  │
-│          │                                                      │
-│          v                                                      │
-│     fetch('/functions/v1/delete-user', { user_id, password })   │
-└─────────────────────────────────────────────────────────────────┘
-                           │
-                           v
-┌─────────────────────────────────────────────────────────────────┐
-│              Edge Function (delete-user)                        │
-│                          │                                      │
-│  1. Validar JWT do Super Admin                                  │
-│  2. Verificar senha do admin (opcional - pode confiar no JWT)   │
-│  3. supabase.auth.admin.deleteUser(user_id)                     │
-│     └── Cascata remove: profiles, user_roles                    │
-│  4. Retornar { success: true }                                  │
-└─────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Arquivos a Criar/Modificar
-
-| Arquivo | Ação |
-|---------|------|
-| `supabase/functions/delete-user/index.ts` | **CRIAR** - Edge Function para exclusão |
-| `src/services/users.cloud.service.ts` | **MODIFICAR** - Chamar Edge Function |
-| `src/pages/super-admin/SuperAdminUsersPage.tsx` | **MODIFICAR** - Integrar serviço real |
-
----
-
-## Detalhes Técnicos
-
-### Edge Function `delete-user`
+Aumentar de 15 segundos para **45 segundos** para dar mais tempo ao servidor Chatwoot responder:
 
 ```typescript
-// Estrutura esperada:
-serve(async (req) => {
-  // 1. Validar método e CORS
-  // 2. Extrair user_id do body
-  // 3. Validar que não é o próprio usuário logado
-  // 4. supabase.auth.admin.deleteUser(user_id)
-  // 5. Retornar sucesso ou erro
-});
+// Antes
+const CHATWOOT_FETCH_TIMEOUT_MS = 15000;
+
+// Depois  
+const CHATWOOT_FETCH_TIMEOUT_MS = 45000;
 ```
 
-### Serviço Atualizado
+### 2. Adicionar Logs de Diagnóstico
+
+Incluir timestamps para medir exatamente quanto tempo cada etapa demora:
 
 ```typescript
-async delete(userId: string, adminPassword: string): Promise<void> {
-  const session = await supabase.auth.getSession();
-  
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/delete-user`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${session.access_token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ user_id: userId, password: adminPassword }),
-  });
-  
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error);
+console.log(`[${Date.now()}] Iniciando conexão com: ${agentsUrl}`);
+// ... fetch
+console.log(`[${Date.now()}] Resposta recebida em ${elapsed}ms`);
+```
+
+### 3. Melhorar Mensagens de Erro
+
+Fornecer informações mais úteis quando ocorrer timeout:
+
+- Mostrar a URL que estava sendo acessada
+- Sugerir verificar se o servidor está acessível
+- Indicar possíveis problemas de firewall
+
+### 4. Adicionar Retry Automático
+
+Implementar uma tentativa automática caso a primeira falhe (útil para instabilidades temporárias):
+
+```typescript
+async function fetchWithRetry(url: string, init: RequestInit, retries = 2) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      return await fetchWithTimeout(url, init);
+    } catch (error) {
+      if (attempt === retries) throw error;
+      console.log(`Tentativa ${attempt} falhou, tentando novamente...`);
+      await new Promise(r => setTimeout(r, 1000)); // Espera 1s entre tentativas
+    }
   }
 }
 ```
 
-### Tratamento de Erros na Página
+---
 
-- Senha incorreta → Mostrar erro no modal, não fechar
-- Usuário não encontrado → Toast de erro
-- Sucesso → Fechar modal, atualizar lista, toast de sucesso
+## Arquivo a Modificar
+
+| Arquivo | Ação |
+|---------|------|
+| `supabase/functions/test-chatwoot-connection/index.ts` | **MODIFICAR** - Aumentar timeout, adicionar retry e logs |
 
 ---
 
-## Segurança
+## Código Atualizado
 
-- Edge Function usa `SUPABASE_SERVICE_ROLE_KEY` para ter permissão de admin
-- JWT do usuário é validado para garantir que é um Super Admin autenticado
-- Verificação adicional de senha para ações destrutivas
-- Não é possível excluir a si mesmo (validação no backend)
+A Edge Function será atualizada com:
+
+1. **Timeout de 45 segundos** (era 15s)
+2. **2 tentativas automáticas** com intervalo de 2 segundos
+3. **Logs detalhados** com timestamps para debug
+4. **Mensagem de erro melhorada** com sugestões de solução
+5. **Fallback para buscar apenas agentes** se inboxes/labels demorarem
+
+---
+
+## Resultado Esperado
+
+- Conexões lentas (até 45s) serão bem-sucedidas
+- Em caso de falha intermitente, haverá retry automático
+- Mensagens de erro mais informativas ajudarão no diagnóstico
+- Logs detalhados facilitarão debug futuro
