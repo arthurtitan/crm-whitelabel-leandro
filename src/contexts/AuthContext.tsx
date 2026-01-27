@@ -44,8 +44,8 @@ interface AuthContextType extends AuthState {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Hydration timeout (8 seconds)
-const HYDRATION_TIMEOUT_MS = 8000;
+// Hydration timeout (15 seconds - increased for slow connections)
+const HYDRATION_TIMEOUT_MS = 15000;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [authState, setAuthState] = useState<AuthState>({
@@ -81,19 +81,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       // Fetch profile and role in parallel with timeout
       const fetchWithTimeout = async <T,>(
-        promise: Promise<T>,
+        promiseFn: () => Promise<T>,
         timeoutMs: number,
-        label: string
+        label: string,
+        retries: number = 1
       ): Promise<T> => {
-        const timeout = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error(`${label} timeout`)), timeoutMs)
-        );
-        return Promise.race([promise, timeout]);
+        for (let attempt = 0; attempt <= retries; attempt++) {
+          try {
+            const timeout = new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error(`${label} timeout`)), timeoutMs)
+            );
+            return await Promise.race([promiseFn(), timeout]);
+          } catch (error) {
+            if (attempt === retries) throw error;
+            console.log(`[AuthContext] ${label} attempt ${attempt + 1} failed, retrying...`);
+            await new Promise(resolve => setTimeout(resolve, 500)); // Brief delay before retry
+          }
+        }
+        throw new Error(`${label} failed after retries`);
       };
 
       const profileStart = performance.now();
-      const [profileResult, roleResult] = await fetchWithTimeout(
-        Promise.all([
+      
+      // Fetch profile and role with retry logic
+      const fetchProfileAndRole = async () => {
+        const results = await Promise.all([
           supabase
             .from('profiles')
             .select('user_id, email, nome, status, permissions, account_id, chatwoot_agent_id')
@@ -104,9 +116,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             .select('role')
             .eq('user_id', supabaseUser.id)
             .maybeSingle(),
-        ]),
+        ]);
+        return results;
+      };
+      
+      const [profileResult, roleResult] = await fetchWithTimeout(
+        fetchProfileAndRole,
         HYDRATION_TIMEOUT_MS,
-        'Profile/Role fetch'
+        'Profile/Role fetch',
+        2 // Retry up to 2 times
       );
       console.log(`[AuthContext] Profile/Role fetch took ${Math.round(performance.now() - profileStart)}ms`);
 
@@ -157,9 +175,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
         
         const accountResult = await fetchWithTimeout(
-          fetchAccount(),
+          fetchAccount,
           HYDRATION_TIMEOUT_MS,
-          'Account fetch'
+          'Account fetch',
+          2 // Retry up to 2 times
         );
         console.log(`[AuthContext] Account fetch took ${Math.round(performance.now() - accountStart)}ms`);
 
