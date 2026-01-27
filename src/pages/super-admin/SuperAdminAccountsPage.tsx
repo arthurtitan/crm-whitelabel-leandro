@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { accountsCloudService, Account } from '@/services/accounts.cloud.service';
 import { usersCloudService } from '@/services/users.cloud.service';
-import { ChatwootAgent } from '@/types/crm';
+import { ChatwootAgent, User } from '@/types/crm';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -51,8 +51,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Building2,
   Plus,
@@ -68,18 +66,19 @@ import {
   CheckCircle2,
   XCircle,
   RefreshCw,
-  User,
-  Shield,
   ArrowRight,
+  ArrowLeft,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ChatwootAgentImport, EmbeddedUserCreationForm } from '@/components/chatwoot';
 
 type AccountStatus = 'active' | 'paused' | 'cancelled';
 type Language = 'pt' | 'en';
 type ConnectionStatus = 'idle' | 'loading' | 'success' | 'error';
+type WizardStep = 'form' | 'select-agents' | 'create-users';
 
 interface ChatwootConnectionResult {
   agents: ChatwootAgent[];
@@ -127,9 +126,12 @@ export default function SuperAdminAccountsPage() {
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [connectionResult, setConnectionResult] = useState<ChatwootConnectionResult | null>(null);
 
-  // Agent import state
+  // Wizard state
+  const [wizardStep, setWizardStep] = useState<WizardStep>('form');
   const [selectedAgentIds, setSelectedAgentIds] = useState<number[]>([]);
-  const [importingAgents, setImportingAgents] = useState(false);
+  const [createdAccountId, setCreatedAccountId] = useState<string | null>(null);
+  const [currentAgentIndex, setCurrentAgentIndex] = useState(0);
+  const [createdUsers, setCreatedUsers] = useState<User[]>([]);
 
   // Load accounts from database
   useEffect(() => {
@@ -169,12 +171,12 @@ export default function SuperAdminAccountsPage() {
     if (result.success) {
       setConnectionStatus('success');
       // Map agents to ChatwootAgent type with proper role typing
-      const agents: ChatwootAgent[] = (result.agents || []).map(a => ({
+      const agents: ChatwootAgent[] = (result.agents || []).map((a: any) => ({
         id: a.id,
         name: a.name,
         email: a.email,
         role: (a.role === 'administrator' ? 'administrator' : 'agent') as 'administrator' | 'agent',
-        availability_status: undefined,
+        availability_status: a.availability_status as 'online' | 'busy' | 'offline' | undefined,
       }));
       setConnectionResult({
         agents,
@@ -189,25 +191,8 @@ export default function SuperAdminAccountsPage() {
     }
   };
 
-  const toggleAgentSelection = (agentId: number) => {
-    setSelectedAgentIds(prev => 
-      prev.includes(agentId) 
-        ? prev.filter(id => id !== agentId)
-        : [...prev, agentId]
-    );
-  };
-
-  const selectAllAgents = () => {
-    if (connectionResult?.agents) {
-      setSelectedAgentIds(connectionResult.agents.map(a => a.id));
-    }
-  };
-
-  const clearAgentSelection = () => {
-    setSelectedAgentIds([]);
-  };
-
-  const createAccountWithAgents = async (importAgents: boolean) => {
+  // Step 1: Create account and move to agent selection
+  const handleProceedToAgentImport = async () => {
     if (!formData.nome.trim()) {
       toast.error('Nome é obrigatório');
       return;
@@ -215,9 +200,8 @@ export default function SuperAdminAccountsPage() {
 
     try {
       setIsSaving(true);
-      setImportingAgents(importAgents && selectedAgentIds.length > 0);
       
-      // 1. Create the account
+      // Create the account first
       const newAccount = await accountsCloudService.create({
         nome: formData.nome,
         chatwoot_base_url: formData.chatwootEnabled ? formData.chatwootBaseUrl : undefined,
@@ -225,44 +209,45 @@ export default function SuperAdminAccountsPage() {
         chatwoot_api_key: formData.chatwootEnabled ? formData.chatwootApiKey : undefined,
       });
       
-      // 2. Import selected agents as users
-      if (importAgents && selectedAgentIds.length > 0 && connectionResult?.agents) {
-        const selectedAgents = connectionResult.agents.filter(a => selectedAgentIds.includes(a.id));
-        let successCount = 0;
-        let failCount = 0;
-        
-        for (const agent of selectedAgents) {
-          try {
-            // Generate a temporary password (user will need to reset)
-            const tempPassword = `Gleps${Date.now().toString(36)}!`;
-            
-            await usersCloudService.create({
-              email: agent.email,
-              nome: agent.name,
-              password: tempPassword,
-              role: agent.role === 'administrator' ? 'admin' : 'agent',
-              account_id: newAccount.id,
-              chatwoot_agent_id: agent.id,
-              permissions: ['dashboard', 'kanban', 'leads', 'agenda'],
-            });
-            successCount++;
-          } catch (err: any) {
-            console.error(`Failed to import agent ${agent.email}:`, err);
-            failCount++;
-          }
-        }
-        
-        if (successCount > 0) {
-          toast.success(`${successCount} usuário(s) importado(s) com sucesso!`);
-        }
-        if (failCount > 0) {
-          toast.warning(`${failCount} usuário(s) não puderam ser importados (possivelmente já existem).`);
-        }
+      setCreatedAccountId(newAccount.id);
+      
+      // If agents found, go to selection step
+      if (connectionResult?.agents && connectionResult.agents.length > 0) {
+        setWizardStep('select-agents');
+        // Pre-select all agents
+        setSelectedAgentIds(connectionResult.agents.map(a => a.id));
+      } else {
+        // No agents, finish
+        await loadAccounts();
+        closeAndReset();
+        toast.success('Conta criada com sucesso!');
       }
+    } catch (error: any) {
+      toast.error('Erro ao criar conta: ' + error.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Step 1 alternative: Create account without agents
+  const handleCreateWithoutAgents = async () => {
+    if (!formData.nome.trim()) {
+      toast.error('Nome é obrigatório');
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      
+      await accountsCloudService.create({
+        nome: formData.nome,
+        chatwoot_base_url: formData.chatwootEnabled ? formData.chatwootBaseUrl : undefined,
+        chatwoot_account_id: formData.chatwootEnabled ? formData.chatwootAccountId : undefined,
+        chatwoot_api_key: formData.chatwootEnabled ? formData.chatwootApiKey : undefined,
+      });
       
       await loadAccounts();
-      setIsCreateOpen(false);
-      resetForm();
+      closeAndReset();
       toast.success('Conta criada com sucesso!');
     } catch (error: any) {
       toast.error('Erro ao criar conta: ' + error.message);
@@ -271,13 +256,101 @@ export default function SuperAdminAccountsPage() {
     }
   };
 
+  // Step 2: Agent selection handlers
+  const handleAgentSelectionProceed = () => {
+    if (selectedAgentIds.length === 0) {
+      toast.error('Selecione pelo menos um agente');
+      return;
+    }
+    setCurrentAgentIndex(0);
+    setCreatedUsers([]);
+    setWizardStep('create-users');
+  };
+
+  const handleSkipAgentImport = async () => {
+    // Account already created, just finish
+    await loadAccounts();
+    closeAndReset();
+    toast.success('Conta criada com sucesso!');
+  };
+
+  // Step 3: User creation handlers
+  const getSelectedAgents = (): ChatwootAgent[] => {
+    if (!connectionResult?.agents) return [];
+    return connectionResult.agents.filter(a => selectedAgentIds.includes(a.id));
+  };
+
+  const getCurrentAgent = (): ChatwootAgent | null => {
+    const selectedAgents = getSelectedAgents();
+    return selectedAgents[currentAgentIndex] || null;
+  };
+
+  const handleUserCreated = async (user: User) => {
+    const currentAgent = getCurrentAgent();
+    if (!currentAgent || !createdAccountId) return;
+
+    try {
+      // Generate temporary password
+      const tempPassword = `Gleps${Date.now().toString(36)}!`;
+      
+      await usersCloudService.create({
+        email: currentAgent.email,
+        nome: currentAgent.name,
+        password: tempPassword,
+        role: user.role,
+        account_id: createdAccountId,
+        chatwoot_agent_id: currentAgent.id,
+        permissions: user.permissions || ['dashboard'],
+      });
+      
+      setCreatedUsers(prev => [...prev, user]);
+      
+      // Move to next agent or finish
+      const selectedAgents = getSelectedAgents();
+      if (currentAgentIndex + 1 < selectedAgents.length) {
+        setCurrentAgentIndex(currentAgentIndex + 1);
+      } else {
+        // All done
+        await loadAccounts();
+        toast.success(`${createdUsers.length + 1} usuário(s) criado(s) com sucesso!`);
+        closeAndReset();
+      }
+    } catch (error: any) {
+      toast.error(`Erro ao criar usuário: ${error.message}`);
+    }
+  };
+
+  const handleSkipCurrentAgent = () => {
+    const selectedAgents = getSelectedAgents();
+    if (currentAgentIndex + 1 < selectedAgents.length) {
+      setCurrentAgentIndex(currentAgentIndex + 1);
+    } else {
+      // All done
+      loadAccounts();
+      if (createdUsers.length > 0) {
+        toast.success(`${createdUsers.length} usuário(s) criado(s) com sucesso!`);
+      } else {
+        toast.success('Conta criada com sucesso!');
+      }
+      closeAndReset();
+    }
+  };
+
+  const closeAndReset = () => {
+    setIsCreateOpen(false);
+    resetForm();
+  };
+
   const resetForm = () => {
     setFormData(initialFormData);
     setConnectionStatus('idle');
     setConnectionError(null);
     setConnectionResult(null);
     setSelectedAgentIds([]);
-    setImportingAgents(false);
+    setWizardStep('form');
+    setCreatedAccountId(null);
+    setCurrentAgentIndex(0);
+    setCreatedUsers([]);
   };
 
   const handleUpdate = async () => {
@@ -340,6 +413,9 @@ export default function SuperAdminAccountsPage() {
     formData.chatwootAccountId.trim() !== '' && 
     formData.chatwootApiKey.trim() !== '';
 
+  const currentAgent = getCurrentAgent();
+  const selectedAgents = getSelectedAgents();
+
   return (
     <div className="page-container">
       {/* Header */}
@@ -359,264 +435,236 @@ export default function SuperAdminAccountsPage() {
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
-            <DialogHeader className="flex-shrink-0">
-              <DialogTitle>Criar Nova Conta</DialogTitle>
-              <DialogDescription>Adicione uma nova conta ao sistema</DialogDescription>
-            </DialogHeader>
+            {/* Step 1: Account Form */}
+            {wizardStep === 'form' && (
+              <>
+                <DialogHeader className="flex-shrink-0">
+                  <DialogTitle>Criar Nova Conta</DialogTitle>
+                  <DialogDescription>Adicione uma nova conta ao sistema</DialogDescription>
+                </DialogHeader>
 
-            <div className="space-y-4 py-4 overflow-y-auto flex-1 px-1">
-              {/* Nome */}
-              <div className="space-y-2">
-                <Label htmlFor="nome">Nome</Label>
-                <Input
-                  id="nome"
-                  value={formData.nome}
-                  onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
-                  placeholder="Ex: Clínica Exemplo"
-                />
-              </div>
-
-              {/* Idioma */}
-              <div className="space-y-2">
-                <Label htmlFor="idioma">Idioma</Label>
-                <Select
-                  value={formData.idioma}
-                  onValueChange={(v) => setFormData({ ...formData, idioma: v as Language })}
-                >
-                  <SelectTrigger id="idioma">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pt">Português</SelectItem>
-                    <SelectItem value="en">English</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Chatwoot Integration */}
-              <div className="space-y-4 rounded-lg border p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label htmlFor="chatwoot-toggle" className="text-sm font-medium">
-                      Integração Chatwoot
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      Habilitar para sincronizar agentes do Chatwoot
-                    </p>
-                  </div>
-                  <Switch
-                    id="chatwoot-toggle"
-                    checked={formData.chatwootEnabled}
-                    onCheckedChange={(checked) => {
-                      setFormData({ ...formData, chatwootEnabled: checked });
-                      if (!checked) {
-                        setConnectionStatus('idle');
-                        setConnectionError(null);
-                      }
-                    }}
-                  />
-                </div>
-
-                {formData.chatwootEnabled && (
-                  <div className="space-y-3 pt-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="chatwootBaseUrl">URL da Instância</Label>
-                      <Input
-                        id="chatwootBaseUrl"
-                        value={formData.chatwootBaseUrl}
-                        onChange={(e) => setFormData({ ...formData, chatwootBaseUrl: e.target.value })}
-                        placeholder="https://app.chatwoot.com"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="chatwootAccountId">Account ID</Label>
-                      <Input
-                        id="chatwootAccountId"
-                        value={formData.chatwootAccountId}
-                        onChange={(e) => setFormData({ ...formData, chatwootAccountId: e.target.value })}
-                        placeholder="ID da conta no Chatwoot"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="chatwootApiKey">API Key</Label>
-                      <Input
-                        id="chatwootApiKey"
-                        type="password"
-                        value={formData.chatwootApiKey}
-                        onChange={(e) => setFormData({ ...formData, chatwootApiKey: e.target.value })}
-                        placeholder="Access Token do usuário"
-                      />
-                    </div>
-
-                    {/* Test Connection Button */}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="w-full gap-2"
-                      disabled={!canTestConnection || connectionStatus === 'loading'}
-                      onClick={handleTestConnection}
+                <div className="space-y-4 py-4 overflow-y-auto flex-1 px-1">
+                  {/* Status */}
+                  <div className="space-y-2">
+                    <Label htmlFor="status">Status</Label>
+                    <Select
+                      value={formData.status}
+                      onValueChange={(v) => setFormData({ ...formData, status: v as AccountStatus })}
                     >
-                      {connectionStatus === 'loading' && (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      )}
-                      {connectionStatus === 'success' && (
-                        <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                      )}
-                      {connectionStatus === 'error' && (
-                        <XCircle className="w-4 h-4 text-destructive" />
-                      )}
-                      {connectionStatus === 'idle' && <RefreshCw className="w-4 h-4" />}
-                      Testar Conexão
-                    </Button>
+                      <SelectTrigger id="status">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">Ativa</SelectItem>
+                        <SelectItem value="paused">Pausada</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-                    {connectionStatus === 'error' && connectionError && (
-                      <p className="text-xs text-destructive">{connectionError}</p>
-                    )}
-                    
-                    {connectionStatus === 'success' && connectionResult && (
-                      <div className="space-y-4">
-                        {/* Connection stats */}
-                        <div className="rounded-md bg-primary/5 border border-primary/20 p-3 space-y-2">
-                          <p className="text-sm font-medium text-primary">
-                            ✓ Conexão estabelecida!
+                  {/* Limite de Agentes */}
+                  <div className="space-y-2">
+                    <Label htmlFor="limite">Limite de Agentes</Label>
+                    <Input
+                      id="limite"
+                      type="number"
+                      value={formData.limiteAgentes}
+                      onChange={(e) => setFormData({ ...formData, limiteAgentes: parseInt(e.target.value) || 10 })}
+                      min={1}
+                    />
+                  </div>
+
+                  {/* Nome - moved below for layout match */}
+                  <div className="space-y-2">
+                    <Label htmlFor="nome">Nome da Conta</Label>
+                    <Input
+                      id="nome"
+                      value={formData.nome}
+                      onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
+                      placeholder="Ex: Clínica Exemplo"
+                    />
+                  </div>
+
+                  {/* Chatwoot Integration */}
+                  <div className="space-y-4 rounded-lg border p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label htmlFor="chatwoot-toggle" className="text-sm font-medium">
+                          Integração Chatwoot
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Habilitar para sincronizar agentes do Chatwoot
+                        </p>
+                      </div>
+                      <Switch
+                        id="chatwoot-toggle"
+                        checked={formData.chatwootEnabled}
+                        onCheckedChange={(checked) => {
+                          setFormData({ ...formData, chatwootEnabled: checked });
+                          if (!checked) {
+                            setConnectionStatus('idle');
+                            setConnectionError(null);
+                            setConnectionResult(null);
+                          }
+                        }}
+                      />
+                    </div>
+
+                    {formData.chatwootEnabled && (
+                      <div className="space-y-3 pt-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="chatwootBaseUrl">URL da Instância</Label>
+                          <Input
+                            id="chatwootBaseUrl"
+                            value={formData.chatwootBaseUrl}
+                            onChange={(e) => setFormData({ ...formData, chatwootBaseUrl: e.target.value })}
+                            placeholder="https://app.chatwoot.com"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            URL do Chatwoot Cloud ou da sua instância self-hosted
                           </p>
-                          <div className="grid grid-cols-3 gap-2 text-xs">
-                            <div className="text-center p-2 rounded bg-background">
-                              <div className="font-bold text-lg text-foreground">{connectionResult.agents.length}</div>
-                              <div className="text-muted-foreground">Agentes</div>
-                            </div>
-                            <div className="text-center p-2 rounded bg-background">
-                              <div className="font-bold text-lg text-foreground">{connectionResult.inboxes.length}</div>
-                              <div className="text-muted-foreground">Canais</div>
-                            </div>
-                            <div className="text-center p-2 rounded bg-background">
-                              <div className="font-bold text-lg text-foreground">{connectionResult.labels.length}</div>
-                              <div className="text-muted-foreground">Etiquetas</div>
-                            </div>
-                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="chatwootAccountId">Account ID</Label>
+                          <Input
+                            id="chatwootAccountId"
+                            value={formData.chatwootAccountId}
+                            onChange={(e) => setFormData({ ...formData, chatwootAccountId: e.target.value })}
+                            placeholder="ID da conta no Chatwoot"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="chatwootApiKey">API Key</Label>
+                          <Input
+                            id="chatwootApiKey"
+                            type="password"
+                            value={formData.chatwootApiKey}
+                            onChange={(e) => setFormData({ ...formData, chatwootApiKey: e.target.value })}
+                            placeholder="Access Token do usuário"
+                          />
                         </div>
 
-                        {/* Agent import section */}
-                        {connectionResult.agents.length > 0 && (
-                          <div className="space-y-3">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                <Users className="w-4 h-4" />
-                                <span>Importar agentes como usuários</span>
-                              </div>
-                              <div className="flex gap-2">
-                                <Button variant="ghost" size="sm" onClick={selectAllAgents}>
-                                  Todos
-                                </Button>
-                                <Button variant="ghost" size="sm" onClick={clearAgentSelection}>
-                                  Limpar
-                                </Button>
-                              </div>
+                        {/* Test Connection Button */}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="w-full gap-2"
+                          disabled={!canTestConnection || connectionStatus === 'loading'}
+                          onClick={handleTestConnection}
+                        >
+                          {connectionStatus === 'loading' && (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          )}
+                          {connectionStatus === 'success' && (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                          )}
+                          {connectionStatus === 'error' && (
+                            <XCircle className="w-4 h-4 text-destructive" />
+                          )}
+                          {connectionStatus === 'idle' && <RefreshCw className="w-4 h-4" />}
+                          {connectionStatus === 'loading' ? 'Testando...' : 'Testar Conexão'}
+                        </Button>
+
+                        {connectionStatus === 'error' && connectionError && (
+                          <p className="text-xs text-destructive">{connectionError}</p>
+                        )}
+                        
+                        {connectionStatus === 'success' && connectionResult && (
+                          <div className="space-y-2">
+                            {/* Agents count indicator */}
+                            <div className="flex items-center justify-center gap-2 p-2 rounded-md bg-muted/50 border">
+                              <CheckCircle2 className="w-4 h-4 text-primary" />
+                              <span className="text-sm font-medium">
+                                {connectionResult.agents.length} agentes encontrados
+                              </span>
                             </div>
-
-                            <ScrollArea className="h-[180px] rounded-md border">
-                              <div className="p-2 space-y-1">
-                                {connectionResult.agents.map((agent) => {
-                                  const isSelected = selectedAgentIds.includes(agent.id);
-                                  return (
-                                    <div
-                                      key={agent.id}
-                                      className={`flex items-center gap-3 p-2.5 rounded-lg cursor-pointer transition-colors ${
-                                        isSelected 
-                                          ? 'bg-primary/10 border border-primary/20' 
-                                          : 'hover:bg-muted/50 border border-transparent'
-                                      }`}
-                                      onClick={() => toggleAgentSelection(agent.id)}
-                                    >
-                                      <Checkbox 
-                                        checked={isSelected} 
-                                        onCheckedChange={() => toggleAgentSelection(agent.id)}
-                                      />
-                                      
-                                      {/* Avatar */}
-                                      <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center text-xs font-medium">
-                                        {agent.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-                                      </div>
-
-                                      {/* Info */}
-                                      <div className="flex-1 min-w-0">
-                                        <span className="font-medium text-sm truncate block">{agent.name}</span>
-                                        <span className="text-xs text-muted-foreground truncate block">
-                                          {agent.email}
-                                        </span>
-                                      </div>
-
-                                      {/* Role Badge */}
-                                      {agent.role === 'administrator' ? (
-                                        <Badge variant="secondary" className="gap-1 text-xs">
-                                          <Shield className="w-3 h-3" />
-                                          Admin
-                                        </Badge>
-                                      ) : (
-                                        <Badge variant="outline" className="gap-1 text-xs">
-                                          <User className="w-3 h-3" />
-                                          Agente
-                                        </Badge>
-                                      )}
-
-                                      {/* Selection indicator */}
-                                      {isSelected && (
-                                        <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </ScrollArea>
-
-                            <p className="text-xs text-muted-foreground">
-                              {selectedAgentIds.length} agente(s) selecionado(s) para importação
-                            </p>
+                            
+                            {/* Success message */}
+                            <div className="rounded-md bg-emerald-500/10 border border-emerald-500/20 p-3">
+                              <p className="text-sm font-medium text-emerald-600 flex items-center gap-2">
+                                <CheckCircle2 className="w-4 h-4" />
+                                Conexão estabelecida!
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {connectionResult.agents.length} agentes encontrados no Chatwoot
+                              </p>
+                            </div>
                           </div>
                         )}
                       </div>
                     )}
                   </div>
-                )}
-              </div>
-            </div>
+                </div>
 
-            <DialogFooter className="flex-shrink-0">
-              <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
-                Cancelar
-              </Button>
-              
-              {/* Show different buttons based on connection status */}
-              {connectionStatus === 'success' && connectionResult && connectionResult.agents.length > 0 ? (
-                <>
-                  <Button 
-                    variant="secondary"
-                    onClick={() => createAccountWithAgents(false)} 
-                    disabled={!formData.nome.trim() || isSaving}
-                  >
-                    {isSaving && !importingAgents && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                    Criar Sem Importar
+                <DialogFooter className="flex-shrink-0">
+                  <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
+                    Cancelar
                   </Button>
-                  <Button 
-                    onClick={() => createAccountWithAgents(true)} 
-                    disabled={!formData.nome.trim() || isSaving || selectedAgentIds.length === 0}
-                    className="gap-2"
+                  
+                  {connectionStatus === 'success' && connectionResult && connectionResult.agents.length > 0 ? (
+                    <Button 
+                      onClick={handleProceedToAgentImport} 
+                      disabled={!formData.nome.trim() || isSaving}
+                      className="gap-2"
+                    >
+                      {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+                      Próximo: Importar Agentes
+                      <ArrowRight className="w-4 h-4" />
+                    </Button>
+                  ) : (
+                    <Button 
+                      onClick={handleCreateWithoutAgents} 
+                      disabled={!formData.nome.trim() || isSaving}
+                    >
+                      {isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                      Criar Conta
+                    </Button>
+                  )}
+                </DialogFooter>
+              </>
+            )}
+
+            {/* Step 2: Agent Selection */}
+            {wizardStep === 'select-agents' && connectionResult?.agents && (
+              <>
+                <DialogHeader className="flex-shrink-0">
+                  <DialogTitle>Importar Agentes do Chatwoot</DialogTitle>
+                  <DialogDescription>Selecione os agentes que deseja criar no CRM</DialogDescription>
+                </DialogHeader>
+
+                <div className="py-4 flex-1 overflow-hidden">
+                  {/* Back button */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-2 mb-4"
+                    onClick={() => setWizardStep('form')}
                   >
-                    {isSaving && importingAgents && <Loader2 className="w-4 h-4 animate-spin" />}
-                    Criar e Importar ({selectedAgentIds.length})
-                    <ArrowRight className="w-4 h-4" />
+                    <ArrowLeft className="w-4 h-4" />
+                    Voltar
                   </Button>
-                </>
-              ) : (
-                <Button 
-                  onClick={() => createAccountWithAgents(false)} 
-                  disabled={!formData.nome.trim() || isSaving}
-                >
-                  {isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                  Criar Conta
-                </Button>
-              )}
-            </DialogFooter>
+
+                  <ChatwootAgentImport
+                    agents={connectionResult.agents}
+                    selectedAgentIds={selectedAgentIds}
+                    onSelectionChange={setSelectedAgentIds}
+                    onProceed={handleAgentSelectionProceed}
+                    onSkip={handleSkipAgentImport}
+                  />
+                </div>
+              </>
+            )}
+
+            {/* Step 3: Create Users One by One */}
+            {wizardStep === 'create-users' && currentAgent && createdAccountId && (
+              <EmbeddedUserCreationForm
+                agent={currentAgent}
+                currentIndex={currentAgentIndex}
+                totalAgents={selectedAgents.length}
+                accountId={createdAccountId}
+                onUserCreated={handleUserCreated}
+                onSkip={handleSkipCurrentAgent}
+              />
+            )}
           </DialogContent>
         </Dialog>
       </div>
@@ -871,8 +919,8 @@ export default function SuperAdminAccountsPage() {
             <AlertDialogCancel onClick={() => setDeletePassword('')}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               disabled={isSaving}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Excluir
