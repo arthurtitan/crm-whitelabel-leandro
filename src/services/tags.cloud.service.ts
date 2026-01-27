@@ -294,28 +294,42 @@ export const tagsCloudService = {
       throw new Error('Não autenticado');
     }
 
-    const response = await fetch(
-      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-chatwoot-labels`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.session.access_token}`,
-        },
-        body: JSON.stringify({
-          account_id: accountId,
-          action: 'list',
-        }),
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-chatwoot-labels`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.session.access_token}`,
+          },
+          body: JSON.stringify({
+            account_id: accountId,
+            action: 'list',
+          }),
+          signal: controller.signal,
+        }
+      );
+
+      clearTimeout(timeoutId);
+
+      const result = await response.json();
+
+      if (!response.ok || result.error) {
+        throw new Error(result.error || `Erro HTTP ${response.status}`);
       }
-    );
 
-    const result = await response.json();
-
-    if (!response.ok || result.error) {
-      throw new Error(result.error || 'Erro ao buscar labels do Chatwoot');
+      return result.labels || [];
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      if (err.name === 'AbortError') {
+        throw new Error('Timeout ao buscar labels do Chatwoot');
+      }
+      throw err;
     }
-
-    return result.labels || [];
   },
 
   /**
@@ -327,41 +341,59 @@ export const tagsCloudService = {
       throw new Error('Não autenticado');
     }
 
-    const response = await fetch(
-      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-chatwoot-labels`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.session.access_token}`,
-        },
-        body: JSON.stringify({
-          account_id: accountId,
-          action: 'import',
-        }),
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-chatwoot-labels`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.session.access_token}`,
+          },
+          body: JSON.stringify({
+            account_id: accountId,
+            action: 'import',
+          }),
+          signal: controller.signal,
+        }
+      );
+
+      clearTimeout(timeoutId);
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        return {
+          success: false,
+          imported: 0,
+          updated: 0,
+          skipped: 0,
+          labels: [],
+          error: result.error || `Erro HTTP ${response.status}`,
+        };
       }
-    );
 
-    const result = await response.json();
-
-    if (!response.ok) {
+      return {
+        success: true,
+        imported: result.imported || 0,
+        updated: result.updated || 0,
+        skipped: result.skipped || 0,
+        labels: result.labels || [],
+      };
+    } catch (err: any) {
+      clearTimeout(timeoutId);
       return {
         success: false,
         imported: 0,
         updated: 0,
         skipped: 0,
         labels: [],
-        error: result.error || 'Erro ao importar labels',
+        error: err.name === 'AbortError' ? 'Timeout ao importar labels' : (err.message || 'Erro desconhecido'),
       };
     }
-
-    return {
-      success: true,
-      imported: result.imported || 0,
-      updated: result.updated || 0,
-      skipped: result.skipped || 0,
-      labels: result.labels || [],
-    };
   },
 
   /**
