@@ -11,6 +11,7 @@ import financeRoutes from './finance.routes';
 import insightsRoutes from './insights.routes';
 import calendarRoutes from './calendar.routes';
 import eventRoutes from './event.routes';
+import chatwootRoutes from './chatwoot.routes';
 
 const router = Router();
 
@@ -38,5 +39,6 @@ router.use('/finance', financeRoutes);
 router.use('/insights', insightsRoutes);
 router.use('/calendar', calendarRoutes);
 router.use('/events', eventRoutes);
+router.use('/chatwoot', chatwootRoutes);
 
 export default router;
