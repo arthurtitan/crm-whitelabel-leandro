@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { toast } from 'sonner';
@@ -28,6 +28,7 @@ interface AuthState {
   account: Account | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  authError: string | null;
 }
 
 interface AuthContextType extends AuthState {
@@ -38,9 +39,13 @@ interface AuthContextType extends AuthState {
   isImpersonating: boolean;
   originalUser: User | null;
   signUp: (email: string, password: string, nome: string) => Promise<{ success: boolean; error?: string }>;
+  clearAuthError: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// Hydration timeout (8 seconds)
+const HYDRATION_TIMEOUT_MS = 8000;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [authState, setAuthState] = useState<AuthState>({
@@ -48,65 +53,117 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     account: null,
     isAuthenticated: false,
     isLoading: true,
+    authError: null,
   });
   const [originalUser, setOriginalUser] = useState<User | null>(null);
   const [isImpersonating, setIsImpersonating] = useState(false);
+  
+  // Concurrency control for hydration
+  const hydrationIdRef = useRef<number>(0);
+  const isHydratingRef = useRef<boolean>(false);
 
-  // Fetch user profile and role from database
-  const fetchUserData = useCallback(async (supabaseUser: SupabaseUser): Promise<{ user: User | null; account: Account | null; error?: string }> => {
-    console.log('[AuthContext] Fetching user data for:', supabaseUser.id);
-    
+  // Clear auth error
+  const clearAuthError = useCallback(() => {
+    setAuthState(prev => ({ ...prev, authError: null }));
+  }, []);
+
+  // Hydrate user data with timeout and retry
+  const hydrateUser = useCallback(async (supabaseUser: SupabaseUser, hydrationId: number): Promise<boolean> => {
+    const startTime = performance.now();
+    console.log(`[AuthContext] Hydration #${hydrationId} started for:`, supabaseUser.id);
+
+    // Check if this hydration is still current
+    if (hydrationIdRef.current !== hydrationId) {
+      console.log(`[AuthContext] Hydration #${hydrationId} cancelled (superseded by #${hydrationIdRef.current})`);
+      return false;
+    }
+
     try {
-      // Get user profile
-      console.log('[AuthContext] Fetching profile...');
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('user_id', supabaseUser.id)
-        .maybeSingle();
+      // Fetch profile and role in parallel with timeout
+      const fetchWithTimeout = async <T,>(
+        promise: Promise<T>,
+        timeoutMs: number,
+        label: string
+      ): Promise<T> => {
+        const timeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`${label} timeout`)), timeoutMs)
+        );
+        return Promise.race([promise, timeout]);
+      };
+
+      const profileStart = performance.now();
+      const [profileResult, roleResult] = await fetchWithTimeout(
+        Promise.all([
+          supabase
+            .from('profiles')
+            .select('user_id, email, nome, status, permissions, account_id, chatwoot_agent_id')
+            .eq('user_id', supabaseUser.id)
+            .maybeSingle(),
+          supabase
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', supabaseUser.id)
+            .maybeSingle(),
+        ]),
+        HYDRATION_TIMEOUT_MS,
+        'Profile/Role fetch'
+      );
+      console.log(`[AuthContext] Profile/Role fetch took ${Math.round(performance.now() - profileStart)}ms`);
+
+      // Check again if this hydration is still current
+      if (hydrationIdRef.current !== hydrationId) {
+        console.log(`[AuthContext] Hydration #${hydrationId} cancelled after fetch`);
+        return false;
+      }
+
+      const { data: profile, error: profileError } = profileResult;
+      const { data: userRole, error: roleError } = roleResult;
 
       if (profileError) {
         console.error('[AuthContext] Error fetching profile:', profileError);
-        return { user: null, account: null, error: 'Erro ao carregar perfil do usuário' };
+        throw new Error('Erro ao carregar perfil do usuário');
       }
 
       if (!profile) {
         console.error('[AuthContext] No profile found for user:', supabaseUser.id);
-        return { user: null, account: null, error: 'Perfil não encontrado. Contate o administrador.' };
+        throw new Error('Perfil não encontrado. Contate o administrador.');
       }
 
-      console.log('[AuthContext] Profile found:', profile.email);
-
-      // Get user role
-      console.log('[AuthContext] Fetching user role...');
-      const { data: userRole, error: roleError } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', supabaseUser.id)
-        .maybeSingle();
-
       if (roleError) {
-        console.error('[AuthContext] Error fetching role:', roleError);
+        console.warn('[AuthContext] Error fetching role (non-fatal):', roleError);
       }
 
       const role = (userRole?.role as 'super_admin' | 'admin' | 'agent') || 'agent';
-      console.log('[AuthContext] User role:', role);
+      console.log(`[AuthContext] User role: ${role}`);
 
       // Check user status
       if (profile.status !== 'active') {
         console.warn('[AuthContext] User is not active:', profile.status);
-        return { user: null, account: null, error: 'Usuário suspenso ou inativo' };
+        throw new Error('Usuário suspenso ou inativo');
       }
 
-      // Get account if user has one
+      // For super_admin, skip account fetch - they don't need it
       let account: Account | null = null;
-      if (profile.account_id) {
-        console.log('[AuthContext] Fetching account:', profile.account_id);
-        const { data: accountData, error: accountError } = await supabase
-          .from('accounts')
-          .select('*')
-          .eq('id', profile.account_id)
-          .maybeSingle();
+      if (role !== 'super_admin' && profile.account_id) {
+        const accountStart = performance.now();
+        
+        // Wrap in a proper async function for the timeout race
+        const fetchAccount = async () => {
+          return await supabase
+            .from('accounts')
+            .select('id, nome, status, chatwoot_base_url, chatwoot_account_id')
+            .eq('id', profile.account_id!)
+            .maybeSingle();
+        };
+        
+        const accountResult = await fetchWithTimeout(
+          fetchAccount(),
+          HYDRATION_TIMEOUT_MS,
+          'Account fetch'
+        );
+        console.log(`[AuthContext] Account fetch took ${Math.round(performance.now() - accountStart)}ms`);
+
+        const { data: accountData, error: accountError } = accountResult;
 
         if (!accountError && accountData) {
           account = {
@@ -117,12 +174,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             chatwoot_account_id: accountData.chatwoot_account_id || undefined,
           };
 
-          // Check account status (except super_admin)
-          if (role !== 'super_admin' && accountData.status === 'paused') {
+          // Check account status
+          if (accountData.status === 'paused') {
             console.warn('[AuthContext] Account is paused');
-            return { user: null, account: null, error: 'Conta pausada. Contate o administrador.' };
+            throw new Error('Conta pausada. Contate o administrador.');
           }
         }
+      }
+
+      // Final check before setting state
+      if (hydrationIdRef.current !== hydrationId) {
+        console.log(`[AuthContext] Hydration #${hydrationId} cancelled before state update`);
+        return false;
       }
 
       const user: User = {
@@ -136,80 +199,132 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         chatwoot_agent_id: profile.chatwoot_agent_id || undefined,
       };
 
-      console.log('[AuthContext] User data complete:', { email: user.email, role: user.role });
-      return { user, account };
-    } catch (error) {
-      console.error('[AuthContext] Unexpected error in fetchUserData:', error);
-      return { user: null, account: null, error: 'Erro inesperado ao carregar dados do usuário' };
+      const totalTime = Math.round(performance.now() - startTime);
+      console.log(`[AuthContext] Hydration #${hydrationId} complete in ${totalTime}ms:`, { email: user.email, role: user.role });
+
+      setAuthState({
+        user,
+        account,
+        isAuthenticated: true,
+        isLoading: false,
+        authError: null,
+      });
+
+      return true;
+    } catch (error: any) {
+      console.error(`[AuthContext] Hydration #${hydrationId} failed:`, error);
+      
+      // Only handle error if this hydration is still current
+      if (hydrationIdRef.current === hydrationId) {
+        // Sign out to avoid half-logged state
+        console.log('[AuthContext] Signing out due to hydration failure');
+        await supabase.auth.signOut();
+        
+        setAuthState({
+          user: null,
+          account: null,
+          isAuthenticated: false,
+          isLoading: false,
+          authError: error.message || 'Erro ao carregar dados do usuário',
+        });
+      }
+      
+      return false;
     }
   }, []);
 
-  // Initialize auth state - register listener BEFORE getSession (recommended pattern)
+  // Initialize auth state
   useEffect(() => {
     let mounted = true;
     console.log('[AuthContext] Initializing auth...');
 
-    // First, set up the auth state change listener
+    // Start new hydration (increments ID to cancel any in-flight)
+    const startHydration = async (supabaseUser: SupabaseUser) => {
+      if (isHydratingRef.current) {
+        console.log('[AuthContext] Another hydration in progress, cancelling it...');
+      }
+      
+      isHydratingRef.current = true;
+      const newHydrationId = ++hydrationIdRef.current;
+      
+      const success = await hydrateUser(supabaseUser, newHydrationId);
+      
+      // Only clear hydrating flag if this hydration is still current
+      if (hydrationIdRef.current === newHydrationId) {
+        isHydratingRef.current = false;
+      }
+      
+      return success;
+    };
+
+    // Set up auth state change listener BEFORE getSession (recommended)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('[AuthContext] Auth state changed:', event);
         
+        if (!mounted) return;
+
         if (event === 'SIGNED_IN' && session?.user) {
-          console.log('[AuthContext] SIGNED_IN event, fetching user data...');
-          const { user, account } = await fetchUserData(session.user);
-          
-          if (mounted) {
-            setAuthState({
-              user,
-              account,
-              isAuthenticated: !!user,
-              isLoading: false,
-            });
-          }
+          console.log('[AuthContext] SIGNED_IN event, starting hydration...');
+          setAuthState(prev => ({ ...prev, isLoading: true, authError: null }));
+          await startHydration(session.user);
         } else if (event === 'SIGNED_OUT') {
           console.log('[AuthContext] SIGNED_OUT event');
-          if (mounted) {
-            setAuthState({
-              user: null,
-              account: null,
-              isAuthenticated: false,
-              isLoading: false,
-            });
-            setOriginalUser(null);
-            setIsImpersonating(false);
-          }
-        } else if (event === 'TOKEN_REFRESHED' && session?.user) {
-          console.log('[AuthContext] TOKEN_REFRESHED event');
-          // Token refreshed, user data should already be loaded
+          hydrationIdRef.current++; // Cancel any in-flight hydration
+          setAuthState({
+            user: null,
+            account: null,
+            isAuthenticated: false,
+            isLoading: false,
+            authError: null,
+          });
+          setOriginalUser(null);
+          setIsImpersonating(false);
+        } else if (event === 'TOKEN_REFRESHED') {
+          console.log('[AuthContext] TOKEN_REFRESHED event (no re-hydration)');
+          // Don't re-hydrate on token refresh to avoid unnecessary calls
+        } else if (event === 'INITIAL_SESSION' && session?.user) {
+          console.log('[AuthContext] INITIAL_SESSION with user, starting hydration...');
+          await startHydration(session.user);
+        } else if (event === 'INITIAL_SESSION' && !session) {
+          console.log('[AuthContext] INITIAL_SESSION without session');
+          setAuthState({
+            user: null,
+            account: null,
+            isAuthenticated: false,
+            isLoading: false,
+            authError: null,
+          });
         }
       }
     );
 
-    // Then check for existing session
+    // Check for existing session (fallback for browsers that don't fire INITIAL_SESSION)
     const initializeAuth = async () => {
       try {
         console.log('[AuthContext] Checking existing session...');
         const { data: { session } } = await supabase.auth.getSession();
         
         if (session?.user && mounted) {
-          console.log('[AuthContext] Existing session found, fetching user data...');
-          const { user, account } = await fetchUserData(session.user);
-          
-          if (mounted) {
-            setAuthState({
-              user,
-              account,
-              isAuthenticated: !!user,
-              isLoading: false,
-            });
+          // Only hydrate if we haven't already started via INITIAL_SESSION
+          if (!isHydratingRef.current && !authState.isAuthenticated) {
+            console.log('[AuthContext] Existing session found, starting hydration...');
+            await startHydration(session.user);
           }
-        } else if (mounted) {
+        } else if (mounted && !isHydratingRef.current) {
           console.log('[AuthContext] No existing session');
-          setAuthState({
-            user: null,
-            account: null,
-            isAuthenticated: false,
-            isLoading: false,
+          setAuthState(prev => {
+            // Only update if still loading
+            if (prev.isLoading) {
+              return {
+                user: null,
+                account: null,
+                isAuthenticated: false,
+                isLoading: false,
+                authError: null,
+              };
+            }
+            return prev;
           });
         }
       } catch (error) {
@@ -220,6 +335,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             account: null,
             isAuthenticated: false,
             isLoading: false,
+            authError: null,
           });
         }
       }
@@ -231,11 +347,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [fetchUserData]);
+  }, [hydrateUser]);
 
+  // Login - ONLY authenticates, hydration happens via onAuthStateChange
   const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    const startTime = performance.now();
     console.log('[AuthContext] Login attempt for:', email);
-    setAuthState(prev => ({ ...prev, isLoading: true }));
+    
+    // Clear any previous auth error
+    setAuthState(prev => ({ ...prev, authError: null }));
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -243,9 +363,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         password,
       });
 
+      const signInTime = Math.round(performance.now() - startTime);
+      console.log(`[AuthContext] signInWithPassword took ${signInTime}ms`);
+
       if (error) {
         console.error('[AuthContext] Supabase auth error:', error.message);
-        setAuthState(prev => ({ ...prev, isLoading: false }));
         
         if (error.message.includes('Invalid login credentials')) {
           return { success: false, error: 'Credenciais inválidas' };
@@ -255,35 +377,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (!data.user) {
         console.error('[AuthContext] No user returned from login');
-        setAuthState(prev => ({ ...prev, isLoading: false }));
         return { success: false, error: 'Erro ao fazer login' };
       }
 
-      console.log('[AuthContext] Supabase auth successful, fetching user data...');
-      const { user, account, error: fetchError } = await fetchUserData(data.user);
-
-      if (!user) {
-        console.error('[AuthContext] Failed to fetch user data after login');
-        await supabase.auth.signOut();
-        setAuthState(prev => ({ ...prev, isLoading: false }));
-        return { success: false, error: fetchError || 'Usuário suspenso ou conta pausada' };
-      }
-
-      console.log('[AuthContext] Login complete, setting auth state');
-      setAuthState({
-        user,
-        account,
-        isAuthenticated: true,
-        isLoading: false,
-      });
-
+      // Success! Hydration will happen via onAuthStateChange SIGNED_IN event
+      console.log('[AuthContext] Login successful, hydration will follow via onAuthStateChange');
       return { success: true };
     } catch (error: any) {
       console.error('[AuthContext] Unexpected error during login:', error);
-      setAuthState(prev => ({ ...prev, isLoading: false }));
       return { success: false, error: 'Erro inesperado ao fazer login' };
     }
-  }, [fetchUserData]);
+  }, []);
 
   const signUp = useCallback(async (email: string, password: string, nome: string): Promise<{ success: boolean; error?: string }> => {
     console.log('[AuthContext] SignUp attempt for:', email);
@@ -316,12 +420,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     console.log('[AuthContext] Logging out...');
+    hydrationIdRef.current++; // Cancel any in-flight hydration
     await supabase.auth.signOut();
     setAuthState({
       user: null,
       account: null,
       isAuthenticated: false,
       isLoading: false,
+      authError: null,
     });
     setOriginalUser(null);
     setIsImpersonating(false);
@@ -339,7 +445,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Get the target user's profile
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('*')
+        .select('user_id, email, nome, status, permissions, account_id, chatwoot_agent_id')
         .eq('user_id', userId)
         .maybeSingle();
 
@@ -362,7 +468,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (profile.account_id) {
         const { data: accountData } = await supabase
           .from('accounts')
-          .select('*')
+          .select('id, nome, status, chatwoot_base_url, chatwoot_account_id')
           .eq('id', profile.account_id)
           .maybeSingle();
 
@@ -428,6 +534,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         exitImpersonation,
         isImpersonating,
         originalUser,
+        clearAuthError,
       }}
     >
       {children}

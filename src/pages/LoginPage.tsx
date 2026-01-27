@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { AlertCircle, Eye, EyeOff, LogIn } from 'lucide-react';
+import { AlertCircle, Eye, EyeOff, LogIn, RefreshCw, Loader2 } from 'lucide-react';
 import glepsLogo from '@/assets/gleps-logo.png';
 
 // Helper function to get default route based on role and permissions
@@ -40,87 +40,92 @@ function getSmartDefaultRoute(user: { role: string; permissions?: string[] }): s
   return '/admin'; // Fallback
 }
 
-// Login timeout in milliseconds (15 seconds)
-const LOGIN_TIMEOUT_MS = 15000;
+// Login timeout for the signIn call only (not hydration)
+const SIGNIN_TIMEOUT_MS = 15000;
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loginSuccess, setLoginSuccess] = useState(false);
   
-  const { login, user, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { login, logout, user, isAuthenticated, isLoading: authLoading, authError, clearAuthError } = useAuth();
   const navigate = useNavigate();
   
-  // Cleanup timeout on unmount
+  // Redirect if authenticated with user data
   useEffect(() => {
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-    };
-  }, []);
-  
-  // Redirect if already authenticated
-  useEffect(() => {
-    if (!authLoading && isAuthenticated && user) {
+    if (isAuthenticated && user && !authLoading) {
       const targetRoute = getSmartDefaultRoute({ role: user.role, permissions: user.permissions });
-      console.log('[LoginPage] User authenticated, redirecting to:', targetRoute);
+      console.log('[LoginPage] User authenticated and hydrated, redirecting to:', targetRoute);
       navigate(targetRoute, { replace: true });
     }
   }, [isAuthenticated, user, authLoading, navigate]);
 
+  // Handle auth errors from context (hydration failures)
+  useEffect(() => {
+    if (authError) {
+      console.log('[LoginPage] Auth error from context:', authError);
+      setError(authError);
+      setLoginSuccess(false);
+      setIsSubmitting(false);
+    }
+  }, [authError]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setIsLoading(true);
+    clearAuthError();
+    setIsSubmitting(true);
+    setLoginSuccess(false);
     
     console.log('[LoginPage] Starting login attempt for:', email);
     
-    // Set up timeout to prevent infinite loading
-    const timeoutPromise = new Promise<{ success: false; error: string }>((resolve) => {
-      timeoutRef.current = setTimeout(() => {
-        console.warn('[LoginPage] Login timeout reached');
-        resolve({ success: false, error: 'Tempo excedido ao autenticar. Verifique sua conexão e tente novamente.' });
-      }, LOGIN_TIMEOUT_MS);
-    });
-    
     try {
-      // Race between login and timeout
+      // Race between login and timeout (only for the signIn call)
+      const timeoutPromise = new Promise<{ success: false; error: string }>((resolve) => {
+        setTimeout(() => {
+          console.warn('[LoginPage] SignIn timeout reached');
+          resolve({ success: false, error: 'Tempo excedido ao conectar. Verifique sua conexão e tente novamente.' });
+        }, SIGNIN_TIMEOUT_MS);
+      });
+      
       const result = await Promise.race([
         login(email, password),
         timeoutPromise
       ]);
       
-      // Clear the timeout if login completed first
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-      
       if (!result.success) {
         console.error('[LoginPage] Login failed:', result.error);
         setError(result.error || 'Erro ao fazer login');
+        setIsSubmitting(false);
       } else {
-        console.log('[LoginPage] Login successful, waiting for auth state update');
-        // Navigation is handled by the useEffect above when user state updates
+        console.log('[LoginPage] Login successful, waiting for hydration...');
+        // Mark login as successful - now waiting for hydration via AuthContext
+        setLoginSuccess(true);
+        // Keep isSubmitting true until redirect happens or authError appears
       }
     } catch (err: any) {
-      // Clear the timeout on error
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-      
       console.error('[LoginPage] Unexpected error during login:', err);
       setError('Erro inesperado ao fazer login. Tente novamente.');
-    } finally {
-      // ALWAYS reset loading state - this is the critical fix
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
+
+  const handleRetry = async () => {
+    console.log('[LoginPage] Retry requested, logging out and clearing state');
+    setError('');
+    clearAuthError();
+    setLoginSuccess(false);
+    setIsSubmitting(false);
+    await logout();
+  };
+
+  // Determine current state for UI
+  const showLoadingProfile = loginSuccess && authLoading && !error && !authError;
+  const showError = error || authError;
+  const isFormDisabled = isSubmitting || showLoadingProfile;
 
   return (
     <div className="dark min-h-screen flex items-center justify-center bg-background p-4">
@@ -155,10 +160,31 @@ export default function LoginPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
-              {error && (
-                <div className="flex items-center gap-2 p-3 text-sm text-destructive bg-destructive/10 rounded-lg border border-destructive/20">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                  <span>{error}</span>
+              {showError && (
+                <div className="flex items-start gap-2 p-3 text-sm text-destructive bg-destructive/10 rounded-lg border border-destructive/20">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <span>{error || authError}</span>
+                    {authError && (
+                      <Button
+                        type="button"
+                        variant="link"
+                        size="sm"
+                        className="p-0 h-auto ml-2 text-destructive hover:text-destructive/80"
+                        onClick={handleRetry}
+                      >
+                        <RefreshCw className="w-3 h-3 mr-1" />
+                        Tentar novamente
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              {showLoadingProfile && (
+                <div className="flex items-center gap-2 p-3 text-sm text-primary bg-primary/10 rounded-lg border border-primary/20">
+                  <Loader2 className="w-4 h-4 flex-shrink-0 animate-spin" />
+                  <span>Autenticado. Carregando seu perfil...</span>
                 </div>
               )}
               
@@ -173,7 +199,7 @@ export default function LoginPage() {
                   required
                   autoComplete="email"
                   className="h-11"
-                  disabled={isLoading}
+                  disabled={isFormDisabled}
                 />
               </div>
               
@@ -189,13 +215,13 @@ export default function LoginPage() {
                     required
                     autoComplete="current-password"
                     className="h-11 pr-10"
-                    disabled={isLoading}
+                    disabled={isFormDisabled}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                    disabled={isLoading}
+                    disabled={isFormDisabled}
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -205,12 +231,17 @@ export default function LoginPage() {
               <Button 
                 type="submit" 
                 className="w-full h-11 bg-gradient-primary hover:opacity-90 transition-opacity glow-primary"
-                disabled={isLoading}
+                disabled={isFormDisabled}
               >
-                {isLoading ? (
+                {isSubmitting && !loginSuccess ? (
                   <div className="flex items-center gap-2">
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     Entrando...
+                  </div>
+                ) : showLoadingProfile ? (
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Carregando perfil...
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
