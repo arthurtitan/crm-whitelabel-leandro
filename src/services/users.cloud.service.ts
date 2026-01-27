@@ -130,6 +130,32 @@ export const usersCloudService = {
 
     const userId = result.user.id;
 
+    // Fallback: Explicitly set password via set-user-password to ensure it's correctly applied
+    try {
+      const setPasswordResponse = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/set-user-password`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${sessionData.session.access_token}`,
+          },
+          body: JSON.stringify({
+            userId: userId,
+            password: input.password,
+          }),
+        }
+      );
+
+      if (!setPasswordResponse.ok) {
+        console.warn('Failed to explicitly set password via fallback, user may need password reset');
+      } else {
+        console.log('Password explicitly set via fallback for user:', userId);
+      }
+    } catch (err) {
+      console.warn('Error in password fallback:', err);
+    }
+
     // Update profile with permissions if agent
     if (input.role === 'agent' && input.permissions?.length) {
       const { error: permError } = await supabase

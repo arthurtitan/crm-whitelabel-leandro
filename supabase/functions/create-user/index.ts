@@ -26,6 +26,16 @@ serve(async (req) => {
 
     const { email, password, nome, role, account_id } = await req.json();
 
+    // Debug logging (without exposing password)
+    console.log("Creating user:", { 
+      email, 
+      nome, 
+      role, 
+      account_id, 
+      hasPassword: !!password,
+      passwordLength: password?.length 
+    });
+
     if (!email || !password || !nome || !role) {
       return new Response(
         JSON.stringify({ error: "Email, password, nome, and role are required" }),
