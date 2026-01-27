@@ -63,12 +63,10 @@ export default function LoginPage() {
     setIsLoading(false);
     
     if (result.success) {
-      // Get user from mock data to determine redirect
-      const { mockUsers } = await import('@/data/mockData');
-      const user = mockUsers.find(u => u.email === email);
-      if (user) {
-        navigate(getSmartDefaultRoute(user), { replace: true });
-      }
+      // Login successful - AuthContext handles navigation via onAuthStateChange
+      // Navigate based on what we know at this point
+      // The user state will be available after redirect
+      navigate('/admin', { replace: true });
     } else {
       setError(result.error || 'Erro ao fazer login');
     }
