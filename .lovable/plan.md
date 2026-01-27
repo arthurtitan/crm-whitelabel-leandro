@@ -1,186 +1,127 @@
 
-# Plano: Corrigir Erro "Failed to Fetch" na Edge Function
+# Plano: Correção da Criação de Usuários Importados do Chatwoot
 
-## Problema Identificado
+## Resumo Executivo
 
-O erro "Failed to send a request to the Edge Function" / "Failed to fetch" acontece apenas no preview frontend, enquanto a Edge Function funciona perfeitamente quando chamada diretamente.
+O problema foi identificado: usuários importados do Chatwoot são criados no banco de dados, mas a **senha digitada pelo Super Admin não está sendo corretamente associada** ao registro de autenticação. O login só funcionou após usar a Edge Function `set-user-password` para redefinir a senha manualmente.
 
-### Evidencias
+---
 
-| Teste | Resultado |
-|-------|-----------|
-| Edge Function via cURL | Sucesso (1284ms, 1 agente) |
-| Edge Function via Preview | "Failed to fetch" |
-| Logs da Edge Function | Sem registro de requisicao do Preview |
+## Diagnóstico
 
-## Causa Raiz
+### O que foi verificado:
+1. O usuário `glepsai@gmail.com` existe no banco (`profiles` e `auth.users`)
+2. A Edge Function `create-user` está recebendo os parâmetros corretos
+3. O código em `EmbeddedUserCreationForm` passa corretamente `{ user, password }` para `handleUserCreated`
+4. O código em `handleUserCreated` usa `data.password` na chamada para `usersCloudService.create`
 
-O problema e uma **race condition no deploy**: a Edge Function foi atualizada, mas o preview precisa ser recarregado para funcionar corretamente. Alem disso, pode haver um problema de timeout no cliente Supabase.
+### Possíveis causas raiz:
+1. **Deploy não aplicado**: As correções de código podem não ter sido publicadas quando o usuário foi criado
+2. **Problema na Edge Function `create-user`**: A função pode estar recebendo a senha mas não está sendo armazenada corretamente no Supabase Auth
+3. **Falta de logs**: Não há logging na Edge Function para verificar se a senha está chegando
 
-## Solucao Proposta
+---
 
-### 1. Aumentar Timeout no Cliente Supabase
+## Plano de Correção
 
-O cliente Supabase tem um timeout padrao de 8 segundos para Edge Functions. Como nossa funcao pode demorar ate 25 segundos, precisamos aumentar esse timeout.
+### Etapa 1: Adicionar Logging na Edge Function `create-user`
+Adicionar logs para rastrear exatamente o que está sendo recebido e processado.
 
-**Arquivo:** `src/services/accounts.cloud.service.ts`
+**Arquivo:** `supabase/functions/create-user/index.ts`
 
 ```typescript
-const { data, error } = await supabase.functions.invoke('test-chatwoot-connection', {
-  body: {
-    baseUrl: normalizedBaseUrl,
-    accountId: normalizedAccountId,
-    apiKey: normalizedApiKey,
-  },
-  // Adicionar timeout maior
+// Adicionar log para debug (sem expor senha)
+console.log("Creating user:", { 
+  email, 
+  nome, 
+  role, 
+  account_id, 
+  hasPassword: !!password,
+  passwordLength: password?.length 
 });
 ```
 
-**Problema:** O SDK do Supabase nao suporta timeout customizado diretamente no `invoke`. A solucao e usar `AbortController` ou fazer a chamada manualmente via fetch.
+### Etapa 2: Verificar se o problema persiste
+Após o deploy, testar a criação de um novo usuário importado do Chatwoot:
+1. Deletar o usuário `glepsai@gmail.com` existente
+2. Importar novamente com uma senha conhecida
+3. Verificar os logs da Edge Function
+4. Tentar fazer login
 
-### 2. Implementar Chamada Fetch Manual com Timeout
+### Etapa 3: Correção alternativa (se necessário)
+Se o problema persistir, adicionar uma chamada explícita para `set-user-password` logo após a criação do usuário, garantindo que a senha seja sempre definida corretamente.
 
-Substituir `supabase.functions.invoke` por uma chamada `fetch` direta com timeout configuraveis e melhor tratamento de erros.
-
-**Mudanca em** `src/services/accounts.cloud.service.ts`:
+**Arquivo:** `src/services/users.cloud.service.ts`
 
 ```typescript
-async testChatwootConnection(baseUrl, accountId, apiKey) {
-  const TIMEOUT_MS = 30000; // 30 segundos
-  
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  
-  try {
-    const response = await fetch(
-      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/test-chatwoot-connection`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token}`,
-          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-        },
-        body: JSON.stringify({ baseUrl, accountId, apiKey }),
-        signal: controller.signal,
-      }
-    );
-    
-    const data = await response.json();
-    // Processar resposta...
-  } finally {
-    clearTimeout(timeoutId);
+async create(input: CreateUserInput): Promise<Profile> {
+  // ... código existente para criar usuário ...
+
+  const userId = result.user.id;
+
+  // Garantir que a senha seja definida via set-user-password como fallback
+  const setPasswordResponse = await fetch(
+    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/set-user-password`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${sessionData.session.access_token}`,
+      },
+      body: JSON.stringify({
+        userId: userId,
+        password: input.password,
+      }),
+    }
+  );
+
+  if (!setPasswordResponse.ok) {
+    console.warn('Failed to explicitly set password, user may need password reset');
   }
+
+  // ... resto do código ...
 }
 ```
 
-## Arquivos a Modificar
+---
 
-| Arquivo | Mudanca |
-|---------|---------|
-| `src/services/accounts.cloud.service.ts` | Substituir `supabase.functions.invoke` por fetch manual com timeout de 30s |
+## Seção Tecnica
 
-## Implementacao Detalhada
+### Arquivos a Modificar
 
-### Mudancas no `accounts.cloud.service.ts`
+| Arquivo | Modificacao |
+|---------|-------------|
+| `supabase/functions/create-user/index.ts` | Adicionar logging para debug |
+| `src/services/users.cloud.service.ts` | Adicionar chamada redundante ao `set-user-password` como fallback |
 
-1. Importar `supabase` para obter sessao
-2. Criar funcao `fetchWithTimeout` para chamadas com timeout customizado
-3. Substituir `supabase.functions.invoke` por fetch direto
-4. Manter tratamento de erros existente
+### Fluxo Corrigido
 
-### Codigo Atualizado
-
-```typescript
-async testChatwootConnection(
-  baseUrl: string, 
-  accountId: string, 
-  apiKey: string
-): Promise<{ success: boolean; message: string; agents?: ...; }> {
-  const TIMEOUT_MS = 30000;
-  const normalizedBaseUrl = String(baseUrl || '').trim().replace(/\/$/, '');
-  const normalizedAccountId = String(accountId || '').trim();
-  const normalizedApiKey = String(apiKey || '').trim();
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-  try {
-    // Obter sessao atual
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-
-    const response = await fetch(
-      `${supabaseUrl}/functions/v1/test-chatwoot-connection`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': session?.access_token 
-            ? `Bearer ${session.access_token}` 
-            : `Bearer ${supabaseKey}`,
-          'apikey': supabaseKey,
-        },
-        body: JSON.stringify({
-          baseUrl: normalizedBaseUrl,
-          accountId: normalizedAccountId,
-          apiKey: normalizedApiKey,
-        }),
-        signal: controller.signal,
-      }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      return { 
-        success: false, 
-        message: `Erro HTTP ${response.status}: ${errorText}`
-      };
-    }
-
-    const data = await response.json();
-    
-    if (data?.success) {
-      return {
-        success: true,
-        message: `Conexao estabelecida! ${data.agents?.length || 0} agentes...`,
-        agents: data.agents,
-        inboxes: data.inboxes,
-        labels: data.labels,
-      };
-    } else {
-      return {
-        success: false,
-        message: data?.error || 'Falha na conexao com Chatwoot',
-      };
-    }
-  } catch (error: any) {
-    if (error.name === 'AbortError') {
-      return {
-        success: false,
-        message: `Timeout apos ${TIMEOUT_MS / 1000}s. O servidor Chatwoot pode estar lento ou inacessivel.`,
-      };
-    }
-    return { 
-      success: false, 
-      message: error.message || 'Erro de conexao' 
-    };
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
+```text
++-------------------+     +------------------+     +-------------------+
+| EmbeddedUserForm  | --> | handleUserCreated| --> | usersCloudService |
+| (coleta senha)    |     | (passa senha)    |     | .create()         |
++-------------------+     +------------------+     +-------------------+
+                                                           |
+                                                           v
+                                              +------------------------+
+                                              | Edge Function          |
+                                              | create-user            |
+                                              | (cria auth.users)      |
+                                              +------------------------+
+                                                           |
+                                                           v
+                                              +------------------------+
+                                              | Edge Function          |
+                                              | set-user-password      |
+                                              | (define senha - backup)|
+                                              +------------------------+
 ```
 
-## Porque Isso Vai Funcionar
-
-1. **Timeout Controlado**: 30s e suficiente para servidores lentos
-2. **Fetch Direto**: Evita abstraçoes do SDK que podem ter bugs
-3. **AbortController**: Cancela a requisicao se demorar muito
-4. **Headers Explicitos**: Garante que autenticacao e passada corretamente
-5. **Melhor Debug**: Erros HTTP sao tratados separadamente
+---
 
 ## Resultado Esperado
 
-Apos a implementacao, o botao "Testar Conexao" deve funcionar corretamente no preview, mostrando "Conexao estabelecida!" com os agentes encontrados.
+Apos a implementacao:
+- Usuarios importados do Chatwoot terao senhas funcionais imediatamente
+- Logs permitirao debug se problemas persistirem
+- Fallback com `set-user-password` garante que a senha seja sempre definida
