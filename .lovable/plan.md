@@ -1,158 +1,226 @@
 
-# Plano: Otimização do Sistema de Autenticação e Rotas
+# Plano de Correção Completa: Sistema de Autenticação e Chatwoot
 
-## Problema Identificado
+## Problemas Identificados
 
-O sistema apresenta lentidão e travamentos após login/logout porque:
+### 1. Login Travando na Tela "Carregando seu perfil..."
+**Causa Raiz:**
+Através dos logs de console e testes no browser, identifico que:
+- A hidratação do usuário está atingindo timeout de 12 segundos
+- Quando a sessão já existe (INITIAL_SESSION ou TOKEN_REFRESHED), o sistema tenta re-hidratar mas falha ou demora excessivamente
+- O `fetchWithTimeout` usando `Promise.race` não cancela efetivamente a Promise do Supabase - apenas ignora o resultado, causando comportamento inconsistente
 
-1. O AuthContext está com lógica excessivamente complexa (retries, timeouts de 15s, múltiplos estados)
-2. O logout não aguarda a conclusão antes de navegar
-3. Os contextos (Tag, Finance, etc) recarregam dados mockados pesados a cada mount
-4. O ProtectedRoute bloqueia a UI enquanto `isLoading = true`
+**Log real capturado:**
+```
+[Auth] Event: SIGNED_IN
+[Auth] Hydrating user: eda770a4-79e4-4656-94df-42a23e433f31
+[Auth] Hydration failed: Timeout
+```
+
+### 2. Chatwoot "Failed to send a request to the Edge Function"
+**Causa Raiz:**
+- A Edge Function `test-chatwoot-connection` estava desligada (cold start)
+- Após deployment, ela funciona corretamente (testei e retornou dados)
 
 ---
 
 ## Mudanças Planejadas
 
-### 1. Simplificar o AuthContext
+### Arquivo 1: `src/contexts/AuthContext.tsx`
 
-**Arquivo:** `src/contexts/AuthContext.tsx`
+**Mudança Principal:** Simplificar drasticamente o fluxo de hidratação e remover timeout problemático.
 
-Remover toda a complexidade desnecessária:
-- Reduzir timeout de 15s para 5s (suficiente para conexões normais)
-- Remover sistema de retries (se falhar uma vez, mostrar erro claro)
-- Simplificar a função `hydrateUser` para um fluxo linear sem complexidade
-- Garantir que o estado `isLoading` seja setado corretamente em todos os cenários
-
-Antes (complexo):
-```text
-- fetchWithTimeout com retries
-- hydrationIdRef para controle de concorrência
-- Múltiplas verificações de hydrationId
-- Timeout de 15 segundos
-```
-
-Depois (simples):
-```text
-- Fetch direto com AbortController para timeout
-- Único fluxo de hidratação
-- Timeout de 5 segundos
-- Erro claro se falhar
-```
-
-### 2. Corrigir o Logout nos Layouts
-
-**Arquivos:** `src/layouts/SuperAdminLayout.tsx`, `src/layouts/AdminLayout.tsx`
-
-Problema atual:
+**Antes (problemático):**
 ```typescript
-const handleLogout = () => {
-  logout();          // Async, mas não aguarda
-  navigate('/login'); // Navega antes do logout completar
+const fetchWithTimeout = async <T,>(promise: Promise<T>, timeoutMs: number) => {
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error('Timeout')), timeoutMs)
+  );
+  return Promise.race([promise, timeout]);
 };
 ```
 
-Solução:
+**Problemas:**
+1. O timeout de 12s é muito longo para UX, mas às vezes não é suficiente
+2. `Promise.race` não cancela a query real do Supabase
+3. A Promise original continua rodando e pode resolver após o timeout
+
+**Depois (simples e robusto):**
 ```typescript
-const handleLogout = async () => {
-  await logout();     // Aguarda conclusão
-  navigate('/login'); // Navega apenas após logout
+// Remover fetchWithTimeout completamente
+// Confiar no timeout nativo do Supabase SDK (60s por padrão)
+// Se falhar, o erro será tratado normalmente
+```
+
+**Fluxo de Hidratação Simplificado:**
+1. Fazer fetch paralelo de `profiles` e `user_roles` diretamente
+2. Se houver erro de rede, o SDK do Supabase retornará erro
+3. Mostrar erro claro ao usuário em vez de timeout genérico
+4. Remover refs de concorrência desnecessários
+
+**Código Novo para `hydrateUser`:**
+```typescript
+const hydrateUser = useCallback(async (supabaseUser: SupabaseUser): Promise<boolean> => {
+  console.log('[Auth] Hydrating user:', supabaseUser.id);
+
+  try {
+    // Fetch profile and role in parallel - sem timeout artificial
+    const [profileResult, roleResult] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('user_id, email, nome, status, permissions, account_id, chatwoot_agent_id')
+        .eq('user_id', supabaseUser.id)
+        .maybeSingle(),
+      supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', supabaseUser.id)
+        .maybeSingle(),
+    ]);
+
+    // ... resto da lógica igual
+  } catch (error: any) {
+    // Tratar erro real, não timeout artificial
+  }
+}, []);
+```
+
+**Mudança no Listener de Auth:**
+```typescript
+const handleAuthChange = async (event: string, session: any) => {
+  if (!mounted) return;
+  console.log('[Auth] Event:', event);
+
+  if (session?.user) {
+    // Hidratar apenas se não temos usuário OU se o ID mudou
+    if (!authState.user || authState.user.id !== session.user.id) {
+      setAuthState(prev => ({ ...prev, isLoading: true }));
+      await hydrateUser(session.user);
+    }
+    // Se já está hidratado com mesmo ID, não fazer nada
+  } else if (event === 'SIGNED_OUT' || !session) {
+    // Limpar estado
+    setAuthState({
+      user: null,
+      account: null,
+      isAuthenticated: false,
+      isLoading: false,
+      authError: null,
+    });
+  }
 };
 ```
 
-### 3. Otimizar o ProtectedRoute
+### Arquivo 2: `src/pages/LoginPage.tsx`
 
-**Arquivo:** `src/components/auth/ProtectedRoute.tsx`
+**Mudança:** Remover o timeout de 15s para o login e simplificar o fluxo.
 
-Adicionar fallback com timeout para evitar loading infinito:
-- Se `isLoading` por mais de 3s, redirecionar para login
-- Isso previne o usuário ficar preso na tela de loading
+**Antes:**
+```typescript
+const timeoutPromise = new Promise<{ success: false; error: string }>((resolve) => {
+  setTimeout(() => {
+    console.warn('[LoginPage] SignIn timeout reached');
+    resolve({ success: false, error: 'Tempo excedido...' });
+  }, SIGNIN_TIMEOUT_MS);
+});
 
-### 4. Lazy Loading para Contextos Pesados
-
-**Arquivo:** `src/App.tsx`
-
-Mover os contextos pesados (Tag, Finance, Product, Calendar) para serem carregados sob demanda, não no boot da aplicação.
-
-Estrutura atual:
-```text
-App
-  └── AuthProvider
-        └── Routes
-              └── ProtectedRoute
-                    └── AdminFinanceWrapper (carrega 4 contextos)
-                          └── AdminLayout
-                                └── Page
+const result = await Promise.race([login(email, password), timeoutPromise]);
 ```
 
-O problema é que `AdminFinanceWrapper` carrega dados mockados pesados mesmo antes do usuário estar autenticado.
+**Depois:**
+```typescript
+const result = await login(email, password);
+// Sem timeout artificial - o SDK do Supabase tem seu próprio timeout
+```
+
+### Arquivo 3: `src/pages/NotFound.tsx`
+
+**Mudança:** Trocar `<a href="/">` por `<Link to="/">` para evitar reload completo.
+
+**Antes:**
+```tsx
+<a href="/" className="text-primary underline hover:text-primary/90">
+  Return to Home
+</a>
+```
+
+**Depois:**
+```tsx
+<Link to="/login" className="text-primary underline hover:text-primary/90">
+  Voltar para o Login
+</Link>
+```
+
+---
+
+## Resumo das Correções
+
+| Problema | Causa | Solução |
+|----------|-------|---------|
+| Login trava em "Carregando perfil" | Timeout artificial de 12s interferindo | Remover timeout, confiar no SDK |
+| Re-hidratação desnecessária | Verificação por ref não funciona bem | Verificar pelo state diretamente |
+| Navegação recarrega tudo | Algumas tags `<a>` em vez de `<Link>` | Trocar para `<Link>` do React Router |
+| Chatwoot "Failed to send" | Edge Function não estava ativa | Já corrigido via deploy |
 
 ---
 
 ## Detalhes Técnicos
 
-### AuthContext Simplificado
+### Por que o timeout era problemático
 
-| Antes | Depois |
-|-------|--------|
-| 600+ linhas | ~300 linhas |
-| Retries com delay | Falha rápida com mensagem clara |
-| Timeout 15s | Timeout 5s |
-| hydrationIdRef complexo | Estado simples |
-| fetchWithTimeout genérico | AbortController nativo |
+O padrão `Promise.race([fetch, timeout])` tem um problema fundamental:
 
-### Fluxo de Hidratação Otimizado
+1. Se o timeout "ganha", a Promise do fetch continua executando
+2. Se o fetch completar depois, pode setar estado em momento inesperado
+3. O Supabase SDK já tem retry/timeout interno configurado
+
+### Nova Arquitetura de Hidratação
 
 ```text
-1. signInWithPassword (retorno imediato)
-2. onAuthStateChange SIGNED_IN
-3. Promise.all([profile, role]) com timeout 5s
-4. Se super_admin: pronto
-5. Se admin/agent: fetch account
-6. Setar estado final
+SIGNED_IN event
+    |
+    v
+authState.user?.id === session.user.id ?
+    |                     |
+   YES                   NO
+    |                     |
+    v                     v
+  (noop)          setAuthState(loading)
+                          |
+                          v
+                  Promise.all([profile, role])
+                          |
+                     success?
+                    /      \
+                  YES       NO
+                   |         |
+                   v         v
+              setAuthState  signOut + 
+              (hydrated)    setAuthState(error)
 ```
 
-### Tratamento de Logout
+### Arquivos Modificados
 
-```text
-1. Usuário clica "Sair"
-2. Setar isLoading = true
-3. Chamar supabase.auth.signOut()
-4. Limpar estados locais
-5. Setar isLoading = false
-6. Navegar para /login
-```
-
----
-
-## Arquivos a Serem Modificados
-
-| Arquivo | Alteração |
-|---------|-----------|
-| `src/contexts/AuthContext.tsx` | Simplificar lógica de hidratação, reduzir timeout |
-| `src/layouts/SuperAdminLayout.tsx` | Adicionar `await` no logout |
-| `src/layouts/AdminLayout.tsx` | Adicionar `await` no logout |
-| `src/components/auth/ProtectedRoute.tsx` | Adicionar timeout de segurança |
-| `src/App.tsx` | Otimizar estrutura de providers |
+1. `src/contexts/AuthContext.tsx` - Simplificar hidratação
+2. `src/pages/LoginPage.tsx` - Remover timeout artificial
+3. `src/pages/NotFound.tsx` - Usar Link do React Router
 
 ---
 
 ## Resultados Esperados
 
-1. Login resolve em menos de 2 segundos (em condições normais)
-2. Logout completa instantaneamente sem travamentos
-3. Navegação fluida entre páginas
-4. Sem estados "presos" de loading
-5. Código mais simples e fácil de manter
+1. Login resolve em ~1-3 segundos (tempo real de rede)
+2. Sem timeouts artificiais causando falsos erros
+3. Navegação entre páginas é instantânea (sem re-hidratação)
+4. Erros reais do banco/rede são mostrados claramente
+5. Edge Function do Chatwoot já está funcionando
 
 ---
 
-## Validação
+## Validação Pós-Implementação
 
-Após implementação, testar:
-
-1. Login como Super Admin, Admin e Agent
-2. Navegação entre páginas no painel
-3. Logout e relogin imediato
-4. Refresh da página (F5)
-5. Acesso direto a URLs protegidas
+1. Login como Super Admin - deve funcionar em segundos
+2. Navegar para Contas, Usuários - sem tela de loading
+3. Testar conexão Chatwoot - deve retornar agentes/inboxes
+4. Logout e login novamente - fluxo limpo
+5. Refresh da página (F5) - sessão mantida sem travamento
