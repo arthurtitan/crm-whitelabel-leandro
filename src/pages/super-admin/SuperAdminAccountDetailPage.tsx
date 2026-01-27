@@ -1,7 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useState } from 'react';
-import { mockAccounts, mockUsers, mockSales, mockConversations, mockContacts } from '@/data/mockData';
-import { Account, AccountStatus } from '@/types/crm';
+import { useState, useEffect } from 'react';
+import { accountsCloudService, Account as CloudAccount } from '@/services/accounts.cloud.service';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -47,6 +46,8 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 
+type AccountStatus = 'active' | 'paused' | 'cancelled';
+
 interface EditFormData {
   nome: string;
   idioma: 'pt' | 'en';
@@ -65,9 +66,9 @@ export default function SuperAdminAccountDetailPage() {
   const { accountId } = useParams<{ accountId: string }>();
   const navigate = useNavigate();
   
-  const [account, setAccount] = useState<Account | null>(
-    mockAccounts.find((a) => a.id === accountId) || null
-  );
+  const [account, setAccount] = useState<CloudAccount | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [isControlOpen, setIsControlOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isPasswordConfirmOpen, setIsPasswordConfirmOpen] = useState(false);
@@ -85,12 +86,48 @@ export default function SuperAdminAccountDetailPage() {
   });
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('idle');
 
-  if (!account) {
+  // Fetch account data from Supabase
+  useEffect(() => {
+    const fetchAccount = async () => {
+      if (!accountId) {
+        setError('ID da conta não fornecido');
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        setIsLoading(true);
+        const accountData = await accountsCloudService.getById(accountId);
+        setAccount(accountData);
+        setError(null);
+      } catch (err: any) {
+        console.error('Error fetching account:', err);
+        setError(err.message || 'Erro ao carregar conta');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchAccount();
+  }, [accountId]);
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
+        <Loader2 className="w-12 h-12 animate-spin text-primary" />
+        <p className="text-muted-foreground">Carregando conta...</p>
+      </div>
+    );
+  }
+
+  // Error or not found state
+  if (error || !account) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
         <Building2 className="w-16 h-16 text-muted-foreground" />
         <h2 className="text-2xl font-bold">Conta não encontrada</h2>
-        <p className="text-muted-foreground">A conta com ID {accountId} não existe.</p>
+        <p className="text-muted-foreground">{error || `A conta com ID ${accountId} não existe.`}</p>
         <Button onClick={() => navigate('/super-admin/accounts')}>
           <ArrowLeft className="w-4 h-4 mr-2" />
           Voltar para Contas
@@ -99,15 +136,11 @@ export default function SuperAdminAccountDetailPage() {
     );
   }
 
-  // Extract numeric ID from account.id (e.g., "acc-1" -> "1")
-  const numericId = account.id.replace(/\D/g, '');
+  // Get account stats from the account object
+  const usersCount = account.users_count || 0;
+  const accountId8 = account.id.substring(0, 8);
 
-  // Get account stats
-  const accountUsers = mockUsers.filter((u) => u.account_id === account.id);
-  const accountContacts = mockContacts.filter((c) => c.account_id === account.id);
-  const accountConversations = mockConversations.filter((c) => c.account_id === account.id);
-  const accountSales = mockSales.filter((s) => s.account_id === account.id);
-  const totalRevenue = accountSales.filter((s) => s.status === 'paid').reduce((sum, s) => sum + s.valor, 0);
+
 
   const handleOpenControl = () => {
     setEditFormData({
@@ -230,7 +263,7 @@ export default function SuperAdminAccountDetailPage() {
               <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-foreground truncate">Conta + {account.nome}</h1>
               <div className="flex flex-wrap items-center gap-2 mt-1">
                 <code className="text-xs bg-muted px-2 py-1 rounded font-mono">
-                  ID: {numericId}
+                  ID: {accountId8}...
                 </code>
                 {getStatusBadge(account.status)}
               </div>
@@ -278,7 +311,7 @@ export default function SuperAdminAccountDetailPage() {
                 <Users className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{accountUsers.length}</p>
+                <p className="text-2xl font-bold">{usersCount}</p>
                 <p className="text-xs text-muted-foreground">Usuários</p>
               </div>
             </div>
@@ -291,7 +324,7 @@ export default function SuperAdminAccountDetailPage() {
                 <UserCircle className="w-5 h-5 text-cyan-400" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{accountContacts.length}</p>
+                <p className="text-2xl font-bold">-</p>
                 <p className="text-xs text-muted-foreground">Leads</p>
               </div>
             </div>
@@ -304,7 +337,7 @@ export default function SuperAdminAccountDetailPage() {
                 <MessageSquare className="w-5 h-5 text-violet-400" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{accountConversations.length}</p>
+                <p className="text-2xl font-bold">-</p>
                 <p className="text-xs text-muted-foreground">Conversas</p>
               </div>
             </div>
@@ -318,7 +351,7 @@ export default function SuperAdminAccountDetailPage() {
               </div>
               <div>
                 <p className="text-2xl font-bold">
-                  {totalRevenue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  R$ 0,00
                 </p>
                 <p className="text-xs text-muted-foreground">Faturamento</p>
               </div>
@@ -336,7 +369,7 @@ export default function SuperAdminAccountDetailPage() {
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between py-2 border-b border-border/50">
               <span className="text-muted-foreground">ID</span>
-              <code className="text-sm font-mono bg-muted px-2 py-1 rounded">{numericId}</code>
+              <code className="text-sm font-mono bg-muted px-2 py-1 rounded">{accountId8}...</code>
             </div>
             <div className="flex items-center justify-between py-2 border-b border-border/50">
               <span className="text-muted-foreground">Nome</span>
@@ -440,34 +473,16 @@ export default function SuperAdminAccountDetailPage() {
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <Users className="w-5 h-5" />
-            Usuários da Conta ({accountUsers.length})
+            Usuários da Conta ({usersCount})
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {accountUsers.length === 0 ? (
+          {usersCount === 0 ? (
             <p className="text-muted-foreground text-center py-4">Nenhum usuário vinculado a esta conta.</p>
           ) : (
-            <div className="space-y-2">
-              {accountUsers.map((user) => (
-                <div key={user.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-                      <span className="text-sm font-medium">{user.nome.charAt(0)}</span>
-                    </div>
-                    <div>
-                      <p className="font-medium">{user.nome}</p>
-                      <p className="text-xs text-muted-foreground">{user.email}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline">{user.role}</Badge>
-                    <span className={user.status === 'active' ? 'status-active' : 'status-paused'}>
-                      {user.status === 'active' ? 'Ativo' : user.status === 'suspended' ? 'Suspenso' : 'Inativo'}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <p className="text-muted-foreground text-center py-4">
+              {usersCount} usuário(s) vinculado(s). Acesse a página de Usuários para gerenciar.
+            </p>
           )}
         </CardContent>
       </Card>
