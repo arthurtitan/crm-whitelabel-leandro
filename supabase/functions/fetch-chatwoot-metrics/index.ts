@@ -16,31 +16,13 @@ interface MetricsRequest {
   agentId?: number;
 }
 
-interface ConversationSummary {
-  open: number;
-  unattended: number;
-  pending: number;
-  resolved: number;
-}
-
-interface AgentMetric {
-  id: number;
-  name: string;
-  email: string;
-  thumbnail?: string;
-  conversations_count: number;
-  resolved_count?: number;
-  avg_first_response_time?: number;
-  avg_resolution_time?: number;
-}
-
 async function fetchWithRetry(url: string, options: RequestInit, retries = 2): Promise<Response> {
   let lastError: Error | null = null;
   
   for (let i = 0; i <= retries; i++) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout
+      const timeoutId = setTimeout(() => controller.abort(), 20000);
       
       const response = await fetch(url, {
         ...options,
@@ -61,8 +43,82 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = 2): P
   throw lastError;
 }
 
+// Fetch all conversations with pagination
+async function fetchAllConversations(
+  baseUrl: string, 
+  accountId: string, 
+  headers: Record<string, string>,
+  status: string = 'all'
+): Promise<any[]> {
+  const allConversations: any[] = [];
+  let page = 1;
+  const perPage = 50;
+  let hasMore = true;
+
+  while (hasMore && page <= 10) { // Max 10 pages (500 conversations)
+    try {
+      const url = `${baseUrl}/api/v1/accounts/${accountId}/conversations?status=${status}&page=${page}&per_page=${perPage}`;
+      console.log(`[Chatwoot] Fetching conversations page ${page}...`);
+      
+      const response = await fetchWithRetry(url, { headers });
+      
+      if (!response.ok) {
+        console.error(`[Chatwoot] Conversations fetch failed: ${response.status}`);
+        break;
+      }
+
+      const data = await response.json();
+      const conversations = data.data?.payload || data.payload || [];
+      
+      if (conversations.length === 0) {
+        hasMore = false;
+      } else {
+        allConversations.push(...conversations);
+        page++;
+        
+        // Check if we got less than requested (last page)
+        if (conversations.length < perPage) {
+          hasMore = false;
+        }
+      }
+    } catch (err) {
+      console.error(`[Chatwoot] Error fetching page ${page}:`, err);
+      break;
+    }
+  }
+
+  return allConversations;
+}
+
+// Fetch team members (agents)
+async function fetchAgents(
+  baseUrl: string,
+  accountId: string,
+  headers: Record<string, string>
+): Promise<any[]> {
+  try {
+    // Try the agents endpoint first
+    const agentsUrl = `${baseUrl}/api/v1/accounts/${accountId}/agents`;
+    console.log('[Chatwoot] Fetching agents...');
+    
+    const response = await fetchWithRetry(agentsUrl, { headers });
+    
+    if (response.ok) {
+      const data = await response.json();
+      const agents = Array.isArray(data) ? data : (data.payload || []);
+      console.log(`[Chatwoot] Found ${agents.length} agents`);
+      return agents;
+    }
+    
+    console.error(`[Chatwoot] Agents fetch failed: ${response.status}`);
+    return [];
+  } catch (err) {
+    console.error('[Chatwoot] Error fetching agents:', err);
+    return [];
+  }
+}
+
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -80,7 +136,6 @@ serve(async (req) => {
       agentId 
     });
 
-    // Normalize inputs
     const normalizedBaseUrl = baseUrl?.trim().replace(/\/$/, '');
     const normalizedAccountId = accountId?.trim();
     const normalizedApiKey = apiKey?.trim();
@@ -101,196 +156,167 @@ serve(async (req) => {
       'User-Agent': 'LovableCRM/1.0 (Chatwoot Metrics)',
     };
 
-    // Convert dates to Unix timestamps (Chatwoot API uses seconds)
-    const since = Math.floor(new Date(dateFrom).getTime() / 1000);
-    const until = Math.floor(new Date(dateTo).getTime() / 1000);
+    // Parse date range
+    const dateFromParsed = new Date(dateFrom);
+    const dateToParsed = new Date(dateTo);
 
-    // Build query params
-    const baseParams = new URLSearchParams({
-      since: since.toString(),
-      until: until.toString(),
-    });
-    
-    if (inboxId) baseParams.append('inbox_id', inboxId.toString());
-
-    // Fetch multiple endpoints in parallel
-    const [
-      summaryResponse,
-      agentsResponse,
-      conversationsResponse,
-      inboxesResponse,
-    ] = await Promise.allSettled([
-      // 1. Conversation summary (open, resolved, pending)
-      fetchWithRetry(
-        `${normalizedBaseUrl}/api/v1/accounts/${normalizedAccountId}/reports/summary?type=conversations&${baseParams}`,
-        { headers }
-      ),
-      // 2. Agent metrics
-      fetchWithRetry(
-        `${normalizedBaseUrl}/api/v1/accounts/${normalizedAccountId}/reports/agents?${baseParams}`,
-        { headers }
-      ),
-      // 3. Conversations list (for IA vs Human calculation)
-      fetchWithRetry(
-        `${normalizedBaseUrl}/api/v1/accounts/${normalizedAccountId}/conversations?status=all`,
-        { headers }
-      ),
-      // 4. Inboxes (for channel breakdown)
+    // Fetch data in parallel
+    const [allConversations, agents, inboxesResponse] = await Promise.all([
+      fetchAllConversations(normalizedBaseUrl, normalizedAccountId, headers, 'all'),
+      fetchAgents(normalizedBaseUrl, normalizedAccountId, headers),
       fetchWithRetry(
         `${normalizedBaseUrl}/api/v1/accounts/${normalizedAccountId}/inboxes`,
         { headers }
       ),
     ]);
 
-    // Parse responses
-    let summary: ConversationSummary = { open: 0, unattended: 0, pending: 0, resolved: 0 };
-    let agents: AgentMetric[] = [];
-    let conversations: any[] = [];
+    // Parse inboxes
     let inboxes: any[] = [];
-
-    // Process summary
-    if (summaryResponse.status === 'fulfilled' && summaryResponse.value.ok) {
-      try {
-        const data = await summaryResponse.value.json();
-        summary = {
-          open: data.open || 0,
-          unattended: data.unattended || 0,
-          pending: data.pending || 0,
-          resolved: data.resolved_count || data.resolved || 0,
-        };
-        console.log('[Chatwoot Metrics] Summary:', summary);
-      } catch (e) {
-        console.error('[Chatwoot Metrics] Failed to parse summary:', e);
-      }
+    if (inboxesResponse.ok) {
+      const data = await inboxesResponse.json();
+      inboxes = data.payload || [];
     }
 
-    // Process agents
-    if (agentsResponse.status === 'fulfilled' && agentsResponse.value.ok) {
-      try {
-        const data = await agentsResponse.value.json();
-        agents = Array.isArray(data) ? data : (data.payload || []);
-        console.log('[Chatwoot Metrics] Agents count:', agents.length);
-      } catch (e) {
-        console.error('[Chatwoot Metrics] Failed to parse agents:', e);
-      }
-    }
+    console.log('[Chatwoot Metrics] Raw data:', {
+      totalConversations: allConversations.length,
+      agents: agents.length,
+      inboxes: inboxes.length,
+    });
 
-    // Process conversations (for IA vs Human)
-    if (conversationsResponse.status === 'fulfilled' && conversationsResponse.value.ok) {
-      try {
-        const data = await conversationsResponse.value.json();
-        conversations = data.data?.payload || data.payload || [];
-        console.log('[Chatwoot Metrics] Conversations count:', conversations.length);
-      } catch (e) {
-        console.error('[Chatwoot Metrics] Failed to parse conversations:', e);
-      }
-    }
+    // Filter conversations by date range
+    const conversations = allConversations.filter((conv: any) => {
+      const createdAt = new Date(conv.created_at);
+      return createdAt >= dateFromParsed && createdAt <= dateToParsed;
+    });
 
-    // Process inboxes
-    if (inboxesResponse.status === 'fulfilled' && inboxesResponse.value.ok) {
-      try {
-        const data = await inboxesResponse.value.json();
-        inboxes = data.payload || [];
-        console.log('[Chatwoot Metrics] Inboxes count:', inboxes.length);
-      } catch (e) {
-        console.error('[Chatwoot Metrics] Failed to parse inboxes:', e);
-      }
-    }
+    // Apply inbox filter if provided
+    const filteredConversations = inboxId 
+      ? conversations.filter((c: any) => c.inbox_id === inboxId)
+      : conversations;
 
-    // Calculate IA vs Human percentages
+    // Apply agent filter if provided
+    const finalConversations = agentId
+      ? filteredConversations.filter((c: any) => 
+          c.meta?.assignee?.id === agentId || c.assignee_id === agentId
+        )
+      : filteredConversations;
+
+    console.log('[Chatwoot Metrics] Filtered conversations:', {
+      afterDateFilter: conversations.length,
+      afterInboxFilter: filteredConversations.length,
+      afterAgentFilter: finalConversations.length,
+    });
+
+    // Calculate metrics from conversations
+    let openCount = 0;
+    let resolvedCount = 0;
+    let pendingCount = 0;
+    let unattendedCount = 0;
     let botConversations = 0;
     let humanConversations = 0;
-    
-    for (const conv of conversations) {
-      // Check if assigned to bot or has bot interactions
-      if (conv.meta?.assignee?.type === 'AgentBot' || conv.agent_bot_id) {
+
+    // Agent performance tracking
+    const agentStats: Record<number, {
+      name: string;
+      email: string;
+      thumbnail?: string;
+      conversations: number;
+      resolved: number;
+      totalResponseTime: number;
+      responseCount: number;
+    }> = {};
+
+    // Initialize agent stats
+    for (const agent of agents) {
+      agentStats[agent.id] = {
+        name: agent.name || agent.email,
+        email: agent.email,
+        thumbnail: agent.thumbnail,
+        conversations: 0,
+        resolved: 0,
+        totalResponseTime: 0,
+        responseCount: 0,
+      };
+    }
+
+    // Hourly distribution
+    const hourlyCount: Record<number, number> = {};
+    for (let h = 0; h <= 23; h++) hourlyCount[h] = 0;
+
+    // Backlog calculation
+    const now = Date.now();
+    const backlog = { ate15min: 0, de15a60min: 0, acima60min: 0 };
+
+    for (const conv of finalConversations) {
+      // Count by status
+      switch (conv.status) {
+        case 'open':
+          openCount++;
+          break;
+        case 'resolved':
+          resolvedCount++;
+          break;
+        case 'pending':
+          pendingCount++;
+          break;
+      }
+
+      // Unattended check
+      if (conv.agent_last_seen_at === null && conv.status === 'open') {
+        unattendedCount++;
+      }
+
+      // Bot vs Human
+      const assignee = conv.meta?.assignee;
+      if (assignee?.type === 'AgentBot' || conv.agent_bot_id) {
         botConversations++;
-      } else if (conv.meta?.assignee?.id) {
+      } else if (assignee?.id || conv.assignee_id) {
         humanConversations++;
+        
+        // Track agent stats
+        const agentIdVal = assignee?.id || conv.assignee_id;
+        if (agentStats[agentIdVal]) {
+          agentStats[agentIdVal].conversations++;
+          if (conv.status === 'resolved') {
+            agentStats[agentIdVal].resolved++;
+          }
+          
+          // Calculate response time if available
+          if (conv.first_reply_created_at && conv.created_at) {
+            const responseTime = new Date(conv.first_reply_created_at).getTime() - 
+                                 new Date(conv.created_at).getTime();
+            if (responseTime > 0) {
+              agentStats[agentIdVal].totalResponseTime += responseTime;
+              agentStats[agentIdVal].responseCount++;
+            }
+          }
+        }
+      }
+
+      // Hourly distribution
+      const createdAt = new Date(conv.created_at);
+      const hour = createdAt.getHours();
+      hourlyCount[hour]++;
+
+      // Backlog (open conversations waiting for response)
+      if (conv.status === 'open' && conv.waiting_since) {
+        const waitingMs = now - (conv.waiting_since * 1000);
+        const waitingMinutes = waitingMs / 60000;
+        
+        if (waitingMinutes <= 15) backlog.ate15min++;
+        else if (waitingMinutes <= 60) backlog.de15a60min++;
+        else backlog.acima60min++;
       }
     }
-    
+
+    // Calculate percentages
     const totalAssigned = botConversations + humanConversations;
     const percentualIA = totalAssigned > 0 ? Math.round((botConversations / totalAssigned) * 100) : 0;
     const percentualHumano = totalAssigned > 0 ? 100 - percentualIA : 0;
 
-    // Calculate conversations by channel/inbox
-    const conversasPorCanal = inboxes.map((inbox: any) => {
-      const inboxConversations = conversations.filter(
-        (c: any) => c.inbox_id === inbox.id
-      ).length;
-      
-      let mappedChannel = 'webchat';
-      if (inbox.channel_type?.includes('Whatsapp')) mappedChannel = 'whatsapp';
-      else if (inbox.channel_type?.includes('Instagram') || inbox.channel_type?.includes('Facebook')) mappedChannel = 'instagram';
-      
-      return {
-        inboxId: inbox.id,
-        canal: mappedChannel,
-        inboxName: inbox.name,
-        totalConversas: inboxConversations,
-      };
-    });
-
-    // Calculate hourly peak (from conversations)
-    const hourlyCount: Record<number, number> = {};
-    for (let h = 0; h <= 23; h++) hourlyCount[h] = 0;
-    
-    for (const conv of conversations) {
-      const createdAt = new Date(conv.created_at);
-      const hour = createdAt.getHours();
-      hourlyCount[hour] = (hourlyCount[hour] || 0) + 1;
-    }
-    
-    const picoPorHora = Object.entries(hourlyCount)
-      .filter(([hora]) => Number(hora) >= 7 && Number(hora) <= 21) // Business hours
-      .map(([hora, total]) => ({
-        hora: Number(hora),
-        totalConversas: total,
-      }));
-
-    // Calculate backlog (conversations without response)
-    const now = Date.now();
-    const backlog = { ate15min: 0, de15a60min: 0, acima60min: 0 };
-    
-    for (const conv of conversations) {
-      if (conv.status === 'open' && !conv.waiting_since) continue;
-      
-      const waitingSince = conv.waiting_since 
-        ? new Date(conv.waiting_since * 1000).getTime()
-        : new Date(conv.last_activity_at || conv.created_at).getTime();
-      
-      const waitingMinutes = (now - waitingSince) / 60000;
-      
-      if (waitingMinutes <= 15) backlog.ate15min++;
-      else if (waitingMinutes <= 60) backlog.de15a60min++;
-      else backlog.acima60min++;
-    }
-
-    // Calculate average response times from agents
-    let totalFirstResponseTime = 0;
-    let totalResolutionTime = 0;
-    let agentsWithMetrics = 0;
-    
-    for (const agent of agents) {
-      if (agent.avg_first_response_time) {
-        totalFirstResponseTime += agent.avg_first_response_time;
-        agentsWithMetrics++;
-      }
-      if (agent.avg_resolution_time) {
-        totalResolutionTime += agent.avg_resolution_time;
-      }
-    }
-    
-    const avgFirstResponseSeconds = agentsWithMetrics > 0 
-      ? Math.round(totalFirstResponseTime / agentsWithMetrics)
-      : 0;
-    const avgResolutionSeconds = agentsWithMetrics > 0
-      ? Math.round(totalResolutionTime / agentsWithMetrics)
-      : 0;
-
-    // Format time strings
-    const formatTime = (seconds: number): string => {
+    // Format time helper
+    const formatTime = (ms: number): string => {
+      const seconds = Math.floor(ms / 1000);
       if (seconds < 60) return `${seconds}s`;
       const mins = Math.floor(seconds / 60);
       const secs = seconds % 60;
@@ -300,28 +326,83 @@ serve(async (req) => {
       return `${hours}h ${remainingMins}m`;
     };
 
-    // Build response
+    // Calculate average response time
+    let totalResponseTime = 0;
+    let totalResponseCount = 0;
+    for (const stats of Object.values(agentStats)) {
+      totalResponseTime += stats.totalResponseTime;
+      totalResponseCount += stats.responseCount;
+    }
+    const avgFirstResponseMs = totalResponseCount > 0 
+      ? totalResponseTime / totalResponseCount 
+      : 0;
+
+    // Build agent performance array
+    const agentPerformance = Object.entries(agentStats)
+      .filter(([_, stats]) => stats.conversations > 0)
+      .map(([id, stats]) => ({
+        agentId: parseInt(id),
+        agentName: stats.name,
+        agentEmail: stats.email,
+        thumbnail: stats.thumbnail,
+        atendimentosAssumidos: stats.conversations,
+        atendimentosResolvidos: stats.resolved,
+        tempoMedioResposta: stats.responseCount > 0 
+          ? formatTime(stats.totalResponseTime / stats.responseCount)
+          : '0s',
+        taxaResolucao: stats.conversations > 0
+          ? Math.round((stats.resolved / stats.conversations) * 100)
+          : 0,
+      }));
+
+    // Conversations by channel
+    const conversasPorCanal = inboxes.map((inbox: any) => {
+      const inboxConversations = finalConversations.filter(
+        (c: any) => c.inbox_id === inbox.id
+      ).length;
+      
+      let mappedChannel = 'webchat';
+      const channelType = inbox.channel_type || '';
+      if (channelType.includes('Whatsapp')) mappedChannel = 'whatsapp';
+      else if (channelType.includes('Instagram') || channelType.includes('Facebook')) mappedChannel = 'instagram';
+      
+      return {
+        inboxId: inbox.id,
+        canal: mappedChannel,
+        inboxName: inbox.name,
+        totalConversas: inboxConversations,
+      };
+    });
+
+    // Hourly peak (business hours only)
+    const picoPorHora = Object.entries(hourlyCount)
+      .filter(([hora]) => Number(hora) >= 7 && Number(hora) <= 21)
+      .map(([hora, total]) => ({
+        hora: Number(hora),
+        totalConversas: total,
+      }));
+
     const response = {
       success: true,
       data: {
         // KPIs
-        totalLeads: summary.open + summary.resolved + summary.pending,
-        conversasAtivas: summary.open,
-        conversasResolvidas: summary.resolved,
-        conversasPendentes: summary.pending,
-        conversasSemResposta: summary.unattended,
+        totalLeads: finalConversations.length,
+        conversasAtivas: openCount,
+        conversasResolvidas: resolvedCount,
+        conversasPendentes: pendingCount,
+        conversasSemResposta: unattendedCount,
         
         // IA vs Human
         percentualIA,
         percentualHumano,
         
         // Time metrics
-        tempoMedioPrimeiraResposta: formatTime(avgFirstResponseSeconds),
-        tempoMedioResolucao: formatTime(avgResolutionSeconds),
+        tempoMedioPrimeiraResposta: formatTime(avgFirstResponseMs),
+        tempoMedioResolucao: '0s', // Would need message-level data
         
-        // Transbordo (bot to human transfers - estimate from unattended)
+        // Transbordo rate
         taxaTransbordo: totalAssigned > 0 
-          ? `${Math.round((summary.unattended / totalAssigned) * 100)}%`
+          ? `${Math.round((unattendedCount / totalAssigned) * 100)}%`
           : '0%',
         
         // Channel breakdown
@@ -334,32 +415,23 @@ serve(async (req) => {
         backlog,
         
         // Agent performance
-        agentes: agents.map(agent => ({
-          agentId: agent.id,
-          agentName: agent.name,
-          agentEmail: agent.email,
-          thumbnail: agent.thumbnail,
-          atendimentosAssumidos: agent.conversations_count || 0,
-          atendimentosResolvidos: agent.resolved_count || 0,
-          tempoMedioResposta: formatTime(agent.avg_first_response_time || 0),
-          taxaResolucao: agent.conversations_count > 0
-            ? Math.round(((agent.resolved_count || 0) / agent.conversations_count) * 100)
-            : 0,
-        })),
+        agentes: agentPerformance,
         
         // Quality metrics
         qualidade: {
-          conversasSemResposta: summary.unattended,
-          taxaAtendimentoVenda: '0%', // Will be calculated with sales data
+          conversasSemResposta: unattendedCount,
+          taxaAtendimentoVenda: '0%',
         },
         
-        // Raw counts for debugging
+        // Debug info
         _debug: {
-          totalConversations: conversations.length,
+          totalConversationsRaw: allConversations.length,
+          totalConversationsFiltered: finalConversations.length,
           botConversations,
           humanConversations,
           inboxesCount: inboxes.length,
           agentsCount: agents.length,
+          dateRange: { from: dateFrom, to: dateTo },
         },
       },
     };
