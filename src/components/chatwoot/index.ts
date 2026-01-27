@@ -1,2 +1,2 @@
 export { ChatwootAgentImport } from './ChatwootAgentImport';
-export { CreateUserFromChatwootDialog } from './CreateUserFromChatwootDialog';
+export { CreateUserFromChatwootDialog, EmbeddedUserCreationForm } from './CreateUserFromChatwootDialog';
