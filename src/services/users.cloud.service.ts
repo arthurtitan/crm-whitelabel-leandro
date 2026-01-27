@@ -18,7 +18,7 @@ export interface CreateUserInput {
   email: string;
   password: string;
   nome: string;
-  role: 'admin' | 'agent';
+  role: 'super_admin' | 'admin' | 'agent';
   account_id?: string;
   permissions?: string[];
   chatwoot_agent_id?: number;
@@ -93,56 +93,62 @@ export const usersCloudService = {
   },
 
   /**
-   * Create a new user with role
+   * Create a new user with role via Edge Function
    */
   async create(input: CreateUserInput): Promise<Profile> {
-    // Create auth user via edge function would be needed for production
-    // For now, we'll use the admin API workaround
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: input.email,
-      password: input.password,
-      options: {
-        data: { nome: input.nome },
-        emailRedirectTo: window.location.origin,
-      },
-    });
-
-    if (authError || !authData.user) {
-      console.error('Error creating auth user:', authError);
-      throw new Error(authError?.message || 'Erro ao criar usuário');
+    const { data: sessionData } = await supabase.auth.getSession();
+    
+    if (!sessionData.session) {
+      throw new Error('Não autenticado');
     }
 
-    const userId = authData.user.id;
+    // Call the Edge Function to create user
+    const response = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sessionData.session.access_token}`,
+        },
+        body: JSON.stringify({
+          email: input.email,
+          password: input.password,
+          nome: input.nome,
+          role: input.role,
+          account_id: input.account_id || null,
+        }),
+      }
+    );
 
-    // Update profile with account_id and permissions
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .update({
-        account_id: input.account_id,
-        permissions: input.permissions || ['dashboard'],
-        chatwoot_agent_id: input.chatwoot_agent_id,
-      })
-      .eq('user_id', userId);
+    const result = await response.json();
 
-    if (profileError) {
-      console.error('Error updating profile:', profileError);
+    if (!response.ok || result.error) {
+      console.error('Error creating user:', result.error);
+      throw new Error(result.error || 'Erro ao criar usuário');
     }
 
-    // Assign role
-    const { error: roleError } = await supabase
-      .from('user_roles')
-      .insert({
-        user_id: userId,
-        role: input.role,
-      });
+    const userId = result.user.id;
 
-    if (roleError) {
-      console.error('Error assigning role:', roleError);
+    // Update profile with permissions if agent
+    if (input.role === 'agent' && input.permissions?.length) {
+      const { error: permError } = await supabase
+        .from('profiles')
+        .update({
+          permissions: input.permissions,
+          chatwoot_agent_id: input.chatwoot_agent_id,
+        })
+        .eq('user_id', userId);
+
+      if (permError) {
+        console.error('Error updating permissions:', permError);
+      }
     }
 
+    // Fetch the created profile
     const profile = await this.getById(userId);
     if (!profile) {
-      throw new Error('Erro ao obter perfil do usuário');
+      throw new Error('Erro ao obter perfil do usuário criado');
     }
 
     return profile;

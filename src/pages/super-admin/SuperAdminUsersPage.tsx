@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { mockUsers } from '@/data/mockData';
 import { accountsCloudService, Account } from '@/services/accounts.cloud.service';
-import { User, UserRole, UserStatus } from '@/types/crm';
+import { usersCloudService, Profile } from '@/services/users.cloud.service';
+import { UserRole, UserStatus } from '@/types/crm';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
@@ -75,36 +75,52 @@ import {
   Activity,
   RotateCcw,
   Lightbulb,
+  Loader2,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 
+// Extend Profile to match User type expectations
+interface UserWithRole extends Profile {
+  last_login_at?: string | null;
+}
+
 export default function SuperAdminUsersPage() {
-  const [users, setUsers] = useState<User[]>(mockUsers);
+  const [users, setUsers] = useState<UserWithRole[]>([]);
+  const [usersLoading, setUsersLoading] = useState(true);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [accountsLoading, setAccountsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<UserRole | 'all'>('all');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [createLoading, setCreateLoading] = useState(false);
 
-  // Load accounts from database on mount
+  // Load accounts and users from database on mount
   useEffect(() => {
-    const loadAccounts = async () => {
+    const loadData = async () => {
       try {
         setAccountsLoading(true);
-        const data = await accountsCloudService.list();
-        setAccounts(data);
+        setUsersLoading(true);
+        
+        const [accountsData, usersData] = await Promise.all([
+          accountsCloudService.list(),
+          usersCloudService.list(),
+        ]);
+        
+        setAccounts(accountsData);
+        setUsers(usersData);
       } catch (error: any) {
-        console.error('Error loading accounts:', error);
-        toast.error('Erro ao carregar contas');
+        console.error('Error loading data:', error);
+        toast.error('Erro ao carregar dados');
       } finally {
         setAccountsLoading(false);
+        setUsersLoading(false);
       }
     };
-    loadAccounts();
+    loadData();
   }, []);
-  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editingUser, setEditingUser] = useState<UserWithRole | null>(null);
   const [editFormData, setEditFormData] = useState({
     nome: '',
     email: '',
@@ -123,7 +139,7 @@ export default function SuperAdminUsersPage() {
 
   // Delete confirmation with password
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [userToDelete, setUserToDelete] = useState<UserWithRole | null>(null);
   const [deletePassword, setDeletePassword] = useState('');
   const [showDeletePassword, setShowDeletePassword] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -199,7 +215,7 @@ export default function SuperAdminUsersPage() {
     return baseValid && passwordsMatch && passwordMinLength && accountValid && permissionsValid;
   };
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (formData.password !== formData.confirmPassword) {
       toast.error('As senhas não coincidem!');
       return;
@@ -209,34 +225,40 @@ export default function SuperAdminUsersPage() {
       return;
     }
     
-    const newUser: User = {
-      id: `user-${Date.now()}`,
-      nome: formData.nome,
-      email: formData.email,
-      role: formData.role,
-      account_id: formData.role === 'super_admin' ? null : formData.account_id || null,
-      status: 'active',
-      permissions: formData.role === 'agent' ? formData.permissions : undefined,
-      last_login_at: null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    setUsers([newUser, ...users]);
-    setIsCreateOpen(false);
-    setFormData({ 
-      nome: '', 
-      email: '', 
-      role: 'agent', 
-      account_id: '', 
-      password: '', 
-      confirmPassword: '',
-      permissions: [] 
-    });
-    setShowPassword(false);
-    toast.success('Usuário criado com sucesso!');
+    setCreateLoading(true);
+    
+    try {
+      const newUser = await usersCloudService.create({
+        nome: formData.nome,
+        email: formData.email,
+        password: formData.password,
+        role: formData.role,
+        account_id: formData.role === 'super_admin' ? undefined : formData.account_id || undefined,
+        permissions: formData.role === 'agent' ? formData.permissions : undefined,
+      });
+      
+      setUsers([newUser, ...users]);
+      setIsCreateOpen(false);
+      setFormData({ 
+        nome: '', 
+        email: '', 
+        role: 'agent', 
+        account_id: '', 
+        password: '', 
+        confirmPassword: '',
+        permissions: [] 
+      });
+      setShowPassword(false);
+      toast.success('Usuário criado com sucesso!');
+    } catch (error: any) {
+      console.error('Error creating user:', error);
+      toast.error(error.message || 'Erro ao criar usuário');
+    } finally {
+      setCreateLoading(false);
+    }
   };
 
-  const handleEditOpen = (user: User) => {
+  const handleEditOpen = (user: UserWithRole) => {
     setEditFormData({
       nome: user.nome,
       email: user.email,
@@ -288,7 +310,7 @@ export default function SuperAdminUsersPage() {
       return;
     }
     
-    const updatedUser: User = {
+    const updatedUser: UserWithRole = {
       ...editingUser,
       nome: editFormData.nome,
       email: editFormData.email,
@@ -315,7 +337,7 @@ export default function SuperAdminUsersPage() {
   };
 
   // Opens delete confirmation modal
-  const openDeleteConfirm = (user: User) => {
+  const openDeleteConfirm = (user: UserWithRole) => {
     setUserToDelete(user);
     setDeletePassword('');
     setShowDeletePassword(false);
@@ -356,7 +378,7 @@ export default function SuperAdminUsersPage() {
     toast.success('Usuário excluído com sucesso!');
   };
 
-  const handleImpersonate = (user: User) => {
+  const handleImpersonate = (user: UserWithRole) => {
     impersonate(user.id);
     // Navigate based on user role
     if (user.role === 'admin') {
@@ -596,7 +618,7 @@ export default function SuperAdminUsersPage() {
                     <p className="text-sm text-destructive">As senhas não coincidem</p>
                   )}
                   {formData.password && formData.password.length < 6 && (
-                    <p className="text-sm text-amber-600">A senha deve ter pelo menos 6 caracteres</p>
+                    <p className="text-sm text-amber-600 dark:text-amber-400">A senha deve ter pelo menos 6 caracteres</p>
                   )}
                 </div>
               </div>
@@ -605,8 +627,15 @@ export default function SuperAdminUsersPage() {
               <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
                 Cancelar
               </Button>
-              <Button onClick={handleCreate} disabled={!isCreateFormValid()}>
-                Criar Usuário
+              <Button onClick={handleCreate} disabled={!isCreateFormValid() || createLoading}>
+                {createLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Criando...
+                  </>
+                ) : (
+                  'Criar Usuário'
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -657,7 +686,27 @@ export default function SuperAdminUsersPage() {
                 </TableRow>
               </TableHeader>
             <TableBody>
-              {filteredUsers.map((user) => (
+              {usersLoading ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-12">
+                    <div className="flex flex-col items-center gap-2">
+                      <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">Carregando usuários...</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : filteredUsers.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-12">
+                    <p className="text-sm text-muted-foreground">
+                      {searchTerm || roleFilter !== 'all' 
+                        ? 'Nenhum usuário encontrado com os filtros aplicados' 
+                        : 'Nenhum usuário cadastrado'}
+                    </p>
+                  </TableCell>
+                </TableRow>
+              ) : (
+              filteredUsers.map((user) => (
                 <TableRow key={user.id}>
                   <TableCell>
                     <div className="flex items-center gap-3">
@@ -740,7 +789,8 @@ export default function SuperAdminUsersPage() {
                     </DropdownMenu>
                   </TableCell>
                 </TableRow>
-              ))}
+              ))
+              )}
             </TableBody>
           </Table>
           </div>
