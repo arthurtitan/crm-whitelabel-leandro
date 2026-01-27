@@ -43,8 +43,8 @@ export default function SuperAdminLayout({ children }: SidebarLayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate('/login');
   };
 
