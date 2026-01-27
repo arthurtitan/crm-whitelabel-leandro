@@ -103,7 +103,7 @@ const initialFormData: CreateFormData = {
   status: 'active',
   limiteAgentes: 10,
   chatwootEnabled: false,
-  chatwootBaseUrl: '',
+  chatwootBaseUrl: 'https://app.chatwoot.com',
   chatwootAccountId: '',
   chatwootApiKey: '',
 };
