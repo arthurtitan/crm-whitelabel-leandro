@@ -25,13 +25,31 @@ interface ChatwootConversation {
   updated_at: number;
 }
 
+interface ChatwootLabel {
+  id: number;
+  title: string;
+  description?: string;
+  color: string;
+  show_on_sidebar: boolean;
+}
+
 interface SyncResult {
   success: boolean;
   contacts_created: number;
   contacts_updated: number;
   lead_tags_applied: number;
   lead_tags_removed: number;
+  stages_created: number;
   errors: string[];
+}
+
+// Helper to generate slug from label name
+function generateSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/\s+/g, '_')  // Replace spaces with underscores
+    .replace(/[^a-z0-9_]/g, '')  // Remove special chars except underscores
+    .substring(0, 50);  // Limit length
 }
 
 serve(async (req) => {
@@ -81,10 +99,65 @@ serve(async (req) => {
       );
     }
 
+    const baseUrl = chatwoot_base_url.replace(/\/$/, '');
+
+    // Fetch all labels from Chatwoot for auto-creating stages
+    console.log('[Sync Contacts] Fetching labels from Chatwoot...');
+    const labelsUrl = `${baseUrl}/api/v1/accounts/${chatwoot_account_id}/labels`;
+    const labelsResponse = await fetch(labelsUrl, {
+      headers: {
+        'api_access_token': chatwoot_api_key,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const chatwootLabelsMap = new Map<string, ChatwootLabel>();
+    if (labelsResponse.ok) {
+      const labelsData = await labelsResponse.json();
+      const labels: ChatwootLabel[] = labelsData.payload || labelsData || [];
+      for (const label of labels) {
+        chatwootLabelsMap.set(label.title.toLowerCase(), label);
+      }
+      console.log('[Sync Contacts] Loaded', chatwootLabelsMap.size, 'labels from Chatwoot');
+    } else {
+      console.warn('[Sync Contacts] Could not fetch labels from Chatwoot');
+    }
+
+    // Get or create default funnel for this account
+    let { data: defaultFunnel } = await supabaseAdmin
+      .from('funnels')
+      .select('id')
+      .eq('account_id', account_id)
+      .eq('is_default', true)
+      .maybeSingle();
+
+    if (!defaultFunnel) {
+      // Create default funnel if it doesn't exist
+      const { data: newFunnel, error: funnelError } = await supabaseAdmin
+        .from('funnels')
+        .insert({
+          account_id,
+          name: 'Funil Principal',
+          slug: 'funil_principal',
+          is_default: true,
+        })
+        .select('id')
+        .single();
+
+      if (funnelError) {
+        console.error('[Sync Contacts] Failed to create default funnel:', funnelError);
+        return new Response(
+          JSON.stringify({ error: 'Failed to create default funnel' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      defaultFunnel = newFunnel;
+    }
+
     // Get existing tags for this account (to map labels to tag_ids)
     const { data: existingTags } = await supabaseAdmin
       .from('tags')
-      .select('id, name, slug, chatwoot_label_id')
+      .select('id, name, slug, chatwoot_label_id, ordem')
       .eq('account_id', account_id)
       .eq('type', 'stage')
       .eq('ativo', true);
@@ -92,7 +165,6 @@ serve(async (req) => {
     // Create multiple lookup maps for flexible matching
     const tagsBySlug = new Map(existingTags?.map(t => [t.slug.toLowerCase(), t]) || []);
     const tagsByName = new Map(existingTags?.map(t => [t.name.toLowerCase(), t]) || []);
-    // Also map by normalized name (removing special chars like underscores)
     const tagsByNormalizedName = new Map(existingTags?.map(t => [
       t.name.toLowerCase().replace(/[^a-z0-9]/g, ''), 
       t
@@ -103,18 +175,18 @@ serve(async (req) => {
       const normalizedLabel = labelSlug.toLowerCase();
       const strippedLabel = normalizedLabel.replace(/[^a-z0-9]/g, '');
       
-      // Try exact slug match first
       if (tagsBySlug.has(normalizedLabel)) return tagsBySlug.get(normalizedLabel);
-      // Try exact name match
       if (tagsByName.has(normalizedLabel)) return tagsByName.get(normalizedLabel);
-      // Try normalized name match (strips underscores, hyphens, etc.)
       if (tagsByNormalizedName.has(strippedLabel)) return tagsByNormalizedName.get(strippedLabel);
-      // Try slug match with stripped version
       if (tagsBySlug.has(strippedLabel)) return tagsBySlug.get(strippedLabel);
       
       return undefined;
     };
+
     console.log('[Sync Contacts] Found', existingTags?.length || 0, 'existing stage tags');
+
+    // Get max order for new stages
+    let maxOrder = existingTags?.reduce((max, t) => Math.max(max, t.ordem || 0), 0) || 0;
 
     // Fetch all conversations from Chatwoot (paginated)
     const allConversations: ChatwootConversation[] = [];
@@ -122,7 +194,7 @@ serve(async (req) => {
     let hasMore = true;
 
     while (hasMore) {
-      const conversationsUrl = `${chatwoot_base_url}/api/v1/accounts/${chatwoot_account_id}/conversations?status=all&page=${page}`;
+      const conversationsUrl = `${baseUrl}/api/v1/accounts/${chatwoot_account_id}/conversations?status=all&page=${page}`;
       console.log('[Sync Contacts] Fetching page', page, 'from:', conversationsUrl);
 
       const response = await fetch(conversationsUrl, {
@@ -146,7 +218,6 @@ serve(async (req) => {
       } else {
         allConversations.push(...conversations);
         page++;
-        // Safety limit
         if (page > 50) hasMore = false;
       }
     }
@@ -159,6 +230,7 @@ serve(async (req) => {
       contacts_updated: 0,
       lead_tags_applied: 0,
       lead_tags_removed: 0,
+      stages_created: 0,
       errors: [],
     };
 
@@ -234,62 +306,111 @@ serve(async (req) => {
           result.contacts_created++;
         }
 
-        // Get current lead_tags for this contact (only stage tags we manage)
-        const stageTagIds = existingTags?.map(t => t.id) || [];
-        if (stageTagIds.length === 0) continue;
-
-        const { data: currentLeadTags } = await supabaseAdmin
-          .from('lead_tags')
-          .select('id, tag_id')
-          .eq('contact_id', contactId)
-          .in('tag_id', stageTagIds);
-
-        const currentTagIds = new Set(currentLeadTags?.map(lt => lt.tag_id) || []);
-        
-        // Determine which tags should be applied based on Chatwoot labels
+        // Process labels for this conversation
         const chatwootLabels = conv.labels || [];
-        const expectedTagIds = new Set<string>();
-        
         console.log('[Sync Contacts] Processing labels for contact', contactId, ':', chatwootLabels);
-        
+
+        // Find stage labels and auto-create if needed
+        const stageLabelsWithTags: { label: string; tag: any }[] = [];
+
         for (const labelSlug of chatwootLabels) {
-          const tag = findTagByLabel(labelSlug);
-          if (tag) {
-            expectedTagIds.add(tag.id);
-            console.log('[Sync Contacts] Matched label', labelSlug, 'to tag', tag.name);
-          } else {
-            console.log('[Sync Contacts] No match for label:', labelSlug);
+          let tag = findTagByLabel(labelSlug);
+
+          // If tag doesn't exist, create it as a stage
+          if (!tag) {
+            console.log('[Sync Contacts] Label not found as stage, creating:', labelSlug);
+            
+            // Get label details from Chatwoot (color, etc.)
+            const chatwootLabel = chatwootLabelsMap.get(labelSlug.toLowerCase());
+            const labelColor = chatwootLabel?.color || '#6B7280';
+            const labelName = chatwootLabel?.title || labelSlug;
+
+            // Create new stage tag
+            maxOrder++;
+            const newSlug = generateSlug(labelName);
+
+            const { data: newTag, error: tagError } = await supabaseAdmin
+              .from('tags')
+              .insert({
+                account_id,
+                funnel_id: defaultFunnel!.id,
+                name: labelName,
+                slug: newSlug,
+                color: labelColor.startsWith('#') ? labelColor : `#${labelColor}`,
+                type: 'stage',
+                ativo: true,
+                ordem: maxOrder,
+                chatwoot_label_id: chatwootLabel?.id || null,
+              })
+              .select('id, name, slug, chatwoot_label_id, ordem')
+              .single();
+
+            if (tagError || !newTag) {
+              console.error('[Sync Contacts] Failed to create stage tag:', tagError);
+              result.errors.push(`Failed to create stage for label ${labelSlug}: ${tagError?.message}`);
+              continue;
+            }
+
+            tag = newTag;
+            result.stages_created++;
+
+            // Update lookup maps with new tag
+            tagsBySlug.set(newSlug.toLowerCase(), tag);
+            tagsByName.set(labelName.toLowerCase(), tag);
+            tagsByNormalizedName.set(labelName.toLowerCase().replace(/[^a-z0-9]/g, ''), tag);
+
+            console.log('[Sync Contacts] Created new stage tag:', tag.name, 'with ID:', tag.id);
           }
+
+          stageLabelsWithTags.push({ label: labelSlug, tag });
         }
 
-        // Remove tags that are no longer in Chatwoot labels
-        for (const leadTag of (currentLeadTags || [])) {
-          if (!expectedTagIds.has(leadTag.tag_id)) {
-            const { error: deleteError } = await supabaseAdmin
-              .from('lead_tags')
-              .delete()
-              .eq('id', leadTag.id);
+        // Apply "last label wins" logic - only keep the last stage label
+        // Chatwoot arrays typically have newest labels at the end
+        const lastStageTag = stageLabelsWithTags.length > 0 
+          ? stageLabelsWithTags[stageLabelsWithTags.length - 1].tag 
+          : null;
 
-            if (!deleteError) {
-              result.lead_tags_removed++;
-              console.log('[Sync Contacts] Removed lead_tag for contact:', contactId, 'tag:', leadTag.tag_id);
+        // Get current lead_tags for this contact (all stage tags we manage)
+        const allStageTagIds = Array.from(tagsBySlug.values()).map(t => t.id);
+        
+        if (allStageTagIds.length > 0) {
+          const { data: currentLeadTags } = await supabaseAdmin
+            .from('lead_tags')
+            .select('id, tag_id')
+            .eq('contact_id', contactId)
+            .in('tag_id', allStageTagIds);
+
+          const currentTagIds = new Set(currentLeadTags?.map(lt => lt.tag_id) || []);
+
+          // Remove all existing stage tags that are not the target tag
+          for (const leadTag of (currentLeadTags || [])) {
+            if (!lastStageTag || leadTag.tag_id !== lastStageTag.id) {
+              const { error: deleteError } = await supabaseAdmin
+                .from('lead_tags')
+                .delete()
+                .eq('id', leadTag.id);
+
+              if (!deleteError) {
+                result.lead_tags_removed++;
+                console.log('[Sync Contacts] Removed lead_tag for contact:', contactId, 'tag:', leadTag.tag_id);
+              }
             }
           }
-        }
 
-        // Add tags that exist in Chatwoot but not in our DB
-        for (const tagId of expectedTagIds) {
-          if (!currentTagIds.has(tagId)) {
+          // Apply the last stage tag if not already applied
+          if (lastStageTag && !currentTagIds.has(lastStageTag.id)) {
             const { error: tagError } = await supabaseAdmin
               .from('lead_tags')
               .insert({
                 contact_id: contactId,
-                tag_id: tagId,
+                tag_id: lastStageTag.id,
                 source: 'chatwoot_sync',
               });
 
             if (!tagError) {
               result.lead_tags_applied++;
+              console.log('[Sync Contacts] Applied stage tag:', lastStageTag.name, 'to contact:', contactId);
             }
           }
         }

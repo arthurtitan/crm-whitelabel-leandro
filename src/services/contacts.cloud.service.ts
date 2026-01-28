@@ -11,6 +11,7 @@ export interface CreateContactInput {
 
 export interface CreateContactWithChatwootInput extends CreateContactInput {
   create_conversation?: boolean;
+  initial_stage_tag_id?: string; // Tag ID to get the label name from
 }
 
 export interface CreateContactResult {
@@ -58,7 +59,7 @@ export async function createContact(input: CreateContactInput): Promise<CreateCo
 export async function createContactWithChatwoot(
   input: CreateContactWithChatwootInput
 ): Promise<CreateContactResult> {
-  const { account_id, nome, telefone, email, origem, create_conversation = true } = input;
+  const { account_id, nome, telefone, email, origem, create_conversation = true, initial_stage_tag_id } = input;
 
   // First, create contact in Supabase
   const { data: contactData, error: contactError } = await supabase
@@ -80,6 +81,21 @@ export async function createContactWithChatwoot(
 
   const contact_id = contactData.id;
 
+  // Get the label name if initial_stage_tag_id is provided
+  let initial_label_name: string | undefined;
+  if (initial_stage_tag_id) {
+    const { data: tagData } = await supabase
+      .from('tags')
+      .select('slug')
+      .eq('id', initial_stage_tag_id)
+      .single();
+
+    if (tagData?.slug) {
+      initial_label_name = tagData.slug;
+      console.log('[contacts.cloud.service] Initial label name:', initial_label_name);
+    }
+  }
+
   // Call edge function to create contact in Chatwoot
   try {
     const { data: chatwootResult, error: chatwootError } = await supabase.functions.invoke(
@@ -91,6 +107,7 @@ export async function createContactWithChatwoot(
           phone: telefone,
           email,
           create_conversation,
+          initial_label_name,
         },
       }
     );

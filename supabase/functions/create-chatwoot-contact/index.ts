@@ -11,6 +11,7 @@ interface CreateChatwootContactRequest {
   phone: string;
   email?: string;
   create_conversation?: boolean;
+  initial_label_name?: string; // Label to apply to the conversation after creation
 }
 
 interface ChatwootContactResponse {
@@ -49,7 +50,7 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const body: CreateChatwootContactRequest = await req.json();
-    const { account_id, name, phone, email, create_conversation = true } = body;
+    const { account_id, name, phone, email, create_conversation = true, initial_label_name } = body;
 
     // Validate required fields
     if (!account_id || !name || !phone) {
@@ -126,7 +127,6 @@ Deno.serve(async (req) => {
     console.log('[create-chatwoot-contact] Chatwoot contact response:', JSON.stringify(contactData));
     
     // Handle different response formats from Chatwoot API
-    // Can be: { payload: { id: 123, ... } } or { payload: { contact: { id: 123 } } } or { id: 123 }
     let chatwoot_contact_id: number | undefined;
     if (contactData.payload?.contact?.id) {
       chatwoot_contact_id = contactData.payload.contact.id;
@@ -189,6 +189,32 @@ Deno.serve(async (req) => {
             const conversationData: ChatwootConversationResponse = await conversationResponse.json();
             chatwoot_conversation_id = conversationData.id;
             console.log('[create-chatwoot-contact] Conversation created with ID:', chatwoot_conversation_id);
+
+            // Apply initial label if provided
+            if (initial_label_name && chatwoot_conversation_id) {
+              console.log('[create-chatwoot-contact] Applying initial label:', initial_label_name);
+              
+              const labelUrl = `${baseUrl}/api/v1/accounts/${chatwoot_account_id}/conversations/${chatwoot_conversation_id}/labels`;
+              
+              const labelResponse = await fetch(labelUrl, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'api_access_token': chatwoot_api_key,
+                },
+                body: JSON.stringify({
+                  labels: [initial_label_name],
+                }),
+              });
+
+              if (labelResponse.ok) {
+                console.log('[create-chatwoot-contact] Initial label applied successfully');
+              } else {
+                const labelError = await labelResponse.text();
+                console.warn('[create-chatwoot-contact] Failed to apply initial label:', labelError);
+                // Don't fail the whole request, just log the warning
+              }
+            }
           } else {
             const errorText = await conversationResponse.text();
             console.warn('[create-chatwoot-contact] Failed to create conversation:', errorText);
