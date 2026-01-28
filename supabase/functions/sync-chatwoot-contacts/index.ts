@@ -174,7 +174,7 @@ serve(async (req) => {
           .select('id')
           .eq('account_id', account_id)
           .eq('chatwoot_contact_id', sender.id)
-          .single();
+          .maybeSingle();
 
         let contactId: string;
 
