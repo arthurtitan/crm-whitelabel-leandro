@@ -65,6 +65,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthState(prev => ({ ...prev, authError: null }));
   }, []);
 
+  // Helper to create a timeout promise
+  const withTimeout = <T,>(promise: Promise<T>, ms: number, errorMsg: string): Promise<T> => {
+    return Promise.race([
+      promise,
+      new Promise<T>((_, reject) => 
+        setTimeout(() => reject(new Error(errorMsg)), ms)
+      )
+    ]);
+  };
+
   // Hydrate user data - stable function via useCallback with no dependencies
   const hydrateUser = useCallback(async (supabaseUser: SupabaseUser): Promise<boolean> => {
     console.log('[Auth] Hydrating user:', supabaseUser.id);
@@ -75,19 +85,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      // Fetch profile and role in parallel
-      const [profileResult, roleResult] = await Promise.all([
-        supabase
-          .from('profiles')
-          .select('user_id, email, nome, status, permissions, account_id, chatwoot_agent_id')
-          .eq('user_id', supabaseUser.id)
-          .maybeSingle(),
-        supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', supabaseUser.id)
-          .maybeSingle(),
-      ]);
+      // Fetch profile and role in parallel with timeout
+      console.log('[Auth] Fetching profile and role...');
+      
+      const profilePromise = supabase
+        .from('profiles')
+        .select('user_id, email, nome, status, permissions, account_id, chatwoot_agent_id')
+        .eq('user_id', supabaseUser.id)
+        .maybeSingle();
+        
+      const rolePromise = supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', supabaseUser.id)
+        .maybeSingle();
+      
+      const [profileResult, roleResult] = await withTimeout(
+        Promise.all([Promise.resolve(profilePromise), Promise.resolve(rolePromise)]),
+        10000, // 10 second timeout
+        'Timeout ao carregar perfil'
+      );
+
+      console.log('[Auth] Profile result:', profileResult.data ? 'found' : 'not found', profileResult.error?.message);
+      console.log('[Auth] Role result:', roleResult.data?.role || 'none', roleResult.error?.message);
 
       const { data: profile, error: profileError } = profileResult;
       const { data: userRole, error: roleError } = roleResult;
@@ -114,11 +134,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Fetch account only for non-super_admin users
       let account: Account | null = null;
       if (role !== 'super_admin' && profile.account_id) {
-        const { data: accountData, error: accountError } = await supabase
+        console.log('[Auth] Fetching account...');
+        const accountPromise = supabase
           .from('accounts')
           .select('id, nome, status, chatwoot_base_url, chatwoot_account_id, chatwoot_api_key')
           .eq('id', profile.account_id)
           .maybeSingle();
+          
+        const accountResult = await withTimeout(
+          Promise.resolve(accountPromise),
+          5000,
+          'Timeout ao carregar conta'
+        );
+        
+        const { data: accountData, error: accountError } = accountResult;
 
         if (!accountError && accountData) {
           account = {
@@ -227,19 +256,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // 1. Set up auth listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      (event, session) => {
         if (!mountedRef.current) return;
         
         console.log('[Auth] Event:', event, 'User:', session?.user?.id || 'none');
 
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           if (session?.user) {
-            // Small delay to let initial session processing complete first
-            if (!initialSessionProcessed) {
-              console.log('[Auth] Waiting for initial session processing...');
-              await new Promise(resolve => setTimeout(resolve, 50));
-            }
-            await processSession(session.user, `listener:${event}`);
+            // CRITICAL: Use setTimeout to escape the auth callback context
+            // This allows the Supabase client to properly update its auth state
+            // before we make authenticated requests
+            const userToHydrate = session.user;
+            setTimeout(() => {
+              if (!mountedRef.current) return;
+              processSession(userToHydrate, `listener:${event}`);
+            }, 0);
           }
         } else if (event === 'SIGNED_OUT') {
           console.log('[Auth] User signed out, clearing state');
