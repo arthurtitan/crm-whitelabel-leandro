@@ -1,18 +1,14 @@
-import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import {
   GoogleConnection,
   CalendarEvent,
   CalendarSettings,
   CreateEventDTO,
   CalendarViewMode,
-  ConnectionStatus,
 } from '@/types/calendar';
 import {
-  mockConnectedState,
-  mockDisconnectedState,
-  mockCalendarEvents,
   mockCalendarSettings,
-  generateMockAvailability,
 } from '@/data/mockCalendarData';
 import { toast } from 'sonner';
 
@@ -22,6 +18,7 @@ interface CalendarContextType {
   // Connection state
   connection: GoogleConnection;
   isConnected: boolean;
+  isLoading: boolean;
   
   // Events
   events: CalendarEvent[];
@@ -35,6 +32,7 @@ interface CalendarContextType {
   connectGoogle: () => Promise<void>;
   disconnectGoogle: () => Promise<void>;
   syncNow: () => Promise<void>;
+  checkConnectionStatus: () => Promise<void>;
   
   // Actions - Settings
   updateSettings: (settings: Partial<CalendarSettings>) => Promise<void>;
@@ -45,6 +43,7 @@ interface CalendarContextType {
   updateEvent: (id: string, data: Partial<CreateEventDTO>) => Promise<CalendarEvent>;
   deleteEvent: (id: string) => Promise<void>;
   selectEvent: (event: CalendarEvent | null) => void;
+  loadEvents: () => Promise<void>;
   
   // Actions - Navigation
   setCurrentDate: (date: Date) => void;
@@ -67,69 +66,194 @@ interface CalendarProviderProps {
   accountId: string;
 }
 
+const defaultConnection: GoogleConnection = {
+  status: 'disconnected',
+  email: null,
+  connectedAt: null,
+  calendars: [],
+  settings: null,
+  lastSync: null,
+};
+
 export function CalendarProvider({ children, accountId }: CalendarProviderProps) {
   // State
-  const [connection, setConnection] = useState<GoogleConnection>(mockDisconnectedState);
-  const [events, setEvents] = useState<CalendarEvent[]>(mockCalendarEvents);
+  const [connection, setConnection] = useState<GoogleConnection>(defaultConnection);
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [viewMode, setViewMode] = useState<CalendarViewMode>('week');
+  const [isLoading, setIsLoading] = useState(true);
 
   const isConnected = connection.status === 'connected';
+
+  // ============= LOAD EVENTS FROM DATABASE =============
+
+  const loadEvents = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('calendar_events')
+        .select('*')
+        .eq('account_id', accountId)
+        .order('start_time', { ascending: true });
+
+      if (error) {
+        console.error('Error loading events:', error);
+        return;
+      }
+
+      const mappedEvents: CalendarEvent[] = (data || []).map((event) => ({
+        id: event.id,
+        title: event.title,
+        start: event.start_time,
+        end: event.end_time,
+        type: (event.type as CalendarEvent['type']) || 'appointment',
+        source: (event.source as 'google' | 'crm') || 'crm',
+        status: (event.status as CalendarEvent['status']) || 'scheduled',
+        location: event.location || undefined,
+        meetingLink: event.meeting_link || undefined,
+        googleEventId: event.google_event_id || undefined,
+        googleCalendarId: event.google_calendar_id || undefined,
+        attendees: [],
+        notes: event.notes || undefined,
+        createdBy: event.created_by || undefined,
+        createdAt: event.created_at || undefined,
+        contactId: event.contact_id || undefined,
+      }));
+
+      setEvents(mappedEvents);
+    } catch (error) {
+      console.error('Failed to load events:', error);
+    }
+  }, [accountId]);
+
+  // ============= CHECK CONNECTION STATUS =============
+
+  const checkConnectionStatus = useCallback(async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setIsLoading(false);
+        return;
+      }
+
+      const response = await supabase.functions.invoke('google-calendar-status', {});
+      
+      if (response.error) {
+        console.error('Status check error:', response.error);
+        setConnection(defaultConnection);
+      } else if (response.data) {
+        const { connected, email, needsReauth } = response.data;
+        
+        if (needsReauth) {
+          setConnection({
+            ...defaultConnection,
+            status: 'error',
+            email,
+          });
+        } else if (connected) {
+          setConnection({
+            status: 'connected',
+            email,
+            connectedAt: new Date().toISOString(),
+            calendars: [],
+            settings: mockCalendarSettings,
+            lastSync: new Date().toISOString(),
+          });
+        } else {
+          setConnection(defaultConnection);
+        }
+      }
+    } catch (error) {
+      console.error('Connection status check failed:', error);
+      setConnection(defaultConnection);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // ============= INITIAL LOAD =============
+
+  useEffect(() => {
+    if (accountId) {
+      checkConnectionStatus();
+      loadEvents();
+    }
+  }, [accountId, checkConnectionStatus, loadEvents]);
 
   // ============= CONNECTION ACTIONS =============
 
   const connectGoogle = useCallback(async () => {
-    // TODO: GET /api/integrations/google/auth-url
-    // Redirect to Google OAuth
-    
-    // Mock: Simulate connection process
     setConnection(prev => ({ ...prev, status: 'connecting' }));
-    
-    // Simulate OAuth delay
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // Mock: Set as connected
-    setConnection({
-      ...mockConnectedState,
-      lastSync: new Date().toISOString(),
-    });
-    
-    toast.success('Google Calendar conectado com sucesso!');
+
+    try {
+      const response = await supabase.functions.invoke('google-calendar-auth-url', {});
+      
+      if (response.error) {
+        throw new Error(response.error.message || 'Erro ao iniciar conexão');
+      }
+
+      if (response.data?.authUrl) {
+        // Redirect to Google OAuth
+        window.location.href = response.data.authUrl;
+      } else {
+        throw new Error('URL de autorização não recebida');
+      }
+    } catch (error: any) {
+      console.error('Connect error:', error);
+      setConnection(defaultConnection);
+      toast.error(error.message || 'Erro ao conectar com Google Calendar');
+    }
   }, []);
 
   const disconnectGoogle = useCallback(async () => {
-    // TODO: DELETE /api/integrations/google
-    
-    // Mock: Disconnect
-    setConnection(mockDisconnectedState);
-    toast.success('Google Calendar desconectado');
+    try {
+      const response = await supabase.functions.invoke('google-calendar-disconnect', {});
+      
+      if (response.error) {
+        throw new Error(response.error.message || 'Erro ao desconectar');
+      }
+
+      setConnection(defaultConnection);
+      toast.success('Google Calendar desconectado');
+    } catch (error: any) {
+      console.error('Disconnect error:', error);
+      toast.error(error.message || 'Erro ao desconectar');
+    }
   }, []);
 
   const syncNow = useCallback(async () => {
-    // TODO: POST /api/integrations/google/sync
-    
     if (!isConnected) return;
     
     setConnection(prev => ({ ...prev, status: 'syncing' }));
-    
-    // Simulate sync delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    setConnection(prev => ({
-      ...prev,
-      status: 'connected',
-      lastSync: new Date().toISOString(),
-    }));
-    
-    toast.success('Calendário sincronizado!');
-  }, [isConnected]);
+
+    try {
+      const response = await supabase.functions.invoke('google-calendar-sync', {});
+      
+      if (response.error) {
+        throw new Error(response.error.message || 'Erro ao sincronizar');
+      }
+
+      // Reload events from database
+      await loadEvents();
+
+      setConnection(prev => ({
+        ...prev,
+        status: 'connected',
+        lastSync: new Date().toISOString(),
+      }));
+
+      const { synced, created, updated } = response.data || {};
+      toast.success(`Sincronizado! ${created || 0} novos, ${updated || 0} atualizados`);
+    } catch (error: any) {
+      console.error('Sync error:', error);
+      setConnection(prev => ({ ...prev, status: 'connected' }));
+      toast.error(error.message || 'Erro ao sincronizar');
+    }
+  }, [isConnected, loadEvents]);
 
   // ============= SETTINGS ACTIONS =============
 
   const updateSettings = useCallback(async (newSettings: Partial<CalendarSettings>) => {
-    // TODO: PUT /api/integrations/google/settings
-    
     setConnection(prev => ({
       ...prev,
       settings: prev.settings ? { ...prev.settings, ...newSettings } : mockCalendarSettings,
@@ -150,61 +274,103 @@ export function CalendarProvider({ children, accountId }: CalendarProviderProps)
   // ============= EVENT ACTIONS =============
 
   const createEvent = useCallback(async (data: CreateEventDTO): Promise<CalendarEvent> => {
-    // TODO: POST /api/calendar/events
-    
-    const newEvent: CalendarEvent = {
-      id: `evt-${Date.now()}`,
-      title: data.title,
-      start: data.start,
-      end: data.end,
-      type: data.type,
+    const { data: newEvent, error } = await supabase
+      .from('calendar_events')
+      .insert({
+        account_id: accountId,
+        title: data.title,
+        start_time: data.start,
+        end_time: data.end,
+        type: data.type,
+        location: data.location,
+        notes: data.notes,
+        contact_id: data.contactId,
+        source: 'crm',
+        status: 'scheduled',
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Create event error:', error);
+      toast.error('Erro ao criar evento');
+      throw error;
+    }
+
+    const mappedEvent: CalendarEvent = {
+      id: newEvent.id,
+      title: newEvent.title,
+      start: newEvent.start_time,
+      end: newEvent.end_time,
+      type: (newEvent.type as CalendarEvent['type']) || 'appointment',
       source: 'crm',
       status: 'scheduled',
-      location: data.location,
-      meetingLink: data.createGoogleMeet ? `https://meet.google.com/${Math.random().toString(36).slice(2, 11)}` : undefined,
-      attendees: data.attendeeEmails?.map(email => ({
-        name: email.split('@')[0],
-        email,
-        status: 'pending' as const,
-      })) || [],
-      notes: data.notes,
-      createdBy: 'current-user',
-      createdAt: new Date().toISOString(),
+      location: newEvent.location || undefined,
+      attendees: [],
+      notes: newEvent.notes || undefined,
+      createdBy: newEvent.created_by || 'system',
+      createdAt: newEvent.created_at || new Date().toISOString(),
     };
-    
-    setEvents(prev => [...prev, newEvent]);
+
+    setEvents(prev => [...prev, mappedEvent]);
     toast.success('Evento criado com sucesso!');
     
-    return newEvent;
-  }, []);
+    return mappedEvent;
+  }, [accountId]);
 
   const updateEvent = useCallback(async (id: string, data: Partial<CreateEventDTO>): Promise<CalendarEvent> => {
-    // TODO: PUT /api/calendar/events/:id
-    
-    let updatedEvent: CalendarEvent | undefined;
-    
-    setEvents(prev => prev.map(event => {
-      if (event.id === id) {
-        updatedEvent = {
-          ...event,
-          title: data.title ?? event.title,
-          start: data.start ?? event.start,
-          end: data.end ?? event.end,
-          location: data.location ?? event.location,
-          notes: data.notes ?? event.notes,
-        };
-        return updatedEvent;
-      }
-      return event;
-    }));
-    
+    const { data: updatedEvent, error } = await supabase
+      .from('calendar_events')
+      .update({
+        title: data.title,
+        start_time: data.start,
+        end_time: data.end,
+        location: data.location,
+        notes: data.notes,
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Update event error:', error);
+      toast.error('Erro ao atualizar evento');
+      throw error;
+    }
+
+    const mappedEvent: CalendarEvent = {
+      id: updatedEvent.id,
+      title: updatedEvent.title,
+      start: updatedEvent.start_time,
+      end: updatedEvent.end_time,
+      type: (updatedEvent.type as CalendarEvent['type']) || 'appointment',
+      source: (updatedEvent.source as 'google' | 'crm') || 'crm',
+      status: (updatedEvent.status as CalendarEvent['status']) || 'scheduled',
+      location: updatedEvent.location || undefined,
+      attendees: [],
+      notes: updatedEvent.notes || undefined,
+      createdBy: updatedEvent.created_by || 'system',
+      createdAt: updatedEvent.created_at || new Date().toISOString(),
+    };
+
+    setEvents(prev => prev.map(event => event.id === id ? mappedEvent : event));
     toast.success('Evento atualizado!');
-    return updatedEvent!;
+    
+    return mappedEvent;
   }, []);
 
   const deleteEvent = useCallback(async (id: string) => {
-    // TODO: DELETE /api/calendar/events/:id
-    
+    const { error } = await supabase
+      .from('calendar_events')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Delete event error:', error);
+      toast.error('Erro ao excluir evento');
+      throw error;
+    }
+
     setEvents(prev => prev.filter(event => event.id !== id));
     setSelectedEvent(null);
     toast.success('Evento excluído!');
@@ -251,16 +417,12 @@ export function CalendarProvider({ children, accountId }: CalendarProviderProps)
   // ============= PUBLIC AVAILABILITY =============
 
   const getAvailability = useCallback((month: string) => {
-    // TODO: GET /api/public/availability/:accountSlug?month=...
-    return generateMockAvailability(month);
+    // TODO: Implement real availability based on events
+    return {};
   }, []);
 
   const createBooking = useCallback(async (data: any) => {
-    // TODO: POST /api/public/bookings
     console.log('Creating booking:', data);
-    
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
     return {
       success: true,
       eventId: `booking-${Date.now()}`,
@@ -272,6 +434,7 @@ export function CalendarProvider({ children, accountId }: CalendarProviderProps)
   const value = useMemo(() => ({
     connection,
     isConnected,
+    isLoading,
     events,
     selectedEvent,
     currentDate,
@@ -279,12 +442,14 @@ export function CalendarProvider({ children, accountId }: CalendarProviderProps)
     connectGoogle,
     disconnectGoogle,
     syncNow,
+    checkConnectionStatus,
     updateSettings,
     selectCalendar,
     createEvent,
     updateEvent,
     deleteEvent,
     selectEvent,
+    loadEvents,
     setCurrentDate,
     setViewMode,
     goToToday,
@@ -295,6 +460,7 @@ export function CalendarProvider({ children, accountId }: CalendarProviderProps)
   }), [
     connection,
     isConnected,
+    isLoading,
     events,
     selectedEvent,
     currentDate,
@@ -302,12 +468,14 @@ export function CalendarProvider({ children, accountId }: CalendarProviderProps)
     connectGoogle,
     disconnectGoogle,
     syncNow,
+    checkConnectionStatus,
     updateSettings,
     selectCalendar,
     createEvent,
     updateEvent,
     deleteEvent,
     selectEvent,
+    loadEvents,
     goToToday,
     goToPrevious,
     goToNext,

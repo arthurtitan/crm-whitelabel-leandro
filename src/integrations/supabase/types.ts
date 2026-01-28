@@ -260,6 +260,53 @@ export type Database = {
           },
         ]
       }
+      google_calendar_tokens: {
+        Row: {
+          access_token: string
+          account_id: string
+          calendar_id: string | null
+          connected_email: string | null
+          created_at: string | null
+          expires_at: string
+          id: string
+          refresh_token: string
+          token_type: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          access_token: string
+          account_id: string
+          calendar_id?: string | null
+          connected_email?: string | null
+          created_at?: string | null
+          expires_at: string
+          id?: string
+          refresh_token: string
+          token_type?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          access_token?: string
+          account_id?: string
+          calendar_id?: string | null
+          connected_email?: string | null
+          created_at?: string | null
+          expires_at?: string
+          id?: string
+          refresh_token?: string
+          token_type?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "google_calendar_tokens_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: true
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lead_notes: {
         Row: {
           author_id: string
