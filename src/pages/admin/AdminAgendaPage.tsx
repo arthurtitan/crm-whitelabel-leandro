@@ -1,23 +1,62 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { CalendarView, GoogleConnectModal } from '@/components/calendar';
 import { useCalendar } from '@/contexts/CalendarContext';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Calendar, Clock, MapPin, Link2, User, Trash2, Pencil, Copy, ExternalLink, RefreshCw } from 'lucide-react';
+import { Calendar, Clock, MapPin, Link2, User, Trash2, Copy, ExternalLink, RefreshCw, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function AdminAgendaPage() {
-  const { selectedEvent, selectEvent, deleteEvent, isConnected, connection, connectGoogle, disconnectGoogle, syncNow } = useCalendar();
+  const { 
+    selectedEvent, 
+    selectEvent, 
+    deleteEvent, 
+    isConnected, 
+    isLoading,
+    connection, 
+    connectGoogle, 
+    disconnectGoogle, 
+    syncNow,
+    checkConnectionStatus 
+  } = useCalendar();
+  
   const [showConnectModal, setShowConnectModal] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Handle OAuth callback
+  useEffect(() => {
+    const googleConnected = searchParams.get('google_connected');
+    const error = searchParams.get('error');
+
+    if (googleConnected === 'true') {
+      toast.success('Google Calendar conectado com sucesso!');
+      checkConnectionStatus();
+      // Clean up URL
+      setSearchParams({});
+    } else if (error) {
+      const errorMessages: Record<string, string> = {
+        oauth_denied: 'Você cancelou a autorização',
+        invalid_params: 'Parâmetros inválidos',
+        config_error: 'Erro de configuração. Contate o suporte.',
+        token_exchange: 'Erro ao obter tokens',
+        missing_tokens: 'Tokens não recebidos',
+        db_error: 'Erro ao salvar conexão',
+        invalid_state: 'Estado inválido',
+        unknown: 'Erro desconhecido',
+      };
+      toast.error(errorMessages[error] || 'Erro ao conectar');
+      setSearchParams({});
+    }
+  }, [searchParams, setSearchParams, checkConnectionStatus]);
 
   const isSyncing = connection.status === 'syncing';
-  const connectionStatus = connection.status === 'connecting' ? 'connecting' : 
-                           connection.status === 'syncing' ? 'connected' :
-                           connection.status === 'connected' ? 'connected' :
-                           connection.status === 'error' ? 'error' : 'disconnected';
+  const isConnecting = connection.status === 'connecting';
+  const hasError = connection.status === 'error';
 
   const handleCopyLink = () => {
     if (selectedEvent?.meetingLink) {
@@ -34,13 +73,26 @@ export default function AdminAgendaPage() {
 
   const handleConnect = async () => {
     await connectGoogle();
-    setShowConnectModal(false);
+    // Modal will close after redirect
   };
 
   const handleDisconnect = async () => {
     await disconnectGoogle();
-    toast.success('Google Calendar desconectado');
   };
+
+  if (isLoading) {
+    return (
+      <div className="page-container h-[calc(100vh-8rem)]">
+        <div className="page-header">
+          <div>
+            <Skeleton className="h-8 w-32 mb-2" />
+            <Skeleton className="h-4 w-48" />
+          </div>
+        </div>
+        <Skeleton className="h-[calc(100%-80px)] w-full" />
+      </div>
+    );
+  }
 
   return (
     <div className="page-container h-[calc(100vh-8rem)]">
@@ -48,28 +100,58 @@ export default function AdminAgendaPage() {
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-foreground">Agenda</h1>
           <p className="text-xs sm:text-sm text-muted-foreground">
-            {isConnected ? 'Sincronizado com Google Calendar' : 'Gerencie seus agendamentos'}
+            {isConnected 
+              ? `Sincronizado com ${connection.email}` 
+              : hasError 
+                ? 'Reconexão necessária'
+                : 'Gerencie seus agendamentos'}
           </p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           {!isConnected ? (
             <Button
-              variant="outline"
+              variant={hasError ? "destructive" : "outline"}
               size="sm"
               onClick={() => setShowConnectModal(true)}
+              disabled={isConnecting}
             >
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Sincronizar
+              {isConnecting ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Conectando...
+                </>
+              ) : hasError ? (
+                <>
+                  <AlertCircle className="w-4 h-4 mr-2" />
+                  Reconectar
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Sincronizar
+                </>
+              )}
             </Button>
           ) : (
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="outline" className="text-success border-success text-xs">
                 ✓ {connection.email}
               </Badge>
-              <Button variant="ghost" size="sm" onClick={syncNow} disabled={isSyncing}>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={syncNow} 
+                disabled={isSyncing}
+                title="Sincronizar agora"
+              >
                 <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
               </Button>
-              <Button variant="ghost" size="sm" onClick={handleDisconnect}>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={handleDisconnect}
+                className="text-muted-foreground hover:text-destructive"
+              >
                 Desconectar
               </Button>
             </div>
@@ -101,7 +183,7 @@ export default function AdminAgendaPage() {
               </SheetHeader>
 
               <div className="mt-6 space-y-6">
-                {/* Data e Hora - Sempre visível */}
+                {/* Data e Hora */}
                 <div className="space-y-3">
                   <div className="flex items-center gap-3">
                     <Calendar className="w-5 h-5 text-muted-foreground flex-shrink-0" />
@@ -119,7 +201,7 @@ export default function AdminAgendaPage() {
                   </div>
                 </div>
 
-                {/* Google Meet - Sempre visível com estado vazio */}
+                {/* Google Meet */}
                 <div className="space-y-2">
                   <div className="flex items-center gap-3">
                     <Link2 className="w-5 h-5 text-muted-foreground flex-shrink-0" />
@@ -144,7 +226,7 @@ export default function AdminAgendaPage() {
                   )}
                 </div>
 
-                {/* Participantes - Sempre visível com estado vazio */}
+                {/* Participantes */}
                 <div>
                   <h4 className="font-medium mb-2">Participantes</h4>
                   {selectedEvent.attendees.length > 0 ? (
@@ -166,13 +248,28 @@ export default function AdminAgendaPage() {
                   )}
                 </div>
 
-                {/* Observações - Sempre visível com estado vazio */}
+                {/* Observações */}
                 <div>
                   <h4 className="font-medium mb-2">Observações</h4>
                   <p className="text-sm text-muted-foreground whitespace-pre-wrap">
                     {selectedEvent.notes || 'Nenhuma observação'}
                   </p>
                 </div>
+
+                {/* Actions */}
+                {selectedEvent.source === 'crm' && (
+                  <div className="pt-4 border-t">
+                    <Button 
+                      variant="destructive" 
+                      size="sm" 
+                      onClick={handleDelete}
+                      className="w-full"
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Excluir evento
+                    </Button>
+                  </div>
+                )}
               </div>
             </>
           )}
