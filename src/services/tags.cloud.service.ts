@@ -406,6 +406,7 @@ export const tagsCloudService = {
     }
 
     // Sync to Chatwoot (non-blocking)
+    console.log('[applyStageTag] Syncing to Chatwoot:', { accountId: tag.account_id, contactId, tagId, oldStageTagId });
     this.updateContactLabelsInChatwoot(tag.account_id, contactId, tagId, oldStageTagId).catch(err => {
       console.error('Failed to sync contact labels to Chatwoot:', err);
     });
