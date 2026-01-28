@@ -49,6 +49,7 @@ import {
   Trash2,
   Download,
   RefreshCw,
+  ExternalLink,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -366,6 +367,25 @@ export default function AdminKanbanPage() {
     setSelectedLead(null);
   };
 
+  const handleOpenChatwoot = (lead: KanbanLead) => {
+    const baseUrl = account?.chatwoot_base_url?.replace(/\/$/, '');
+    const accountIdChatwoot = account?.chatwoot_account_id;
+    const conversationId = lead.chatwoot_conversation_id;
+
+    if (!baseUrl || !accountIdChatwoot) {
+      toast.error('Chatwoot não configurado para esta conta');
+      return;
+    }
+
+    if (!conversationId) {
+      toast.warning('Este lead não possui conversa vinculada no Chatwoot');
+      return;
+    }
+
+    const url = `${baseUrl}/app/accounts/${accountIdChatwoot}/conversations/${conversationId}`;
+    window.open(url, '_blank');
+  };
+
   const handleImportComplete = () => {
     fetchTagsData(false);
   };
@@ -677,8 +697,8 @@ export default function AdminKanbanPage() {
               </div>
 
               <div className="pt-4 border-t space-y-2">
-                <Button className="w-full gap-2" variant="outline">
-                  <MessageSquare className="w-4 h-4" />
+                <Button className="w-full gap-2" variant="outline" onClick={() => handleOpenChatwoot(selectedLead)}>
+                  <ExternalLink className="w-4 h-4" />
                   Abrir Conversa no Chatwoot
                 </Button>
                 <Button className="w-full gap-2" onClick={() => handleOpenSaleDialog(selectedLead.id)}>

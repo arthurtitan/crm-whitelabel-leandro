@@ -73,6 +73,8 @@ export interface Contact {
   telefone: string | null;
   email: string | null;
   origem: ContactOrigin | null;
+  chatwoot_contact_id?: number | null;
+  chatwoot_conversation_id?: number | null;
   created_at: string;
   updated_at: string;
 }

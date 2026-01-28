@@ -210,9 +210,22 @@ export default function AdminLeadsPage() {
   };
 
   const handleOpenChatwoot = (contact: Contact) => {
-    // This will open Chatwoot in a new tab when API is integrated
-    toast.info('Abrirá conversa no Chatwoot (integração pendente)');
-    // window.open(`https://chatwoot.example.com/contacts/${contact.id}`, '_blank');
+    const baseUrl = account?.chatwoot_base_url?.replace(/\/$/, '');
+    const accountIdChatwoot = account?.chatwoot_account_id;
+    const conversationId = contact.chatwoot_conversation_id;
+
+    if (!baseUrl || !accountIdChatwoot) {
+      toast.error('Chatwoot não configurado para esta conta');
+      return;
+    }
+
+    if (!conversationId) {
+      toast.warning('Este lead não possui conversa vinculada no Chatwoot');
+      return;
+    }
+
+    const url = `${baseUrl}/app/accounts/${accountIdChatwoot}/conversations/${conversationId}`;
+    window.open(url, '_blank');
   };
 
   return (
