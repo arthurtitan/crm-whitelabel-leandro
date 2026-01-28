@@ -1,153 +1,148 @@
 
-# Plano: Adicionar Cliente no Kanban com Cadastro no Chatwoot
+# Plano de Correção: Sincronização Bilateral Kanban ↔ Chatwoot
 
-## Resumo
-Criar uma funcao que permite adicionar um novo cliente diretamente no Kanban, cadastrando-o simultaneamente no CRM (Supabase) e no Chatwoot. O cliente sera criado com uma conversa associada, permitindo que a equipe inicie o atendimento imediatamente.
+## Visao Geral dos Requisitos
 
-## Como vai funcionar
-1. Usuario clica em "Adicionar Lead" no Kanban
-2. Preenche formulario com: Nome, Telefone, Email (opcional), Origem
-3. Seleciona a etapa inicial do Kanban (opcional - padrao sera primeira etapa)
-4. Sistema cria o contato no Supabase
-5. Sistema cria o contato no Chatwoot via API
-6. Sistema cria uma conversa no Chatwoot vinculada ao contato
-7. Sistema atualiza o contato local com os IDs do Chatwoot (chatwoot_contact_id e chatwoot_conversation_id)
-8. Sistema aplica a etapa/label selecionada
-9. Lead aparece no Kanban ja pronto para atendimento
+| Acao | Comportamento Esperado | Status Atual |
+|------|------------------------|--------------|
+| Label atribuida no Chatwoot | Criar etapa no Kanban se nao existe | Parcial (importa, mas nao cria automaticamente) |
+| Etapa criada no Kanban | Criar label no Chatwoot | Funcionando |
+| Lead criado no Kanban com etapa | Criar contato + conversa + label no Chatwoot | Falta aplicar label |
+| Label conectada a contato no Chatwoot | Mover lead para etapa correspondente | Funcionando (via sync) |
+| Multiplas labels no contato | Considerar ultima adicionada | Nao implementado |
+| Lead movido no Kanban | Remover label anterior, aplicar nova | Funcionando |
+| Lead em duas etapas | Nunca permitir | Reforcar logica |
 
-## Componentes a criar
+---
 
-### 1. Edge Function: `create-chatwoot-contact`
-Nova funcao serverless que:
-- Recebe dados do contato (nome, telefone, email)
-- Busca configuracao da conta (chatwoot_base_url, chatwoot_account_id, chatwoot_api_key)
-- Cria contato na API do Chatwoot (`POST /api/v1/accounts/{id}/contacts`)
-- Opcionalmente cria conversa (`POST /api/v1/accounts/{id}/conversations`)
-- Retorna IDs criados (contact_id, conversation_id)
+## Etapas de Implementacao
 
-### 2. Componente: `CreateLeadDialog.tsx`
-Dialog similar ao CreateStageDialog com:
-- Campo Nome (obrigatorio)
-- Campo Telefone (obrigatorio)
-- Campo Email (opcional)
-- Seletor de Origem (WhatsApp, Instagram, Site, Manual)
-- Seletor de Etapa Inicial (opcional)
-- Checkbox "Criar conversa no Chatwoot" (marcado por padrao se Chatwoot configurado)
+### 1. Aplicar Label no Chatwoot ao Criar Lead
 
-### 3. Service: `contacts.cloud.service.ts`
-Novo servico para operacoes de contato via Cloud:
-- `createContact()` - Cria no Supabase
-- `createContactWithChatwoot()` - Cria no Supabase + Chatwoot
-- `linkChatwootContact()` - Atualiza IDs do Chatwoot no contato existente
+**Problema**: Quando um lead e criado no Kanban e uma etapa inicial e selecionada, a label correspondente nao e aplicada na conversa do Chatwoot.
 
-## Arquivos a modificar
+**Solucao**: Modificar a Edge Function `create-chatwoot-contact` para aceitar um parametro `initial_label` e aplicar a label na conversa recem-criada.
 
-### Novos arquivos:
-- `supabase/functions/create-chatwoot-contact/index.ts`
-- `src/components/kanban/CreateLeadDialog.tsx`
-- `src/services/contacts.cloud.service.ts`
+**Arquivos a modificar**:
+- `supabase/functions/create-chatwoot-contact/index.ts`: Adicionar logica para aplicar label
+- `src/services/contacts.cloud.service.ts`: Passar o nome da etapa para a Edge Function
+- `src/components/kanban/CreateLeadDialog.tsx`: Enviar informacao da etapa selecionada
 
-### Arquivos a modificar:
-- `src/pages/admin/AdminKanbanPage.tsx` - Adicionar botao "Novo Lead" e importar o dialog
-- `src/components/kanban/index.ts` - Exportar novo componente
-- `supabase/config.toml` - Registrar nova edge function
+---
 
-## Detalhes Tecnicos
+### 2. Criar Etapa Automaticamente para Labels Novas
 
-### API do Chatwoot para criar contato
+**Problema**: Quando uma label nova e atribuida a um contato no Chatwoot (label que nao existe no Kanban), ela deveria ser criada como etapa automaticamente.
 
-```text
-POST /api/v1/accounts/{account_id}/contacts
-Headers: api_access_token: {api_key}
-Body: {
-  "name": "Nome do Cliente",
-  "phone_number": "+5511999999999",
-  "email": "email@exemplo.com",
-  "identifier": "unique-identifier" (opcional)
-}
-Response: {
-  "payload": {
-    "id": 123,
-    "name": "Nome do Cliente",
-    ...
-  }
-}
-```
+**Solucao**: Modificar a Edge Function `sync-chatwoot-contacts` para criar tags/etapas quando encontrar labels desconhecidas.
 
-### API do Chatwoot para criar conversa
+**Arquivos a modificar**:
+- `supabase/functions/sync-chatwoot-contacts/index.ts`: Adicionar logica para criar tag quando label nao existe
+
+---
+
+### 3. Garantir Lead em Apenas Uma Etapa (Ultima Label)
+
+**Problema**: Se um contato tem multiplas labels no Chatwoot, o sistema precisa considerar apenas a ultima adicionada.
+
+**Solucao**: 
+- No Chatwoot, as labels de uma conversa nao tem timestamp individual, entao usaremos a posicao no array (ultima = mais recente) como aproximacao
+- Modificar a logica de sync para aplicar apenas UMA etapa por lead
+
+**Arquivos a modificar**:
+- `supabase/functions/sync-chatwoot-contacts/index.ts`: Aplicar logica de "ultima label ganha"
+
+---
+
+### 4. Remover Labels Antigas Automaticamente ao Mover
+
+**Problema**: Ja funciona parcialmente, mas precisamos garantir que todas as labels de etapa sejam removidas antes de aplicar a nova.
+
+**Solucao**: A funcao `update-chatwoot-contact-labels` ja faz isso corretamente - apenas confirmar funcionamento.
+
+---
+
+## Detalhamento Tecnico
+
+### Modificacao 1: create-chatwoot-contact
+
+Adicionar parametro `initial_label_name` e aplicar label na conversa:
 
 ```text
-POST /api/v1/accounts/{account_id}/conversations
-Headers: api_access_token: {api_key}
-Body: {
-  "contact_id": 123,
-  "inbox_id": 1,
-  "status": "open"
-}
-Response: {
-  "id": 456,
-  ...
-}
+Apos criar a conversa, chamar:
+POST /api/v1/accounts/{account_id}/conversations/{conversation_id}/labels
+Body: { labels: [initial_label_name] }
 ```
 
-### Nota sobre inbox_id
-Para criar uma conversa no Chatwoot, e necessario um inbox_id. Opcoes:
-1. Buscar lista de inboxes da conta e usar o primeiro disponivel
-2. Adicionar campo `chatwoot_default_inbox_id` na tabela `accounts`
-3. Permitir usuario selecionar o inbox no dialog
+### Modificacao 2: sync-chatwoot-contacts
 
-A implementacao usara a opcao 1 (buscar primeiro inbox disponivel) como padrao.
+Quando encontrar uma label sem correspondencia:
+1. Buscar ou criar o funil padrao
+2. Criar nova tag com type='stage'
+3. Usar API do Chatwoot para buscar detalhes da label (cor, etc)
+4. Vincular chatwoot_label_id
 
-### Fluxo da Edge Function
+Para multiplas labels:
+1. Filtrar apenas labels que correspondem a etapas
+2. Pegar a ULTIMA do array (mais recente)
+3. Aplicar apenas essa como lead_tag
+
+### Modificacao 3: contacts.cloud.service.ts
+
+Modificar `createContactWithChatwoot` para:
+1. Receber `initial_stage_tag_id` como parametro
+2. Buscar o nome/slug da tag para enviar como `initial_label_name`
+3. Passar para a Edge Function
+
+### Modificacao 4: CreateLeadDialog.tsx
+
+Modificar chamada para passar informacoes da etapa:
+1. Quando `create_in_chatwoot` e true E `initial_stage_id` esta definido
+2. Buscar a tag selecionada para obter o nome
+3. Passar para o service
+
+---
+
+## Fluxo Final Esperado
 
 ```text
-1. Receber dados: { account_id, name, phone, email, create_conversation }
-2. Buscar config da conta no Supabase
-3. Criar contato no Chatwoot
-4. Se create_conversation:
-   a. Buscar inboxes da conta
-   b. Criar conversa com primeiro inbox
-5. Retornar { chatwoot_contact_id, chatwoot_conversation_id }
+CRIACAO DE ETAPA NO KANBAN:
+Kanban -> createStageTag -> DB + push-chatwoot-label -> Chatwoot
+
+CRIACAO DE LABEL NO CHATWOOT:
+Chatwoot -> sync-chatwoot-contacts -> Detecta label sem tag -> Cria tag -> DB
+
+CRIACAO DE LEAD NO KANBAN:
+Kanban -> CreateLeadDialog -> createContactWithChatwoot(com label) -> 
+  DB + create-chatwoot-contact(com label) -> Chatwoot
+
+ATRIBUICAO DE LABEL NO CHATWOOT:
+Chatwoot -> sync-chatwoot-contacts -> Encontra label -> 
+  Se ja tem etapa: move lead (remove antigas) -> DB
+  Se nao tem etapa: cria etapa + move lead -> DB
+
+MOVIMENTACAO NO KANBAN:
+Kanban -> applyStageTag -> DB + update-chatwoot-contact-labels -> 
+  Remove labels antigas + aplica nova -> Chatwoot
 ```
 
-### Interface do Dialog
+---
 
-```text
-+----------------------------------+
-|     Adicionar Novo Lead          |
-+----------------------------------+
-| Nome *                           |
-| [________________________]       |
-|                                  |
-| Telefone *                       |
-| [________________________]       |
-|                                  |
-| Email                            |
-| [________________________]       |
-|                                  |
-| Origem                           |
-| [v WhatsApp              ]       |
-|                                  |
-| Etapa Inicial                    |
-| [v Novos Leads           ]       |
-|                                  |
-| [x] Cadastrar no Chatwoot        |
-| (cria contato e conversa)        |
-|                                  |
-|     [Cancelar]  [Adicionar]      |
-+----------------------------------+
-```
+## Arquivos a Modificar
 
-## Validacoes
-1. Nome e telefone sao obrigatorios
-2. Telefone deve ter formato valido (minimo 10 digitos)
-3. Se email informado, validar formato
-4. Se Chatwoot nao configurado, checkbox fica desabilitado/oculto
-5. Se criacao no Chatwoot falhar, contato ainda e criado localmente (com aviso)
+1. `supabase/functions/create-chatwoot-contact/index.ts`
+2. `supabase/functions/sync-chatwoot-contacts/index.ts`
+3. `src/services/contacts.cloud.service.ts`
+4. `src/components/kanban/CreateLeadDialog.tsx`
 
-## Estimativa
-Implementacao completa: ~45-60 minutos
-- Edge Function: 20 min
-- Dialog Component: 15 min
-- Service + Integration: 15 min
-- Testes: 10 min
+---
+
+## Testes Necessarios
+
+Apos implementacao:
+1. Criar etapa no Kanban - verificar se label aparece no Chatwoot
+2. Criar lead no Kanban com etapa - verificar se contato e conversa tem a label no Chatwoot
+3. Adicionar label a contato no Chatwoot - verificar se lead aparece na etapa correspondente
+4. Adicionar segunda label a contato - verificar se lead move para nova etapa (ultima)
+5. Mover lead no Kanban - verificar se label antiga foi removida e nova aplicada
+6. Adicionar label que nao existe como etapa - verificar se etapa e criada automaticamente
