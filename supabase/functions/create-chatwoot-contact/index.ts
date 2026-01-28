@@ -194,6 +194,56 @@ Deno.serve(async (req) => {
             if (initial_label_name && chatwoot_conversation_id) {
               console.log('[create-chatwoot-contact] Applying initial label:', initial_label_name);
               
+              // First, ensure the label exists in Chatwoot
+              const labelsListUrl = `${baseUrl}/api/v1/accounts/${chatwoot_account_id}/labels`;
+              const existingLabelsResponse = await fetch(labelsListUrl, {
+                method: 'GET',
+                headers: {
+                  'api_access_token': chatwoot_api_key,
+                },
+              });
+              
+              let labelExists = false;
+              if (existingLabelsResponse.ok) {
+                const existingLabels = await existingLabelsResponse.json();
+                console.log('[create-chatwoot-contact] Existing labels in Chatwoot:', JSON.stringify(existingLabels));
+                
+                // Check if our label exists (by title or key matching the slug)
+                const labelArray = existingLabels.payload || existingLabels;
+                if (Array.isArray(labelArray)) {
+                  labelExists = labelArray.some((l: { title?: string }) => 
+                    l.title === initial_label_name || 
+                    l.title?.toLowerCase().replace(/[^a-z0-9]/g, '_') === initial_label_name.toLowerCase()
+                  );
+                }
+              }
+              
+              // If label doesn't exist, create it first
+              if (!labelExists) {
+                console.log('[create-chatwoot-contact] Label does not exist, creating it:', initial_label_name);
+                const createLabelResponse = await fetch(labelsListUrl, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'api_access_token': chatwoot_api_key,
+                  },
+                  body: JSON.stringify({
+                    title: initial_label_name,
+                    description: `Stage: ${initial_label_name}`,
+                    color: '#1f93ff', // Default blue color
+                    show_on_sidebar: true,
+                  }),
+                });
+                
+                if (createLabelResponse.ok) {
+                  console.log('[create-chatwoot-contact] Label created successfully');
+                } else {
+                  const createError = await createLabelResponse.text();
+                  console.warn('[create-chatwoot-contact] Failed to create label (may already exist):', createError);
+                }
+              }
+              
+              // Now apply the label to the conversation
               const labelUrl = `${baseUrl}/api/v1/accounts/${chatwoot_account_id}/conversations/${chatwoot_conversation_id}/labels`;
               
               const labelResponse = await fetch(labelUrl, {
@@ -207,12 +257,13 @@ Deno.serve(async (req) => {
                 }),
               });
 
+              const labelResponseText = await labelResponse.text();
+              console.log('[create-chatwoot-contact] Label apply response:', labelResponse.status, labelResponseText);
+              
               if (labelResponse.ok) {
                 console.log('[create-chatwoot-contact] Initial label applied successfully');
               } else {
-                const labelError = await labelResponse.text();
-                console.warn('[create-chatwoot-contact] Failed to apply initial label:', labelError);
-                // Don't fail the whole request, just log the warning
+                console.warn('[create-chatwoot-contact] Failed to apply initial label:', labelResponseText);
               }
             }
           } else {
