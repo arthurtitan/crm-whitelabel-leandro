@@ -429,7 +429,7 @@ serve(async (req) => {
     }
 
     // ============== RECONCILIATION: Delete orphaned contacts ==============
-    // Find contacts in DB that have chatwoot_contact_id but are no longer in Chatwoot
+    // Step 1: Delete contacts WITH chatwoot_contact_id that are no longer in Chatwoot
     console.log('[Sync Contacts] Starting reconciliation - checking for orphaned contacts...');
     
     const { data: dbContactsWithChatwoot } = await supabaseAdmin
@@ -442,7 +442,7 @@ serve(async (req) => {
       contact => !activeChatwootContactIds.has(contact.chatwoot_contact_id as number)
     );
     
-    console.log('[Sync Contacts] Found', orphanedContacts.length, 'orphaned contacts to delete');
+    console.log('[Sync Contacts] Found', orphanedContacts.length, 'orphaned contacts (with chatwoot_contact_id) to delete');
     
     for (const orphan of orphanedContacts) {
       try {
@@ -473,6 +473,118 @@ serve(async (req) => {
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : 'Unknown error';
         result.errors.push(`Error deleting orphan ${orphan.id}: ${errorMsg}`);
+      }
+    }
+
+    // Step 2: "Strict mirror" - Check contacts WITHOUT chatwoot_contact_id
+    // Search Chatwoot by phone/email, if not found -> delete from Kanban
+    console.log('[Sync Contacts] Starting strict mirror - checking unlinked contacts...');
+    
+    const { data: unlinkedContacts } = await supabaseAdmin
+      .from('contacts')
+      .select('id, nome, telefone, email')
+      .eq('account_id', account_id)
+      .is('chatwoot_contact_id', null);
+    
+    console.log('[Sync Contacts] Found', unlinkedContacts?.length || 0, 'unlinked contacts to verify in Chatwoot');
+    
+    // Helper function to normalize phone for search
+    const normalizePhoneForSearch = (phone: string | null): string | null => {
+      if (!phone) return null;
+      // Remove all non-numeric characters except +
+      let normalized = phone.replace(/[^\d+]/g, '');
+      // Ensure starts with +
+      if (!normalized.startsWith('+')) {
+        normalized = '+' + normalized;
+      }
+      return normalized;
+    };
+
+    for (const contact of (unlinkedContacts || [])) {
+      try {
+        let foundInChatwoot = false;
+        
+        // Try to find by phone first
+        const normalizedPhone = normalizePhoneForSearch(contact.telefone);
+        if (normalizedPhone) {
+          const searchUrl = `${baseUrl}/api/v1/accounts/${chatwoot_account_id}/contacts/search?q=${encodeURIComponent(normalizedPhone)}`;
+          const searchResponse = await fetch(searchUrl, {
+            headers: {
+              'api_access_token': chatwoot_api_key,
+              'Content-Type': 'application/json',
+            },
+          });
+          
+          if (searchResponse.ok) {
+            const searchData = await searchResponse.json();
+            const contacts = searchData.payload || [];
+            if (contacts.length > 0) {
+              foundInChatwoot = true;
+              // Link the contact to Chatwoot
+              const chatwootContact = contacts[0];
+              console.log('[Sync Contacts] Found unlinked contact in Chatwoot by phone:', contact.nome, '-> Chatwoot ID:', chatwootContact.id);
+              
+              await supabaseAdmin
+                .from('contacts')
+                .update({ chatwoot_contact_id: chatwootContact.id })
+                .eq('id', contact.id);
+            }
+          }
+        }
+        
+        // If not found by phone, try email
+        if (!foundInChatwoot && contact.email) {
+          const searchUrl = `${baseUrl}/api/v1/accounts/${chatwoot_account_id}/contacts/search?q=${encodeURIComponent(contact.email)}`;
+          const searchResponse = await fetch(searchUrl, {
+            headers: {
+              'api_access_token': chatwoot_api_key,
+              'Content-Type': 'application/json',
+            },
+          });
+          
+          if (searchResponse.ok) {
+            const searchData = await searchResponse.json();
+            const contacts = searchData.payload || [];
+            if (contacts.length > 0) {
+              foundInChatwoot = true;
+              // Link the contact to Chatwoot
+              const chatwootContact = contacts[0];
+              console.log('[Sync Contacts] Found unlinked contact in Chatwoot by email:', contact.nome, '-> Chatwoot ID:', chatwootContact.id);
+              
+              await supabaseAdmin
+                .from('contacts')
+                .update({ chatwoot_contact_id: chatwootContact.id })
+                .eq('id', contact.id);
+            }
+          }
+        }
+        
+        // If not found in Chatwoot at all -> delete from Kanban (strict mirror)
+        if (!foundInChatwoot) {
+          console.log('[Sync Contacts] Unlinked contact not found in Chatwoot, deleting:', contact.nome, contact.id);
+          
+          // Delete lead_tags first
+          await supabaseAdmin
+            .from('lead_tags')
+            .delete()
+            .eq('contact_id', contact.id);
+          
+          // Delete the contact
+          const { error: deleteError } = await supabaseAdmin
+            .from('contacts')
+            .delete()
+            .eq('id', contact.id);
+          
+          if (!deleteError) {
+            result.contacts_deleted++;
+            console.log('[Sync Contacts] Deleted unlinked contact:', contact.id);
+          } else {
+            result.errors.push(`Failed to delete unlinked contact ${contact.id}: ${deleteError.message}`);
+          }
+        }
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+        result.errors.push(`Error checking unlinked contact ${contact.id}: ${errorMsg}`);
       }
     }
 
