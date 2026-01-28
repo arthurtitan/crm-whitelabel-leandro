@@ -453,6 +453,32 @@
   .kanban-column-snap {
     @apply snap-center sm:snap-align-none;
   }
+  
+  /* Kanban Drag & Drop Animations */
+  .kanban-card {
+    will-change: transform, opacity;
+    transform: translateZ(0); /* GPU acceleration */
+  }
+  
+  .kanban-card-new {
+    animation: kanban-slide-in 0.3s ease-out;
+  }
+  
+  @keyframes kanban-slide-in {
+    from {
+      opacity: 0;
+      transform: translateY(-10px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+  
+  /* Drop zone feedback */
+  .kanban-column[data-drag-over="true"] .kanban-drop-zone {
+    @apply bg-primary/5 border-primary/20 border-2 border-dashed;
+  }
 
   /* Table Mobile Optimizations */
   .table-cell-hide-mobile {
