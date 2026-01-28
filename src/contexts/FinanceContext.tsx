@@ -1,10 +1,10 @@
-import { createContext, useContext, useState, useMemo, ReactNode, useCallback } from 'react';
+import { createContext, useContext, useState, useMemo, ReactNode, useCallback, useEffect } from 'react';
 import { Sale, SaleItem, Contact, LeadFunnelState, SaleStatus, PaymentMethod, Product, ContactOrigin, LeadNote } from '@/types/crm';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTagContext } from '@/contexts/TagContext';
+import { supabase } from '@/integrations/supabase/client';
 import { 
   mockSales, 
-  mockContacts, 
   mockLeadFunnelStates, 
   mockFunnelStages,
   mockProducts 
@@ -65,6 +65,7 @@ interface FinanceContextType {
   leadFunnelStates: LeadFunnelState[];
   leadNotes: LeadNote[];
   events: FinanceEvent[];
+  isLoadingContacts: boolean;
   
   // Derived KPIs
   kpis: FinanceKPIs;
@@ -81,7 +82,7 @@ interface FinanceContextType {
   refundSale: (saleId: string, reason: string) => void;
   refundSaleItem: (saleId: string, itemId: string, reason: string) => void;
   updateSale: (saleId: string, data: Partial<Sale>) => { success: boolean; error?: string };
-  
+  refetchContacts: () => Promise<void>;
   // Helpers
   getContactById: (id: string) => Contact | undefined;
   getContactSales: (contactId: string) => Sale[];
@@ -136,15 +137,10 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
     mockSales.filter((s) => s.account_id === accountId)
   );
   
-  const [contacts, setContacts] = useState<Contact[]>(
-    mockContacts.filter((c) => c.account_id === accountId)
-  );
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [isLoadingContacts, setIsLoadingContacts] = useState(true);
   
-  const [leadFunnelStates, setLeadFunnelStates] = useState<LeadFunnelState[]>(
-    mockLeadFunnelStates.filter((lfs) => 
-      mockContacts.filter((c) => c.account_id === accountId).some((c) => c.id === lfs.contact_id)
-    )
-  );
+  const [leadFunnelStates, setLeadFunnelStates] = useState<LeadFunnelState[]>([]);
 
   const [leadNotes, setLeadNotes] = useState<LeadNote[]>([]);
   
@@ -154,6 +150,37 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
     () => mockProducts.filter((p) => p.account_id === accountId && p.ativo),
     [accountId]
   );
+
+  // Fetch contacts from Supabase
+  // Function to fetch contacts from Supabase
+  const fetchContactsFromDb = useCallback(async () => {
+    setIsLoadingContacts(true);
+    try {
+      const { data, error } = await supabase
+        .from('contacts')
+        .select('*')
+        .eq('account_id', accountId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching contacts:', error);
+        return;
+      }
+
+      setContacts((data || []) as Contact[]);
+    } catch (err) {
+      console.error('Error fetching contacts:', err);
+    } finally {
+      setIsLoadingContacts(false);
+    }
+  }, [accountId]);
+
+  // Fetch contacts on mount and when accountId changes
+  useEffect(() => {
+    if (accountId) {
+      fetchContactsFromDb();
+    }
+  }, [accountId, fetchContactsFromDb]);
 
   // Helper functions
   const getContactById = useCallback(
@@ -605,6 +632,7 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
     leadFunnelStates,
     leadNotes,
     events,
+    isLoadingContacts,
     kpis,
     createSale,
     createContact,
@@ -617,6 +645,7 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
     refundSale,
     refundSaleItem,
     updateSale,
+    refetchContacts: fetchContactsFromDb,
     getContactById,
     getContactSales,
     getContactNotes,

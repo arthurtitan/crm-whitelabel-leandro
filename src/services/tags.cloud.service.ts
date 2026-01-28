@@ -50,6 +50,14 @@ export interface ImportLabelsResult {
   error?: string;
 }
 
+export interface SyncContactsResult {
+  success: boolean;
+  contacts_created: number;
+  contacts_updated: number;
+  lead_tags_applied: number;
+  errors: string[];
+}
+
 export const tagsCloudService = {
   /**
    * List all stage tags for an account (Kanban columns)
@@ -413,6 +421,59 @@ export const tagsCloudService = {
     }
 
     return data;
+  },
+
+  /**
+   * Sync contacts and their labels from Chatwoot
+   */
+  async syncChatwootContacts(accountId: string): Promise<SyncContactsResult> {
+    const { data: session } = await supabase.auth.getSession();
+    if (!session.session) {
+      throw new Error('Não autenticado');
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout for contacts
+
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-chatwoot-contacts`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.session.access_token}`,
+          },
+          body: JSON.stringify({ account_id: accountId }),
+          signal: controller.signal,
+        }
+      );
+
+      clearTimeout(timeoutId);
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        return {
+          success: false,
+          contacts_created: 0,
+          contacts_updated: 0,
+          lead_tags_applied: 0,
+          errors: [result.error || `Erro HTTP ${response.status}`],
+        };
+      }
+
+      return result as SyncContactsResult;
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      return {
+        success: false,
+        contacts_created: 0,
+        contacts_updated: 0,
+        lead_tags_applied: 0,
+        errors: [err.name === 'AbortError' ? 'Timeout ao sincronizar contatos' : (err.message || 'Erro desconhecido')],
+      };
+    }
   },
 };
 
