@@ -85,18 +85,24 @@ Deno.serve(async (req) => {
     // Normalize base URL (remove trailing slash)
     const baseUrl = chatwoot_base_url.replace(/\/$/, '');
 
+    // Normalize phone to E.164 format (must start with +)
+    let normalizedPhone = phone.replace(/[\s\-\(\)]/g, ''); // Remove spaces, dashes, parentheses
+    if (!normalizedPhone.startsWith('+')) {
+      normalizedPhone = '+' + normalizedPhone;
+    }
+
     // Create contact in Chatwoot
     const createContactUrl = `${baseUrl}/api/v1/accounts/${chatwoot_account_id}/contacts`;
     
     const contactPayload: Record<string, string> = {
       name,
-      phone_number: phone,
+      phone_number: normalizedPhone,
     };
     if (email) {
       contactPayload.email = email;
     }
 
-    console.log('[create-chatwoot-contact] Creating contact in Chatwoot:', { name, phone });
+    console.log('[create-chatwoot-contact] Creating contact in Chatwoot:', { name, phone: normalizedPhone });
 
     const contactResponse = await fetch(createContactUrl, {
       method: 'POST',
