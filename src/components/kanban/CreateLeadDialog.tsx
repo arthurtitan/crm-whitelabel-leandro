@@ -104,7 +104,7 @@ export function CreateLeadDialog({
       let result;
 
       if (values.create_in_chatwoot && hasChatwootConfig) {
-        // Create in Supabase + Chatwoot
+        // Create in Supabase + Chatwoot (with initial label if stage selected)
         result = await contactsCloudService.createContactWithChatwoot({
           account_id: accountId,
           nome: values.nome,
@@ -112,6 +112,7 @@ export function CreateLeadDialog({
           email: values.email || undefined,
           origem: values.origem as ContactOrigin,
           create_conversation: true,
+          initial_stage_tag_id: values.initial_stage_id, // Pass tag ID to get label name
         });
       } else {
         // Create in Supabase only
@@ -304,7 +305,7 @@ export function CreateLeadDialog({
                     <div className="space-y-1 leading-none">
                       <FormLabel>Cadastrar no Chatwoot</FormLabel>
                       <FormDescription>
-                        Cria o contato e uma conversa automaticamente no Chatwoot
+                        Cria o contato e uma conversa automaticamente no Chatwoot com a etapa selecionada
                       </FormDescription>
                     </div>
                   </FormItem>
