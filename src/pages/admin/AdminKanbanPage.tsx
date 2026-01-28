@@ -400,10 +400,14 @@ export default function AdminKanbanPage() {
       if (result.success) {
         const total = result.contacts_created + result.contacts_updated;
         const removedCount = result.lead_tags_removed || 0;
-        if (total > 0 || result.lead_tags_applied > 0 || removedCount > 0) {
-          toast.success(
-            `Sincronização concluída: ${result.contacts_created} criado(s), ${result.contacts_updated} atualizado(s), ${result.lead_tags_applied} etapa(s) aplicada(s), ${removedCount} removida(s).`
-          );
+        const deletedCount = result.contacts_deleted || 0;
+        if (total > 0 || result.lead_tags_applied > 0 || removedCount > 0 || deletedCount > 0) {
+          const parts = [];
+          if (result.contacts_created > 0) parts.push(`${result.contacts_created} criado(s)`);
+          if (result.contacts_updated > 0) parts.push(`${result.contacts_updated} atualizado(s)`);
+          if (deletedCount > 0) parts.push(`${deletedCount} excluído(s)`);
+          if (result.lead_tags_applied > 0) parts.push(`${result.lead_tags_applied} etapa(s) aplicada(s)`);
+          toast.success(`Sincronização concluída: ${parts.join(', ')}.`);
           // Refresh contacts and lead tags
           await refetchContacts();
           fetchTagsData(false);
