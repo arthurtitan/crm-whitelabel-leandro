@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useTagContext } from '@/contexts/TagContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { Plus, Palette } from 'lucide-react';
 import { toast } from 'sonner';
+import { tagsCloudService } from '@/services/tags.cloud.service';
 
 const PRESET_COLORS = [
   '#0EA5E9', // Sky blue
@@ -30,16 +31,19 @@ const PRESET_COLORS = [
 
 interface CreateStageDialogProps {
   trigger?: React.ReactNode;
+  onStageCreated?: () => void;
 }
 
-export function CreateStageDialog({ trigger }: CreateStageDialogProps) {
-  const { createStageTag } = useTagContext();
+export function CreateStageDialog({ trigger, onStageCreated }: CreateStageDialogProps) {
+  const { user, account } = useAuth();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [color, setColor] = useState(PRESET_COLORS[0]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const accountId = user?.account_id || account?.id;
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!name.trim()) {
@@ -47,31 +51,46 @@ export function CreateStageDialog({ trigger }: CreateStageDialogProps) {
       return;
     }
 
+    if (!accountId) {
+      toast.error('Conta não encontrada');
+      return;
+    }
+
     setIsSubmitting(true);
 
-    const slug = name
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/\s+/g, '-')
-      .replace(/[^a-z0-9-]/g, '');
+    try {
+      // Get or create default funnel
+      let funnel = await tagsCloudService.getDefaultFunnel(accountId);
+      
+      if (!funnel) {
+        // Create a default funnel if it doesn't exist
+        funnel = await tagsCloudService.createDefaultFunnel(accountId);
+      }
 
-    const result = createStageTag({
-      name: name.trim(),
-      slug,
-      color,
-      source: 'kanban',
-    });
+      if (!funnel) {
+        toast.error('Erro ao obter funil');
+        setIsSubmitting(false);
+        return;
+      }
 
-    setIsSubmitting(false);
+      // Create the stage tag
+      await tagsCloudService.createStageTag({
+        accountId,
+        funnelId: funnel.id,
+        name: name.trim(),
+        color,
+      });
 
-    if (result.success) {
       toast.success(`Etapa "${name}" criada! Ela também aparecerá no Chatwoot como etiqueta.`);
       setName('');
       setColor(PRESET_COLORS[0]);
       setOpen(false);
-    } else {
-      toast.error(result.error || 'Erro ao criar etapa');
+      onStageCreated?.();
+    } catch (error: any) {
+      console.error('Error creating stage:', error);
+      toast.error(error.message || 'Erro ao criar etapa');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
