@@ -37,6 +37,7 @@ interface SyncResult {
   success: boolean;
   contacts_created: number;
   contacts_updated: number;
+  contacts_deleted: number;
   lead_tags_applied: number;
   lead_tags_removed: number;
   stages_created: number;
@@ -228,11 +229,18 @@ serve(async (req) => {
       success: true,
       contacts_created: 0,
       contacts_updated: 0,
+      contacts_deleted: 0,
       lead_tags_applied: 0,
       lead_tags_removed: 0,
       stages_created: 0,
       errors: [],
     };
+
+    // Collect all chatwoot_contact_ids from conversations for reconciliation
+    const activeChatwootContactIds = new Set<number>(
+      allConversations.map(conv => conv.meta?.sender?.id).filter(Boolean)
+    );
+    console.log('[Sync Contacts] Active Chatwoot contact IDs:', activeChatwootContactIds.size);
 
     // Process each conversation
     for (const conv of allConversations) {
@@ -417,6 +425,54 @@ serve(async (req) => {
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : 'Unknown error';
         result.errors.push(`Error processing conversation ${conv.id}: ${errorMsg}`);
+      }
+    }
+
+    // ============== RECONCILIATION: Delete orphaned contacts ==============
+    // Find contacts in DB that have chatwoot_contact_id but are no longer in Chatwoot
+    console.log('[Sync Contacts] Starting reconciliation - checking for orphaned contacts...');
+    
+    const { data: dbContactsWithChatwoot } = await supabaseAdmin
+      .from('contacts')
+      .select('id, chatwoot_contact_id')
+      .eq('account_id', account_id)
+      .not('chatwoot_contact_id', 'is', null);
+    
+    const orphanedContacts = (dbContactsWithChatwoot || []).filter(
+      contact => !activeChatwootContactIds.has(contact.chatwoot_contact_id as number)
+    );
+    
+    console.log('[Sync Contacts] Found', orphanedContacts.length, 'orphaned contacts to delete');
+    
+    for (const orphan of orphanedContacts) {
+      try {
+        // Delete lead_tags first (foreign key constraint)
+        const { error: leadTagsError } = await supabaseAdmin
+          .from('lead_tags')
+          .delete()
+          .eq('contact_id', orphan.id);
+        
+        if (leadTagsError) {
+          result.errors.push(`Failed to delete lead_tags for orphan ${orphan.id}: ${leadTagsError.message}`);
+          continue;
+        }
+        
+        // Delete the contact
+        const { error: contactError } = await supabaseAdmin
+          .from('contacts')
+          .delete()
+          .eq('id', orphan.id);
+        
+        if (contactError) {
+          result.errors.push(`Failed to delete orphan contact ${orphan.id}: ${contactError.message}`);
+          continue;
+        }
+        
+        result.contacts_deleted++;
+        console.log('[Sync Contacts] Deleted orphaned contact:', orphan.id);
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+        result.errors.push(`Error deleting orphan ${orphan.id}: ${errorMsg}`);
       }
     }
 
