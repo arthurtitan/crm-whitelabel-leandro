@@ -30,6 +30,7 @@ interface SyncResult {
   contacts_created: number;
   contacts_updated: number;
   lead_tags_applied: number;
+  lead_tags_removed: number;
   errors: string[];
 }
 
@@ -133,6 +134,7 @@ serve(async (req) => {
       contacts_created: 0,
       contacts_updated: 0,
       lead_tags_applied: 0,
+      lead_tags_removed: 0,
       errors: [],
     };
 
@@ -208,33 +210,55 @@ serve(async (req) => {
           result.contacts_created++;
         }
 
-        // Apply labels as lead_tags
-        if (conv.labels && conv.labels.length > 0) {
-          for (const labelSlug of conv.labels) {
-            const tag = tagsBySlug.get(labelSlug);
-            if (!tag) continue; // Label not imported as stage tag
+        // Get current lead_tags for this contact (only stage tags we manage)
+        const stageTagIds = Array.from(tagsBySlug.values()).map(t => t.id);
+        const { data: currentLeadTags } = await supabaseAdmin
+          .from('lead_tags')
+          .select('id, tag_id')
+          .eq('contact_id', contactId)
+          .in('tag_id', stageTagIds);
 
-            // Check if lead_tag already exists
-            const { data: existingLeadTag } = await supabaseAdmin
+        const currentTagIds = new Set(currentLeadTags?.map(lt => lt.tag_id) || []);
+        
+        // Determine which tags should be applied based on Chatwoot labels
+        const chatwootLabels = conv.labels || [];
+        const expectedTagIds = new Set<string>();
+        
+        for (const labelSlug of chatwootLabels) {
+          const tag = tagsBySlug.get(labelSlug);
+          if (tag) {
+            expectedTagIds.add(tag.id);
+          }
+        }
+
+        // Remove tags that are no longer in Chatwoot labels
+        for (const leadTag of (currentLeadTags || [])) {
+          if (!expectedTagIds.has(leadTag.tag_id)) {
+            const { error: deleteError } = await supabaseAdmin
               .from('lead_tags')
-              .select('id')
-              .eq('contact_id', contactId)
-              .eq('tag_id', tag.id)
-              .single();
+              .delete()
+              .eq('id', leadTag.id);
 
-            if (!existingLeadTag) {
-              // Create lead_tag
-              const { error: tagError } = await supabaseAdmin
-                .from('lead_tags')
-                .insert({
-                  contact_id: contactId,
-                  tag_id: tag.id,
-                  source: 'chatwoot_sync',
-                });
+            if (!deleteError) {
+              result.lead_tags_removed++;
+              console.log('[Sync Contacts] Removed lead_tag for contact:', contactId, 'tag:', leadTag.tag_id);
+            }
+          }
+        }
 
-              if (!tagError) {
-                result.lead_tags_applied++;
-              }
+        // Add tags that exist in Chatwoot but not in our DB
+        for (const tagId of expectedTagIds) {
+          if (!currentTagIds.has(tagId)) {
+            const { error: tagError } = await supabaseAdmin
+              .from('lead_tags')
+              .insert({
+                contact_id: contactId,
+                tag_id: tagId,
+                source: 'chatwoot_sync',
+              });
+
+            if (!tagError) {
+              result.lead_tags_applied++;
             }
           }
         }
