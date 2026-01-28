@@ -84,13 +84,37 @@ serve(async (req) => {
     // Get existing tags for this account (to map labels to tag_ids)
     const { data: existingTags } = await supabaseAdmin
       .from('tags')
-      .select('id, slug, chatwoot_label_id')
+      .select('id, name, slug, chatwoot_label_id')
       .eq('account_id', account_id)
       .eq('type', 'stage')
       .eq('ativo', true);
 
-    const tagsBySlug = new Map(existingTags?.map(t => [t.slug, t]) || []);
-    console.log('[Sync Contacts] Found', tagsBySlug.size, 'existing stage tags');
+    // Create multiple lookup maps for flexible matching
+    const tagsBySlug = new Map(existingTags?.map(t => [t.slug.toLowerCase(), t]) || []);
+    const tagsByName = new Map(existingTags?.map(t => [t.name.toLowerCase(), t]) || []);
+    // Also map by normalized name (removing special chars like underscores)
+    const tagsByNormalizedName = new Map(existingTags?.map(t => [
+      t.name.toLowerCase().replace(/[^a-z0-9]/g, ''), 
+      t
+    ]) || []);
+    
+    // Helper to find tag by label (tries multiple matching strategies)
+    const findTagByLabel = (labelSlug: string) => {
+      const normalizedLabel = labelSlug.toLowerCase();
+      const strippedLabel = normalizedLabel.replace(/[^a-z0-9]/g, '');
+      
+      // Try exact slug match first
+      if (tagsBySlug.has(normalizedLabel)) return tagsBySlug.get(normalizedLabel);
+      // Try exact name match
+      if (tagsByName.has(normalizedLabel)) return tagsByName.get(normalizedLabel);
+      // Try normalized name match (strips underscores, hyphens, etc.)
+      if (tagsByNormalizedName.has(strippedLabel)) return tagsByNormalizedName.get(strippedLabel);
+      // Try slug match with stripped version
+      if (tagsBySlug.has(strippedLabel)) return tagsBySlug.get(strippedLabel);
+      
+      return undefined;
+    };
+    console.log('[Sync Contacts] Found', existingTags?.length || 0, 'existing stage tags');
 
     // Fetch all conversations from Chatwoot (paginated)
     const allConversations: ChatwootConversation[] = [];
@@ -211,7 +235,9 @@ serve(async (req) => {
         }
 
         // Get current lead_tags for this contact (only stage tags we manage)
-        const stageTagIds = Array.from(tagsBySlug.values()).map(t => t.id);
+        const stageTagIds = existingTags?.map(t => t.id) || [];
+        if (stageTagIds.length === 0) continue;
+
         const { data: currentLeadTags } = await supabaseAdmin
           .from('lead_tags')
           .select('id, tag_id')
@@ -224,10 +250,15 @@ serve(async (req) => {
         const chatwootLabels = conv.labels || [];
         const expectedTagIds = new Set<string>();
         
+        console.log('[Sync Contacts] Processing labels for contact', contactId, ':', chatwootLabels);
+        
         for (const labelSlug of chatwootLabels) {
-          const tag = tagsBySlug.get(labelSlug);
+          const tag = findTagByLabel(labelSlug);
           if (tag) {
             expectedTagIds.add(tag.id);
+            console.log('[Sync Contacts] Matched label', labelSlug, 'to tag', tag.name);
+          } else {
+            console.log('[Sync Contacts] No match for label:', labelSlug);
           }
         }
 
