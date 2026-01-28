@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { AlertCircle, Eye, EyeOff, LogIn, RefreshCw, Loader2 } from 'lucide-react';
+import { AlertCircle, Eye, EyeOff, LogIn, Loader2 } from 'lucide-react';
 import glepsLogo from '@/assets/gleps-logo.png';
 
 // Helper function to get default route based on role and permissions
@@ -46,26 +46,24 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [loginSuccess, setLoginSuccess] = useState(false);
   
-  const { login, logout, user, isAuthenticated, isLoading: authLoading, authError, clearAuthError } = useAuth();
+  const { login, user, isAuthenticated, isLoading, authError, clearAuthError } = useAuth();
   const navigate = useNavigate();
   
-  // Redirect if authenticated with user data
+  // Redirect when authenticated with user data
   useEffect(() => {
-    if (isAuthenticated && user && !authLoading) {
+    if (isAuthenticated && user && !isLoading) {
       const targetRoute = getSmartDefaultRoute({ role: user.role, permissions: user.permissions });
-      console.log('[LoginPage] User authenticated and hydrated, redirecting to:', targetRoute);
+      console.log('[LoginPage] Authenticated, redirecting to:', targetRoute);
       navigate(targetRoute, { replace: true });
     }
-  }, [isAuthenticated, user, authLoading, navigate]);
+  }, [isAuthenticated, user, isLoading, navigate]);
 
-  // Handle auth errors from context (hydration failures)
+  // Handle auth errors from context
   useEffect(() => {
     if (authError) {
-      console.log('[LoginPage] Auth error from context:', authError);
+      console.log('[LoginPage] Auth error:', authError);
       setError(authError);
-      setLoginSuccess(false);
       setIsSubmitting(false);
     }
   }, [authError]);
@@ -75,44 +73,22 @@ export default function LoginPage() {
     setError('');
     clearAuthError();
     setIsSubmitting(true);
-    setLoginSuccess(false);
     
-    console.log('[LoginPage] Starting login attempt for:', email);
+    console.log('[LoginPage] Submitting login for:', email);
     
-    try {
-      // Direct login - no artificial timeout
-      const result = await login(email, password);
-      
-      if (!result.success) {
-        console.error('[LoginPage] Login failed:', result.error);
-        setError(result.error || 'Erro ao fazer login');
-        setIsSubmitting(false);
-      } else {
-        console.log('[LoginPage] Login successful, waiting for hydration...');
-        // Mark login as successful - now waiting for hydration via AuthContext
-        setLoginSuccess(true);
-        // Keep isSubmitting true until redirect happens or authError appears
-      }
-    } catch (err: any) {
-      console.error('[LoginPage] Unexpected error during login:', err);
-      setError('Erro inesperado ao fazer login. Tente novamente.');
+    const result = await login(email, password);
+    
+    if (!result.success) {
+      console.error('[LoginPage] Login failed:', result.error);
+      setError(result.error || 'Erro ao fazer login');
       setIsSubmitting(false);
     }
+    // On success, isSubmitting stays true until redirect happens via useEffect
   };
 
-  const handleRetry = async () => {
-    console.log('[LoginPage] Retry requested, logging out and clearing state');
-    setError('');
-    clearAuthError();
-    setLoginSuccess(false);
-    setIsSubmitting(false);
-    await logout();
-  };
-
-  // Determine current state for UI
-  const showLoadingProfile = loginSuccess && authLoading && !error && !authError;
-  const showError = error || authError;
-  const isFormDisabled = isSubmitting || showLoadingProfile;
+  // Determine UI state
+  const showLoading = isSubmitting || (isLoading && !error && !authError);
+  const isFormDisabled = showLoading;
 
   return (
     <div className="dark min-h-screen flex items-center justify-center bg-background p-4">
@@ -147,31 +123,10 @@ export default function LoginPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
-              {showError && (
+              {(error || authError) && (
                 <div className="flex items-start gap-2 p-3 text-sm text-destructive bg-destructive/10 rounded-lg border border-destructive/20">
                   <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <span>{error || authError}</span>
-                    {authError && (
-                      <Button
-                        type="button"
-                        variant="link"
-                        size="sm"
-                        className="p-0 h-auto ml-2 text-destructive hover:text-destructive/80"
-                        onClick={handleRetry}
-                      >
-                        <RefreshCw className="w-3 h-3 mr-1" />
-                        Tentar novamente
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              )}
-              
-              {showLoadingProfile && (
-                <div className="flex items-center gap-2 p-3 text-sm text-primary bg-primary/10 rounded-lg border border-primary/20">
-                  <Loader2 className="w-4 h-4 flex-shrink-0 animate-spin" />
-                  <span>Autenticado. Carregando seu perfil...</span>
+                  <span>{error || authError}</span>
                 </div>
               )}
               
@@ -220,15 +175,10 @@ export default function LoginPage() {
                 className="w-full h-11 bg-gradient-primary hover:opacity-90 transition-opacity glow-primary"
                 disabled={isFormDisabled}
               >
-                {isSubmitting && !loginSuccess ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Entrando...
-                  </div>
-                ) : showLoadingProfile ? (
+                {showLoading ? (
                   <div className="flex items-center gap-2">
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Carregando perfil...
+                    Entrando...
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
@@ -240,7 +190,6 @@ export default function LoginPage() {
             </form>
           </CardContent>
         </Card>
-
       </div>
     </div>
   );
