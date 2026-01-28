@@ -56,6 +56,7 @@ import { toast } from 'sonner';
 import { tagsCloudService, type Tag as CloudTag, type LeadTag } from '@/services/tags.cloud.service';
 import { supabase } from '@/integrations/supabase/client';
 import { mergeById } from '@/utils/dataSync';
+import { cn } from '@/lib/utils';
 
 interface KanbanLead extends Contact {
   stage_id: string | null;
@@ -74,6 +75,7 @@ export default function AdminKanbanPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedLead, setSelectedLead] = useState<KanbanLead | null>(null);
   const [draggedLead, setDraggedLead] = useState<string | null>(null);
+  const [dragOverStage, setDragOverStage] = useState<string | null>(null);
   const [saleContactId, setSaleContactId] = useState<string | null>(null);
   const [deleteConfirmStage, setDeleteConfirmStage] = useState<CloudTag | null>(null);
   const [showImportDialog, setShowImportDialog] = useState(false);
@@ -224,30 +226,83 @@ export default function AdminKanbanPage() {
 
   const getLeadsByStage = (stageTagId: string) => leads.filter((lead) => lead.stage_id === stageTagId);
 
-  const handleDragStart = (leadId: string) => setDraggedLead(leadId);
-  const handleDragOver = (e: DragEvent<HTMLDivElement>) => e.preventDefault();
+  const handleDragStart = useCallback((leadId: string) => {
+    setDraggedLead(leadId);
+  }, []);
+  
+  const handleDragEnd = useCallback(() => {
+    setDraggedLead(null);
+    setDragOverStage(null);
+  }, []);
+  
+  const handleDragOver = useCallback((e: DragEvent<HTMLDivElement>, stageId: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverStage !== stageId) {
+      setDragOverStage(stageId);
+    }
+  }, [dragOverStage]);
+  
+  const handleDragLeave = useCallback((e: DragEvent<HTMLDivElement>) => {
+    // Only clear if leaving the column entirely (not just moving between children)
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX;
+    const y = e.clientY;
+    
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+      setDragOverStage(null);
+    }
+  }, []);
 
-  const handleDrop = async (stageTagId: string) => {
+  const handleDrop = useCallback(async (stageTagId: string) => {
     if (!draggedLead) return;
 
     const lead = leads.find((l) => l.id === draggedLead);
     const stage = stageTags.find((s) => s.id === stageTagId);
+    const previousLeadTags = [...leadTags];
+    
+    // Skip if dropping on same stage
+    const currentStageTag = leadTags.find(lt => lt.contact_id === draggedLead);
+    if (currentStageTag?.tag_id === stageTagId) {
+      setDraggedLead(null);
+      return;
+    }
 
+    // OPTIMISTIC UPDATE: Update UI immediately
+    setLeadTags(current => {
+      const existing = current.find(lt => lt.contact_id === draggedLead);
+      if (existing) {
+        // Update existing tag
+        return current.map(lt => 
+          lt.contact_id === draggedLead 
+            ? { ...lt, tag_id: stageTagId }
+            : lt
+        );
+      } else {
+        // Add new tag
+        return [...current, {
+          id: `temp-${Date.now()}`,
+          contact_id: draggedLead,
+          tag_id: stageTagId,
+          created_at: new Date().toISOString(),
+          applied_by_id: null,
+          source: 'kanban'
+        }];
+      }
+    });
+    
+    setDraggedLead(null);
+
+    // BACKGROUND SYNC: Update database without blocking UI
     try {
       await tagsCloudService.applyStageTag(draggedLead, stageTagId, 'kanban');
       toast.success(`${lead?.nome} movido para ${stage?.name}`);
-      
-      // Refresh lead tags
-      const { data: leadTagsData } = await supabase
-        .from('lead_tags')
-        .select('*');
-      setLeadTags(leadTagsData || []);
     } catch (error: any) {
+      // Rollback on error
+      setLeadTags(previousLeadTags);
       toast.error(error.message || 'Erro ao mover lead');
     }
-
-    setDraggedLead(null);
-  };
+  }, [draggedLead, leads, stageTags, leadTags]);
 
   const handleMoveStage = async (tagId: string, direction: 'left' | 'right') => {
     const currentIndex = stageTags.findIndex(t => t.id === tagId);
@@ -484,9 +539,16 @@ export default function AdminKanbanPage() {
             return (
               <div
                 key={stage.id}
-                className="kanban-column kanban-column-snap"
-                onDragOver={handleDragOver}
-                onDrop={() => handleDrop(stage.id)}
+                className={cn(
+                  'kanban-column kanban-column-snap transition-colors duration-150',
+                  dragOverStage === stage.id && draggedLead && 'ring-2 ring-primary/30 ring-inset rounded-lg'
+                )}
+                onDragOver={(e) => handleDragOver(e, stage.id)}
+                onDragLeave={handleDragLeave}
+                onDrop={() => {
+                  setDragOverStage(null);
+                  handleDrop(stage.id);
+                }}
               >
                 <Card className="h-full flex flex-col">
                   <CardHeader className="py-3 px-4">
@@ -546,6 +608,7 @@ export default function AdminKanbanPage() {
                             isNew={newContactIds.has(lead.id) || newLeadTagIds.has(lead.id)}
                             onClick={() => setSelectedLead(lead)}
                             onDragStart={() => handleDragStart(lead.id)}
+                            onDragEnd={handleDragEnd}
                           />
                         ))}
                         {stageLeads.length === 0 && (

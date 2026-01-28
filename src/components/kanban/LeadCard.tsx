@@ -28,9 +28,10 @@ interface LeadCardProps {
   isNew?: boolean; // Indicates if this is a newly added lead
   onClick: () => void;
   onDragStart: () => void;
+  onDragEnd?: () => void;
 }
 
-export function LeadCard({ lead, stage, isDragging, isNew, onClick, onDragStart }: LeadCardProps) {
+export function LeadCard({ lead, stage, isDragging, isNew, onClick, onDragStart, onDragEnd }: LeadCardProps) {
   const { getContactSales } = useFinance();
 
   const sales = useMemo(() => getContactSales(lead.id), [lead.id, getContactSales]);
@@ -86,11 +87,21 @@ export function LeadCard({ lead, stage, isDragging, isNew, onClick, onDragStart 
   return (
     <div
       draggable
-      onDragStart={onDragStart}
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', lead.id);
+        // Small delay to allow the drag image to be captured before opacity changes
+        requestAnimationFrame(() => onDragStart());
+      }}
+      onDragEnd={() => {
+        onDragEnd?.();
+      }}
       onClick={onClick}
       className={cn(
-        'kanban-card p-3 rounded-lg bg-card border border-border cursor-pointer transition-all hover:shadow-md hover:border-primary/30',
-        isDragging && 'opacity-50 scale-95',
+        'kanban-card p-3 rounded-lg bg-card border border-border cursor-grab active:cursor-grabbing',
+        'transition-[transform,opacity,box-shadow] duration-200 ease-out',
+        'hover:shadow-md hover:border-primary/30 hover:-translate-y-0.5',
+        isDragging && 'opacity-40 scale-[0.98] shadow-lg',
         isNew && 'kanban-card-new'
       )}
       style={{ borderLeftColor: stage.color, borderLeftWidth: 3 }}
