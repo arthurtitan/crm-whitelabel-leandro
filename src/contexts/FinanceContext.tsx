@@ -1,8 +1,9 @@
-import { createContext, useContext, useState, useMemo, ReactNode, useCallback, useEffect } from 'react';
+import { createContext, useContext, useState, useMemo, ReactNode, useCallback, useEffect, useRef } from 'react';
 import { Sale, SaleItem, Contact, LeadFunnelState, SaleStatus, PaymentMethod, Product, ContactOrigin, LeadNote } from '@/types/crm';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTagContext } from '@/contexts/TagContext';
 import { supabase } from '@/integrations/supabase/client';
+import { mergeContacts } from '@/utils/dataSync';
 import { 
   mockSales, 
   mockLeadFunnelStates, 
@@ -66,6 +67,9 @@ interface FinanceContextType {
   leadNotes: LeadNote[];
   events: FinanceEvent[];
   isLoadingContacts: boolean;
+  isSyncingContacts: boolean;
+  lastContactsSync: string | null;
+  newContactIds: Set<string>;
   
   // Derived KPIs
   kpis: FinanceKPIs;
@@ -139,6 +143,11 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
   
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [isLoadingContacts, setIsLoadingContacts] = useState(true);
+  const [isSyncingContacts, setIsSyncingContacts] = useState(false);
+  const [lastContactsSync, setLastContactsSync] = useState<string | null>(null);
+  const [newContactIds, setNewContactIds] = useState<Set<string>>(new Set());
+  
+  const isFirstContactsLoad = useRef(true);
   
   const [leadFunnelStates, setLeadFunnelStates] = useState<LeadFunnelState[]>([]);
 
@@ -151,10 +160,26 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
     [accountId]
   );
 
-  // Fetch contacts from Supabase
-  // Function to fetch contacts from Supabase
+  // Clear new contact animation after delay
+  const clearNewContactIds = useCallback((ids: string[]) => {
+    setTimeout(() => {
+      setNewContactIds(prev => {
+        const next = new Set(prev);
+        ids.forEach(id => next.delete(id));
+        return next;
+      });
+    }, 2000); // Animation duration
+  }, []);
+
+  // Fetch contacts from Supabase with merge strategy
   const fetchContactsFromDb = useCallback(async () => {
-    setIsLoadingContacts(true);
+    // Only show full loading on first load
+    if (isFirstContactsLoad.current) {
+      setIsLoadingContacts(true);
+    } else {
+      setIsSyncingContacts(true);
+    }
+    
     try {
       const { data, error } = await supabase
         .from('contacts')
@@ -167,13 +192,35 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
         return;
       }
 
-      setContacts((data || []) as Contact[]);
+      const incoming = (data || []) as Contact[];
+      
+      setContacts(current => {
+        if (current.length === 0 || isFirstContactsLoad.current) {
+          // First load - just set data
+          return incoming;
+        }
+
+        // Merge with existing data (stale-while-revalidate)
+        const result = mergeContacts(current, incoming);
+        
+        // Track new items for animation
+        if (result.added.length > 0) {
+          setNewContactIds(prev => new Set([...prev, ...result.added]));
+          clearNewContactIds(result.added);
+        }
+
+        return result.data;
+      });
+      
+      setLastContactsSync(new Date().toISOString());
+      isFirstContactsLoad.current = false;
     } catch (err) {
       console.error('Error fetching contacts:', err);
     } finally {
       setIsLoadingContacts(false);
+      setIsSyncingContacts(false);
     }
-  }, [accountId]);
+  }, [accountId, clearNewContactIds]);
 
   // Fetch contacts on mount and when accountId changes
   useEffect(() => {
@@ -633,6 +680,9 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
     leadNotes,
     events,
     isLoadingContacts,
+    isSyncingContacts,
+    lastContactsSync,
+    newContactIds,
     kpis,
     createSale,
     createContact,

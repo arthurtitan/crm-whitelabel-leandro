@@ -25,11 +25,12 @@ interface LeadCardProps {
   lead: KanbanLead;
   stage: Tag; // Tag de etapa (Chatwoot) = coluna do Kanban
   isDragging?: boolean;
+  isNew?: boolean; // Indicates if this is a newly added lead
   onClick: () => void;
   onDragStart: () => void;
 }
 
-export function LeadCard({ lead, stage, isDragging, onClick, onDragStart }: LeadCardProps) {
+export function LeadCard({ lead, stage, isDragging, isNew, onClick, onDragStart }: LeadCardProps) {
   const { getContactSales } = useFinance();
 
   const sales = useMemo(() => getContactSales(lead.id), [lead.id, getContactSales]);
@@ -88,8 +89,9 @@ export function LeadCard({ lead, stage, isDragging, onClick, onDragStart }: Lead
       onDragStart={onDragStart}
       onClick={onClick}
       className={cn(
-        'p-3 rounded-lg bg-card border border-border cursor-pointer transition-all hover:shadow-md hover:border-primary/30',
-        isDragging && 'opacity-50 scale-95'
+        'kanban-card p-3 rounded-lg bg-card border border-border cursor-pointer transition-all hover:shadow-md hover:border-primary/30',
+        isDragging && 'opacity-50 scale-95',
+        isNew && 'kanban-card-new'
       )}
       style={{ borderLeftColor: stage.color, borderLeftWidth: 3 }}
     >
