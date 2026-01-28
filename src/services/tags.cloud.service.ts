@@ -350,7 +350,7 @@ export const tagsCloudService = {
   },
 
   /**
-   * Apply a stage tag to a contact (removes other stage tags)
+   * Apply a stage tag to a contact (removes other stage tags) and sync to Chatwoot
    */
   async applyStageTag(contactId: string, tagId: string, source: string = 'kanban'): Promise<void> {
     // Get the tag to verify it's a stage tag
@@ -373,6 +373,15 @@ export const tagsCloudService = {
 
     const stageTagIds = (stageTags || []).map(t => t.id);
 
+    // Get old stage tag id before removal
+    const { data: existingLeadTags } = await supabase
+      .from('lead_tags')
+      .select('tag_id')
+      .eq('contact_id', contactId)
+      .in('tag_id', stageTagIds);
+    
+    const oldStageTagId = existingLeadTags?.[0]?.tag_id;
+
     // Remove existing stage tags from contact
     if (stageTagIds.length > 0) {
       await supabase
@@ -394,6 +403,53 @@ export const tagsCloudService = {
     if (insertError) {
       console.error('Error applying stage tag:', insertError);
       throw new Error(insertError.message);
+    }
+
+    // Sync to Chatwoot (non-blocking)
+    this.updateContactLabelsInChatwoot(tag.account_id, contactId, tagId, oldStageTagId).catch(err => {
+      console.error('Failed to sync contact labels to Chatwoot:', err);
+    });
+  },
+
+  /**
+   * Update contact labels in Chatwoot when lead changes stage
+   */
+  async updateContactLabelsInChatwoot(
+    accountId: string, 
+    contactId: string, 
+    newStageTagId: string,
+    oldStageTagId?: string
+  ): Promise<{ success: boolean }> {
+    const { data: session } = await supabase.auth.getSession();
+    if (!session.session) {
+      console.warn('Not authenticated, skipping Chatwoot contact label sync');
+      return { success: false };
+    }
+
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/update-chatwoot-contact-labels`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.session.access_token}`,
+          },
+          body: JSON.stringify({
+            account_id: accountId,
+            contact_id: contactId,
+            new_stage_tag_id: newStageTagId,
+            old_stage_tag_id: oldStageTagId,
+          }),
+        }
+      );
+
+      const result = await response.json();
+      console.log('[Tags Service] Chatwoot contact labels sync result:', result);
+      return result;
+    } catch (err) {
+      console.error('Error updating contact labels in Chatwoot:', err);
+      return { success: false };
     }
   },
 
