@@ -69,7 +69,6 @@ export function ImportChatwootLabelsDialog({
         Array.from(selectedLabels)
       );
       setResult(importResult);
-      setStep('result');
 
       if (importResult.success) {
         const changed = (importResult.imported || 0) + (importResult.updated || 0);
@@ -81,7 +80,10 @@ export function ImportChatwootLabelsDialog({
           toast.info(`Nenhuma mudança: ${importResult.skipped} label(s) já estavam sincronizadas.`);
         }
         onImportComplete?.();
+        // Close dialog after successful import
+        handleOpenChange(false);
       } else {
+        setStep('result');
         toast.error(importResult.error || 'Erro ao importar labels');
       }
     } catch (err) {
