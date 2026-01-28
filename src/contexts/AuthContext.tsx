@@ -186,87 +186,110 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     mountedRef.current = true;
     console.log('[Auth] Initializing auth system...');
 
-    const initAuth = async () => {
-      // 1. Set up auth listener FIRST (before checking session)
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(
-        async (event, session) => {
-          if (!mountedRef.current) return;
-          
-          console.log('[Auth] Event:', event, 'User:', session?.user?.id || 'none');
+    // Track if initial session has been processed
+    let initialSessionProcessed = false;
 
-          if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-            // Only hydrate if user changed and not already hydrating
-            if (session?.user && currentUserRef.current !== session.user.id) {
-              if (!isHydratingRef.current) {
-                isHydratingRef.current = true;
-                console.log('[Auth] Starting hydration for new user...');
-                const success = await hydrateUser(session.user);
-                currentUserRef.current = session.user.id;
-                isHydratingRef.current = false;
-                console.log('[Auth] Hydration finished, success:', success);
-              } else {
-                console.log('[Auth] Skipping - already hydrating');
-              }
-            } else {
-              console.log('[Auth] Skipping - same user or no session');
-            }
-          } else if (event === 'SIGNED_OUT') {
-            console.log('[Auth] User signed out, clearing state');
-            currentUserRef.current = null;
-            isHydratingRef.current = false;
-            setAuthState({
-              user: null,
-              account: null,
-              isAuthenticated: false,
-              isLoading: false,
-              authError: null,
-            });
-            setOriginalUser(null);
-            setIsImpersonating(false);
-          } else if (event === 'INITIAL_SESSION' && !session) {
-            console.log('[Auth] No initial session');
-            setAuthState(prev => ({ ...prev, isLoading: false }));
-          }
+    const processSession = async (supabaseUser: SupabaseUser, source: string) => {
+      if (!mountedRef.current) {
+        console.log(`[Auth] (${source}) Component unmounted, skipping`);
+        return;
+      }
+
+      // Skip if same user already hydrated
+      if (currentUserRef.current === supabaseUser.id) {
+        console.log(`[Auth] (${source}) User already hydrated, skipping`);
+        // Make sure loading is false
+        setAuthState(prev => prev.isLoading ? { ...prev, isLoading: false } : prev);
+        return;
+      }
+
+      // Skip if already hydrating
+      if (isHydratingRef.current) {
+        console.log(`[Auth] (${source}) Already hydrating, skipping`);
+        return;
+      }
+
+      console.log(`[Auth] (${source}) Starting hydration for:`, supabaseUser.id);
+      isHydratingRef.current = true;
+
+      try {
+        const success = await hydrateUser(supabaseUser);
+        if (success) {
+          currentUserRef.current = supabaseUser.id;
         }
-      );
+        console.log(`[Auth] (${source}) Hydration complete, success:`, success);
+      } catch (error) {
+        console.error(`[Auth] (${source}) Hydration error:`, error);
+      } finally {
+        isHydratingRef.current = false;
+      }
+    };
 
-      // 2. Check for existing session
+    // 1. Set up auth listener FIRST
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (!mountedRef.current) return;
+        
+        console.log('[Auth] Event:', event, 'User:', session?.user?.id || 'none');
+
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          if (session?.user) {
+            // Small delay to let initial session processing complete first
+            if (!initialSessionProcessed) {
+              console.log('[Auth] Waiting for initial session processing...');
+              await new Promise(resolve => setTimeout(resolve, 50));
+            }
+            await processSession(session.user, `listener:${event}`);
+          }
+        } else if (event === 'SIGNED_OUT') {
+          console.log('[Auth] User signed out, clearing state');
+          currentUserRef.current = null;
+          isHydratingRef.current = false;
+          setAuthState({
+            user: null,
+            account: null,
+            isAuthenticated: false,
+            isLoading: false,
+            authError: null,
+          });
+          setOriginalUser(null);
+          setIsImpersonating(false);
+        } else if (event === 'INITIAL_SESSION' && !session) {
+          console.log('[Auth] No initial session');
+          setAuthState(prev => ({ ...prev, isLoading: false }));
+        }
+      }
+    );
+
+    // 2. Check for existing session AFTER listener is set up
+    const checkSession = async () => {
       console.log('[Auth] Checking existing session...');
       const { data: { session }, error } = await supabase.auth.getSession();
       
       if (error) {
         console.error('[Auth] getSession error:', error);
         setAuthState(prev => ({ ...prev, isLoading: false }));
-        return subscription;
+        initialSessionProcessed = true;
+        return;
       }
 
-      if (session?.user && !currentUserRef.current) {
-        console.log('[Auth] Found existing session, hydrating...');
-        if (!isHydratingRef.current) {
-          isHydratingRef.current = true;
-          const success = await hydrateUser(session.user);
-          currentUserRef.current = session.user.id;
-          isHydratingRef.current = false;
-          console.log('[Auth] Initial hydration finished, success:', success);
-        }
-      } else if (!session) {
+      if (session?.user) {
+        console.log('[Auth] Found existing session');
+        await processSession(session.user, 'getSession');
+      } else {
         console.log('[Auth] No existing session');
         setAuthState(prev => ({ ...prev, isLoading: false }));
       }
-
-      return subscription;
+      
+      initialSessionProcessed = true;
     };
 
-    let subscription: { unsubscribe: () => void } | undefined;
-    
-    initAuth().then(sub => {
-      subscription = sub;
-    });
+    checkSession();
 
     return () => {
       console.log('[Auth] Cleanup - unmounting');
       mountedRef.current = false;
-      subscription?.unsubscribe();
+      subscription.unsubscribe();
     };
   }, [hydrateUser]); // Only hydrateUser as dependency (stable via useCallback)
 
