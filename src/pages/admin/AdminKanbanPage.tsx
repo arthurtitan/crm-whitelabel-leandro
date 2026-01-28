@@ -48,11 +48,12 @@ import {
   Trash2,
   Download,
   Loader2,
+  RefreshCw,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
-import { tagsCloudService, type Tag as CloudTag, type LeadTag } from '@/services/tags.cloud.service';
+import { tagsCloudService, type Tag as CloudTag, type LeadTag, type SyncContactsResult } from '@/services/tags.cloud.service';
 import { supabase } from '@/integrations/supabase/client';
 
 interface KanbanLead extends Contact {
@@ -61,7 +62,7 @@ interface KanbanLead extends Contact {
 
 export default function AdminKanbanPage() {
   const { user, account } = useAuth();
-  const { contacts } = useFinance();
+  const { contacts, refetchContacts } = useFinance();
 
   const [stageTags, setStageTags] = useState<CloudTag[]>([]);
   const [leadTags, setLeadTags] = useState<LeadTag[]>([]);
@@ -72,6 +73,7 @@ export default function AdminKanbanPage() {
   const [saleContactId, setSaleContactId] = useState<string | null>(null);
   const [deleteConfirmStage, setDeleteConfirmStage] = useState<CloudTag | null>(null);
   const [showImportDialog, setShowImportDialog] = useState(false);
+  const [isSyncingContacts, setIsSyncingContacts] = useState(false);
 
   const accountId = user?.account_id || account?.id;
 
@@ -221,6 +223,35 @@ export default function AdminKanbanPage() {
     fetchData();
   };
 
+  const handleSyncContacts = async () => {
+    if (!accountId || isSyncingContacts) return;
+    
+    setIsSyncingContacts(true);
+    try {
+      const result = await tagsCloudService.syncChatwootContacts(accountId);
+      
+      if (result.success) {
+        const total = result.contacts_created + result.contacts_updated;
+        if (total > 0 || result.lead_tags_applied > 0) {
+          toast.success(
+            `Sincronização concluída: ${result.contacts_created} criado(s), ${result.contacts_updated} atualizado(s), ${result.lead_tags_applied} etapa(s) aplicada(s).`
+          );
+          // Refresh contacts and lead tags
+          await refetchContacts();
+          fetchData();
+        } else {
+          toast.info('Nenhuma alteração necessária - tudo sincronizado.');
+        }
+      } else {
+        toast.error(result.errors[0] || 'Erro ao sincronizar contatos');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Erro ao sincronizar contatos');
+    } finally {
+      setIsSyncingContacts(false);
+    }
+  };
+
   // Check if Chatwoot is configured
   const hasChatwootConfig = Boolean(account?.chatwoot_base_url && account?.chatwoot_account_id && account?.chatwoot_api_key);
 
@@ -242,16 +273,33 @@ export default function AdminKanbanPage() {
         </div>
         <div className="flex flex-col xs:flex-row items-stretch xs:items-center gap-2 sm:gap-3 w-full xs:w-auto">
           {hasChatwootConfig && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-2 min-h-[40px] sm:min-h-0"
-              onClick={() => setShowImportDialog(true)}
-            >
-              <Download className="w-4 h-4" />
-              <span className="hidden xs:inline">Importar Labels</span>
-              <span className="xs:hidden">Labels</span>
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2 min-h-[40px] sm:min-h-0"
+                onClick={handleSyncContacts}
+                disabled={isSyncingContacts}
+              >
+                {isSyncingContacts ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4" />
+                )}
+                <span className="hidden xs:inline">Sincronizar</span>
+                <span className="xs:hidden">Sync</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2 min-h-[40px] sm:min-h-0"
+                onClick={() => setShowImportDialog(true)}
+              >
+                <Download className="w-4 h-4" />
+                <span className="hidden xs:inline">Importar Labels</span>
+                <span className="xs:hidden">Labels</span>
+              </Button>
+            </>
           )}
           <CreateStageDialog
             trigger={
