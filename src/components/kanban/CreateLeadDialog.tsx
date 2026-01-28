@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -68,6 +68,9 @@ export function CreateLeadDialog({
   const [open, setOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Get the first stage ID when stages are available
+  const defaultStageId = stages.length > 0 ? stages[0].id : undefined;
+
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -75,10 +78,24 @@ export function CreateLeadDialog({
       telefone: '',
       email: '',
       origem: 'whatsapp',
-      initial_stage_id: stages.length > 0 ? stages[0].id : undefined,
+      initial_stage_id: defaultStageId,
       create_in_chatwoot: hasChatwootConfig,
     },
   });
+
+  // Reset form with correct initial_stage_id when dialog opens
+  useEffect(() => {
+    if (open && stages.length > 0) {
+      form.reset({
+        nome: '',
+        telefone: '',
+        email: '',
+        origem: 'whatsapp',
+        initial_stage_id: stages[0].id,
+        create_in_chatwoot: hasChatwootConfig,
+      });
+    }
+  }, [open, stages, hasChatwootConfig, form]);
 
   const onSubmit = async (values: FormValues) => {
     setIsSubmitting(true);
@@ -113,12 +130,21 @@ export function CreateLeadDialog({
       }
 
       // Apply initial stage tag if selected
+      console.log('[CreateLeadDialog] Checking stage tag application:', {
+        initial_stage_id: values.initial_stage_id,
+        contact_id: result.contact_id,
+      });
+      
       if (values.initial_stage_id && result.contact_id) {
-        await contactsCloudService.applyStageTagToContact(
+        console.log('[CreateLeadDialog] Applying stage tag...');
+        const tagResult = await contactsCloudService.applyStageTagToContact(
           result.contact_id,
           values.initial_stage_id,
           'kanban'
         );
+        console.log('[CreateLeadDialog] Stage tag result:', tagResult);
+      } else {
+        console.log('[CreateLeadDialog] Skipping stage tag - missing data');
       }
 
       // Show success message
