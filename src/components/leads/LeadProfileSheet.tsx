@@ -45,7 +45,7 @@ interface LeadProfileSheetProps {
 }
 
 export function LeadProfileSheet({ contact, open, onOpenChange }: LeadProfileSheetProps) {
-  const { user } = useAuth();
+  const { user, account } = useAuth();
   const { 
     getContactSales, 
     getContactNotes, 
@@ -120,9 +120,22 @@ export function LeadProfileSheet({ contact, open, onOpenChange }: LeadProfileShe
   };
 
   const handleOpenChatwoot = () => {
-    // This will open Chatwoot in a new tab when API is integrated
-    toast.info('Abrirá conversa no Chatwoot (integração pendente)');
-    // window.open(`https://chatwoot.example.com/contacts/${contact.id}`, '_blank');
+    const baseUrl = account?.chatwoot_base_url?.replace(/\/$/, '');
+    const accountId = account?.chatwoot_account_id;
+    const conversationId = contact.chatwoot_conversation_id;
+
+    if (!baseUrl || !accountId) {
+      toast.error('Chatwoot não configurado para esta conta');
+      return;
+    }
+
+    if (!conversationId) {
+      toast.warning('Este lead não possui conversa vinculada no Chatwoot');
+      return;
+    }
+
+    const url = `${baseUrl}/app/accounts/${accountId}/conversations/${conversationId}`;
+    window.open(url, '_blank');
   };
 
   const handleMarkAsPaid = (saleId: string) => {
