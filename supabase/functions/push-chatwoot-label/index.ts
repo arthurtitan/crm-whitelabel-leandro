@@ -70,13 +70,20 @@ serve(async (req) => {
 
     // Chatwoot API expects color WITH the # prefix
     const normalizedColor = label.color.startsWith('#') ? label.color : `#${label.color}`;
+    
+    // Chatwoot labels must be snake_case (no spaces, only lowercase letters, numbers, underscores)
+    const labelSlug = label.title
+      .toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // Remove accents
+      .replace(/\s+/g, '_') // Replace spaces with underscores
+      .replace(/[^a-z0-9_]/g, ''); // Remove special characters
 
     let result: { success: boolean; chatwoot_label_id?: number; error?: string };
 
     if (action === 'create') {
       // Create label in Chatwoot
       const createUrl = `${chatwoot_base_url}/api/v1/accounts/${chatwoot_account_id}/labels`;
-      console.log('[Push Label] Creating label at:', createUrl);
+      console.log('[Push Label] Creating label at:', createUrl, 'with slug:', labelSlug);
 
       const response = await fetch(createUrl, {
         method: 'POST',
@@ -85,9 +92,9 @@ serve(async (req) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          title: label.title,
+          title: labelSlug, // Use slug for Chatwoot title
           color: normalizedColor,
-          description: label.description || `Created from CRM Kanban`,
+          description: label.description || label.title, // Store original title in description
         }),
       });
 
@@ -107,8 +114,9 @@ serve(async (req) => {
           
           if (listResponse.ok) {
             const labels = await listResponse.json();
+            // Search by slug (normalized title)
             const existingLabel = labels.payload?.find((l: any) => 
-              l.title.toLowerCase() === label.title.toLowerCase()
+              l.title.toLowerCase() === labelSlug.toLowerCase()
             );
             
             if (existingLabel) {
@@ -160,7 +168,7 @@ serve(async (req) => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            title: label.title,
+            title: labelSlug, // Use slug for Chatwoot title
             color: normalizedColor,
           }),
         });
