@@ -63,12 +63,23 @@ export function ImportChatwootLabelsDialog({
     setStep('importing');
 
     try {
-      const importResult = await tagsCloudService.importChatwootLabels(accountId);
+      console.log('[ImportLabels] Starting import for account:', accountId, 'selected:', selectedLabels.size);
+      const importResult = await tagsCloudService.importChatwootLabels(
+        accountId,
+        Array.from(selectedLabels)
+      );
       setResult(importResult);
       setStep('result');
 
       if (importResult.success) {
-        toast.success(`${importResult.imported} etapa(s) importada(s) com sucesso!`);
+        const changed = (importResult.imported || 0) + (importResult.updated || 0);
+        if (changed > 0) {
+          toast.success(
+            `Importação concluída: ${importResult.imported} importada(s), ${importResult.updated} atualizada(s), ${importResult.skipped} ignorada(s).`
+          );
+        } else {
+          toast.info(`Nenhuma mudança: ${importResult.skipped} label(s) já estavam sincronizadas.`);
+        }
         onImportComplete?.();
       } else {
         toast.error(importResult.error || 'Erro ao importar labels');
@@ -184,6 +195,7 @@ export function ImportChatwootLabelsDialog({
                         <Checkbox
                           checked={selectedLabels.has(label.id)}
                           onCheckedChange={() => toggleLabel(label.id)}
+                          onClick={(e) => e.stopPropagation()}
                         />
                         <div
                           className="w-4 h-4 rounded-full flex-shrink-0"

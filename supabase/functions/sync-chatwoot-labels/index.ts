@@ -38,7 +38,7 @@ serve(async (req) => {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    const { account_id, action = 'import' } = await req.json();
+    const { account_id, action = 'import', selected_label_ids } = await req.json();
 
     if (!account_id) {
       return new Response(
@@ -94,7 +94,7 @@ serve(async (req) => {
     }
 
     const labelsData = await labelsResponse.json();
-    const labels: ChatwootLabel[] = labelsData.payload || labelsData || [];
+    let labels: ChatwootLabel[] = labelsData.payload || labelsData || [];
 
     console.log(`[Chatwoot Labels] Found ${labels.length} labels`);
 
@@ -112,6 +112,13 @@ serve(async (req) => {
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // If UI passed a selection, import only those label IDs
+    if (Array.isArray(selected_label_ids) && selected_label_ids.length > 0) {
+      const selected = new Set<number>(selected_label_ids);
+      labels = labels.filter((l) => selected.has(l.id));
+      console.log(`[Chatwoot Labels] Filtered to ${labels.length} selected labels`);
     }
 
     // Get default funnel for account
@@ -166,19 +173,33 @@ serve(async (req) => {
     // Process each label
     for (let i = 0; i < labels.length; i++) {
       const label = labels[i];
-      const slug = label.title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+      const slug = label.title
+        .toLowerCase()
+        .trim()
+        .replace(/\s+/g, '-')
+        // keep underscores to avoid collisions (e.g. novos_leads)
+        .replace(/[^a-z0-9-_]/g, '');
 
       // Check if already linked by chatwoot_label_id
       const existingByLabel = existingByLabelId.get(label.id);
       if (existingByLabel) {
-        // Update if name or color changed
-        if (existingByLabel.name !== label.title || existingByLabel.color !== label.color) {
+        // Update if name/color/slug changed OR if tag is inactive
+        const needsUpdate =
+          existingByLabel.name !== label.title ||
+          existingByLabel.color !== label.color ||
+          existingByLabel.slug !== slug ||
+          existingByLabel.ativo !== true ||
+          existingByLabel.type !== 'stage';
+
+        if (needsUpdate) {
           const { error: updateError } = await supabase
             .from("tags")
             .update({
               name: label.title,
               color: label.color,
               slug,
+              type: 'stage',
+              ativo: true,
             })
             .eq("id", existingByLabel.id);
 
@@ -202,6 +223,10 @@ serve(async (req) => {
           .update({
             chatwoot_label_id: label.id,
             color: label.color,
+            name: label.title,
+            slug,
+            type: 'stage',
+            ativo: true,
           })
           .eq("id", existingByName.id);
 
