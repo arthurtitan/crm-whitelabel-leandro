@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.delete-user]
 verify_jwt = false
+
+[functions.create-chatwoot-contact]
+verify_jwt = false

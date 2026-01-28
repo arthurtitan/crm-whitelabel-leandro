@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect, useCallback, useRef, type DragEvent } fro
 import { useAuth } from '@/contexts/AuthContext';
 import { useFinance } from '@/contexts/FinanceContext';
 import { CreateSaleDialog } from '@/components/finance/CreateSaleDialog';
-import { LeadCard, CreateStageDialog, ImportChatwootLabelsDialog, SyncIndicator } from '@/components/kanban';
+import { LeadCard, CreateStageDialog, ImportChatwootLabelsDialog, SyncIndicator, CreateLeadDialog } from '@/components/kanban';
 import { Contact } from '@/types/crm';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -495,6 +495,22 @@ export default function AdminKanbanPage() {
               </Button>
             </>
           )}
+          <CreateLeadDialog
+            accountId={accountId || ''}
+            stages={stageTags}
+            hasChatwootConfig={hasChatwootConfig}
+            trigger={
+              <Button variant="default" size="sm" className="gap-2 min-h-[40px] sm:min-h-0">
+                <Plus className="w-4 h-4" />
+                <span className="hidden xs:inline">Novo Lead</span>
+                <span className="xs:hidden">Lead</span>
+              </Button>
+            }
+            onLeadCreated={() => {
+              refetchContacts();
+              fetchTagsData(false);
+            }}
+          />
           <CreateStageDialog
             trigger={
               <Button variant="outline" size="sm" className="gap-2 min-h-[40px] sm:min-h-0">
