@@ -294,9 +294,10 @@ export default function AdminKanbanPage() {
       
       if (result.success) {
         const total = result.contacts_created + result.contacts_updated;
-        if (total > 0 || result.lead_tags_applied > 0) {
+        const removedCount = result.lead_tags_removed || 0;
+        if (total > 0 || result.lead_tags_applied > 0 || removedCount > 0) {
           toast.success(
-            `Sincronização concluída: ${result.contacts_created} criado(s), ${result.contacts_updated} atualizado(s), ${result.lead_tags_applied} etapa(s) aplicada(s).`
+            `Sincronização concluída: ${result.contacts_created} criado(s), ${result.contacts_updated} atualizado(s), ${result.lead_tags_applied} etapa(s) aplicada(s), ${removedCount} removida(s).`
           );
           // Refresh contacts and lead tags
           await refetchContacts();

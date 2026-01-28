@@ -55,6 +55,7 @@ export interface SyncContactsResult {
   contacts_created: number;
   contacts_updated: number;
   lead_tags_applied: number;
+  lead_tags_removed: number;
   errors: string[];
 }
 
@@ -459,6 +460,7 @@ export const tagsCloudService = {
           contacts_created: 0,
           contacts_updated: 0,
           lead_tags_applied: 0,
+          lead_tags_removed: 0,
           errors: [result.error || `Erro HTTP ${response.status}`],
         };
       }
@@ -471,6 +473,7 @@ export const tagsCloudService = {
         contacts_created: 0,
         contacts_updated: 0,
         lead_tags_applied: 0,
+        lead_tags_removed: 0,
         errors: [err.name === 'AbortError' ? 'Timeout ao sincronizar contatos' : (err.message || 'Erro desconhecido')],
       };
     }
