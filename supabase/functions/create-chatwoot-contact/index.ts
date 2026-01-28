@@ -116,10 +116,29 @@ Deno.serve(async (req) => {
       );
     }
 
-    const contactData: ChatwootContactResponse = await contactResponse.json();
-    const chatwoot_contact_id = contactData.payload.id;
+    const contactData = await contactResponse.json();
+    console.log('[create-chatwoot-contact] Chatwoot contact response:', JSON.stringify(contactData));
+    
+    // Handle different response formats from Chatwoot API
+    // Can be: { payload: { id: 123, ... } } or { payload: { contact: { id: 123 } } } or { id: 123 }
+    let chatwoot_contact_id: number | undefined;
+    if (contactData.payload?.contact?.id) {
+      chatwoot_contact_id = contactData.payload.contact.id;
+    } else if (contactData.payload?.id) {
+      chatwoot_contact_id = contactData.payload.id;
+    } else if (contactData.id) {
+      chatwoot_contact_id = contactData.id;
+    }
 
-    console.log('[create-chatwoot-contact] Contact created with ID:', chatwoot_contact_id);
+    console.log('[create-chatwoot-contact] Extracted contact ID:', chatwoot_contact_id);
+
+    if (!chatwoot_contact_id) {
+      console.error('[create-chatwoot-contact] Could not extract contact ID from response');
+      return new Response(
+        JSON.stringify({ success: false, error: 'Could not extract contact ID from Chatwoot response' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     let chatwoot_conversation_id: number | null = null;
 
