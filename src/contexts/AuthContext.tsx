@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { toast } from 'sonner';
@@ -56,16 +56,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [originalUser, setOriginalUser] = useState<User | null>(null);
   const [isImpersonating, setIsImpersonating] = useState(false);
 
+  // Refs to prevent stale closures and duplicate hydrations
+  const currentUserRef = useRef<string | null>(null);
+  const isHydratingRef = useRef(false);
+  const mountedRef = useRef(true);
+
   const clearAuthError = useCallback(() => {
     setAuthState(prev => ({ ...prev, authError: null }));
   }, []);
 
-  // Hydrate user data - simplified without artificial timeout
+  // Hydrate user data - stable function via useCallback with no dependencies
   const hydrateUser = useCallback(async (supabaseUser: SupabaseUser): Promise<boolean> => {
     console.log('[Auth] Hydrating user:', supabaseUser.id);
 
     try {
-      // Fetch profile and role in parallel - no artificial timeout
+      // Fetch profile and role in parallel
       const [profileResult, roleResult] = await Promise.all([
         supabase
           .from('profiles')
@@ -166,63 +171,104 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Initialize auth state
+  // Initialize auth state - listener created ONCE on mount
   useEffect(() => {
-    let mounted = true;
+    mountedRef.current = true;
+    console.log('[Auth] Initializing auth system...');
 
-    const handleAuthChange = async (event: string, session: any) => {
-      if (!mounted) return;
-      console.log('[Auth] Event:', event);
+    const initAuth = async () => {
+      // 1. Set up auth listener FIRST (before checking session)
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(
+        async (event, session) => {
+          if (!mountedRef.current) return;
+          
+          console.log('[Auth] Event:', event, 'User:', session?.user?.id || 'none');
 
-      if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') && session?.user) {
-        // Only hydrate if we don't have the user OR if the user ID changed
-        const currentUserId = authState.user?.id;
-        if (currentUserId === session.user.id && authState.isAuthenticated) {
-          console.log('[Auth] Already hydrated, skipping');
-          return;
+          if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+            // Only hydrate if user changed and not already hydrating
+            if (session?.user && currentUserRef.current !== session.user.id) {
+              if (!isHydratingRef.current) {
+                isHydratingRef.current = true;
+                console.log('[Auth] Starting hydration for new user...');
+                await hydrateUser(session.user);
+                currentUserRef.current = session.user.id;
+                isHydratingRef.current = false;
+              } else {
+                console.log('[Auth] Skipping - already hydrating');
+              }
+            } else {
+              console.log('[Auth] Skipping - same user or no session');
+            }
+          } else if (event === 'SIGNED_OUT') {
+            console.log('[Auth] User signed out, clearing state');
+            currentUserRef.current = null;
+            isHydratingRef.current = false;
+            setAuthState({
+              user: null,
+              account: null,
+              isAuthenticated: false,
+              isLoading: false,
+              authError: null,
+            });
+            setOriginalUser(null);
+            setIsImpersonating(false);
+          } else if (event === 'INITIAL_SESSION' && !session) {
+            console.log('[Auth] No initial session');
+            setAuthState(prev => ({ ...prev, isLoading: false }));
+          }
         }
-        
-        setAuthState(prev => ({ ...prev, isLoading: true, authError: null }));
-        await hydrateUser(session.user);
-      } else if (event === 'SIGNED_OUT') {
-        setAuthState({
-          user: null,
-          account: null,
-          isAuthenticated: false,
-          isLoading: false,
-          authError: null,
-        });
-        setOriginalUser(null);
-        setIsImpersonating(false);
-      } else if (event === 'INITIAL_SESSION' && !session) {
-        setAuthState({
-          user: null,
-          account: null,
-          isAuthenticated: false,
-          isLoading: false,
-          authError: null,
-        });
+      );
+
+      // 2. Check for existing session
+      console.log('[Auth] Checking existing session...');
+      const { data: { session }, error } = await supabase.auth.getSession();
+      
+      if (error) {
+        console.error('[Auth] getSession error:', error);
+        setAuthState(prev => ({ ...prev, isLoading: false }));
+        return subscription;
       }
+
+      if (session?.user && !currentUserRef.current) {
+        console.log('[Auth] Found existing session, hydrating...');
+        if (!isHydratingRef.current) {
+          isHydratingRef.current = true;
+          await hydrateUser(session.user);
+          currentUserRef.current = session.user.id;
+          isHydratingRef.current = false;
+        }
+      } else if (!session) {
+        console.log('[Auth] No existing session');
+        setAuthState(prev => ({ ...prev, isLoading: false }));
+      }
+
+      return subscription;
     };
 
-    // Set up auth listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(handleAuthChange);
+    let subscription: { unsubscribe: () => void } | undefined;
+    
+    initAuth().then(sub => {
+      subscription = sub;
+    });
 
     return () => {
-      mounted = false;
-      subscription.unsubscribe();
+      console.log('[Auth] Cleanup - unmounting');
+      mountedRef.current = false;
+      subscription?.unsubscribe();
     };
-  }, [hydrateUser, authState.user?.id, authState.isAuthenticated]);
+  }, [hydrateUser]); // Only hydrateUser as dependency (stable via useCallback)
 
   // Login - just authenticates, hydration follows via listener
   const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    console.log('[Auth] Login:', email);
-    setAuthState(prev => ({ ...prev, authError: null }));
+    console.log('[Auth] Login attempt:', email);
+    setAuthState(prev => ({ ...prev, authError: null, isLoading: true }));
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
       if (error) {
+        console.error('[Auth] Login error:', error.message);
+        setAuthState(prev => ({ ...prev, isLoading: false }));
         if (error.message.includes('Invalid login credentials')) {
           return { success: false, error: 'Credenciais inválidas' };
         }
@@ -230,11 +276,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (!data.user) {
+        setAuthState(prev => ({ ...prev, isLoading: false }));
         return { success: false, error: 'Erro ao fazer login' };
       }
 
+      console.log('[Auth] Login successful, waiting for listener to hydrate...');
+      // Don't set isLoading to false here - let the listener handle it after hydration
       return { success: true };
     } catch (error: any) {
+      console.error('[Auth] Unexpected login error:', error);
+      setAuthState(prev => ({ ...prev, isLoading: false }));
       return { success: false, error: 'Erro inesperado' };
     }
   }, []);
@@ -266,12 +317,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    console.log('[Auth] Logout');
+    console.log('[Auth] Logout requested');
     setAuthState(prev => ({ ...prev, isLoading: true }));
     
     try {
       await supabase.auth.signOut();
-    } finally {
+      // State will be cleared by the listener
+    } catch (error) {
+      console.error('[Auth] Logout error:', error);
+      // Force clear state even if signOut fails
+      currentUserRef.current = null;
       setAuthState({
         user: null,
         account: null,
