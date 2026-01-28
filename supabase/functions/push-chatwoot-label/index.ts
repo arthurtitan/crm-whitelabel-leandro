@@ -68,8 +68,8 @@ serve(async (req) => {
       );
     }
 
-    // Normalize color (Chatwoot expects hex without #)
-    const normalizedColor = label.color.startsWith('#') ? label.color.slice(1) : label.color;
+    // Chatwoot API expects color WITH the # prefix
+    const normalizedColor = label.color.startsWith('#') ? label.color : `#${label.color}`;
 
     let result: { success: boolean; chatwoot_label_id?: number; error?: string };
 
