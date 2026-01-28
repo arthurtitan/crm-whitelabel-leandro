@@ -3,3 +3,4 @@ export { TagSelector } from './TagSelector';
 export { TagHistoryList } from './TagHistoryList';
 export { CreateStageDialog } from './CreateStageDialog';
 export { ImportChatwootLabelsDialog } from './ImportChatwootLabelsDialog';
+export { SyncIndicator } from './SyncIndicator';

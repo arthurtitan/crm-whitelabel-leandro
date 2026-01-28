@@ -1,8 +1,8 @@
-import { useMemo, useState, useEffect, useCallback, type DragEvent } from 'react';
+import { useMemo, useState, useEffect, useCallback, useRef, type DragEvent } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFinance } from '@/contexts/FinanceContext';
 import { CreateSaleDialog } from '@/components/finance/CreateSaleDialog';
-import { LeadCard, CreateStageDialog, ImportChatwootLabelsDialog } from '@/components/kanban';
+import { LeadCard, CreateStageDialog, ImportChatwootLabelsDialog, SyncIndicator } from '@/components/kanban';
 import { Contact } from '@/types/crm';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Dialog,
   DialogContent,
@@ -47,14 +48,14 @@ import {
   ChevronRight,
   Trash2,
   Download,
-  Loader2,
   RefreshCw,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
-import { tagsCloudService, type Tag as CloudTag, type LeadTag, type SyncContactsResult } from '@/services/tags.cloud.service';
+import { tagsCloudService, type Tag as CloudTag, type LeadTag } from '@/services/tags.cloud.service';
 import { supabase } from '@/integrations/supabase/client';
+import { mergeById } from '@/utils/dataSync';
 
 interface KanbanLead extends Contact {
   stage_id: string | null;
@@ -62,31 +63,52 @@ interface KanbanLead extends Contact {
 
 export default function AdminKanbanPage() {
   const { user, account } = useAuth();
-  const { contacts, refetchContacts } = useFinance();
+  const { contacts, refetchContacts, isLoadingContacts, isSyncingContacts, lastContactsSync, newContactIds } = useFinance();
 
   const [stageTags, setStageTags] = useState<CloudTag[]>([]);
   const [leadTags, setLeadTags] = useState<LeadTag[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingTags, setIsLoadingTags] = useState(true);
+  const [isSyncingTags, setIsSyncingTags] = useState(false);
+  const [lastTagsSync, setLastTagsSync] = useState<string | null>(null);
+  const [newLeadTagIds, setNewLeadTagIds] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedLead, setSelectedLead] = useState<KanbanLead | null>(null);
   const [draggedLead, setDraggedLead] = useState<string | null>(null);
   const [saleContactId, setSaleContactId] = useState<string | null>(null);
   const [deleteConfirmStage, setDeleteConfirmStage] = useState<CloudTag | null>(null);
   const [showImportDialog, setShowImportDialog] = useState(false);
-  const [isSyncingContacts, setIsSyncingContacts] = useState(false);
+  const [isSyncingChatwoot, setIsSyncingChatwoot] = useState(false);
+
+  const isFirstTagsLoad = useRef(true);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
   const accountId = user?.account_id || account?.id;
 
-  // Fetch stage tags and lead_tags from Supabase
-  const fetchData = useCallback(async () => {
+  // Clear new lead tag animation after delay
+  const clearNewLeadTagIds = useCallback((ids: string[]) => {
+    setTimeout(() => {
+      setNewLeadTagIds(prev => {
+        const next = new Set(prev);
+        ids.forEach(id => next.delete(id));
+        return next;
+      });
+    }, 2000);
+  }, []);
+
+  // Fetch stage tags and lead_tags with merge strategy
+  const fetchTagsData = useCallback(async (isBackground = false) => {
     if (!accountId) {
-      setIsLoading(false);
+      setIsLoadingTags(false);
       return;
     }
 
-    try {
-      setIsLoading(true);
+    if (isFirstTagsLoad.current) {
+      setIsLoadingTags(true);
+    } else if (isBackground) {
+      setIsSyncingTags(true);
+    }
 
+    try {
       // Fetch stage tags
       const tags = await tagsCloudService.listStageTags(accountId);
       setStageTags(tags);
@@ -96,18 +118,58 @@ export default function AdminKanbanPage() {
         .from('lead_tags')
         .select('*');
 
-      setLeadTags(leadTagsData || []);
+      const incoming = leadTagsData || [];
+      
+      setLeadTags(current => {
+        if (current.length === 0 || isFirstTagsLoad.current) {
+          return incoming;
+        }
+        
+        // Merge with existing data
+        const result = mergeById(current, incoming, true);
+        
+        // Track new items for animation
+        if (result.added.length > 0) {
+          setNewLeadTagIds(prev => new Set([...prev, ...result.added]));
+          clearNewLeadTagIds(result.added);
+        }
+        
+        return result.data;
+      });
+
+      setLastTagsSync(new Date().toISOString());
+      isFirstTagsLoad.current = false;
     } catch (error) {
       console.error('Error fetching kanban data:', error);
-      toast.error('Erro ao carregar etapas');
+      if (isFirstTagsLoad.current) {
+        toast.error('Erro ao carregar etapas');
+      }
     } finally {
-      setIsLoading(false);
+      setIsLoadingTags(false);
+      setIsSyncingTags(false);
     }
-  }, [accountId]);
+  }, [accountId, clearNewLeadTagIds]);
 
+  // Initial fetch
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    fetchTagsData(false);
+  }, [fetchTagsData]);
+
+  // Background polling every 30 seconds
+  useEffect(() => {
+    pollingRef.current = setInterval(() => {
+      if (!isFirstTagsLoad.current) {
+        fetchTagsData(true);
+        refetchContacts();
+      }
+    }, 30000);
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+      }
+    };
+  }, [fetchTagsData, refetchContacts]);
 
   // Get stage tag for a lead
   const getLeadStageTag = useCallback((contactId: string): CloudTag | undefined => {
@@ -172,7 +234,7 @@ export default function AdminKanbanPage() {
     try {
       await tagsCloudService.swapTagOrder(tagId, adjacentTag.id);
       toast.success('Etapa reordenada!');
-      fetchData();
+      fetchTagsData(false);
     } catch (error: any) {
       toast.error(error.message || 'Erro ao reordenar');
     }
@@ -184,7 +246,7 @@ export default function AdminKanbanPage() {
     try {
       await tagsCloudService.deleteTag(deleteConfirmStage.id);
       toast.success(`Etapa "${deleteConfirmStage.name}" excluída!`);
-      fetchData();
+      fetchTagsData(false);
     } catch (error: any) {
       toast.error(error.message || 'Erro ao excluir etapa');
     }
@@ -220,13 +282,13 @@ export default function AdminKanbanPage() {
   };
 
   const handleImportComplete = () => {
-    fetchData();
+    fetchTagsData(false);
   };
 
-  const handleSyncContacts = async () => {
-    if (!accountId || isSyncingContacts) return;
+  const handleSyncChatwoot = async () => {
+    if (!accountId || isSyncingChatwoot) return;
     
-    setIsSyncingContacts(true);
+    setIsSyncingChatwoot(true);
     try {
       const result = await tagsCloudService.syncChatwootContacts(accountId);
       
@@ -238,7 +300,7 @@ export default function AdminKanbanPage() {
           );
           // Refresh contacts and lead tags
           await refetchContacts();
-          fetchData();
+          fetchTagsData(false);
         } else {
           toast.info('Nenhuma alteração necessária - tudo sincronizado.');
         }
@@ -248,17 +310,38 @@ export default function AdminKanbanPage() {
     } catch (error: any) {
       toast.error(error.message || 'Erro ao sincronizar contatos');
     } finally {
-      setIsSyncingContacts(false);
+      setIsSyncingChatwoot(false);
     }
   };
 
   // Check if Chatwoot is configured
   const hasChatwootConfig = Boolean(account?.chatwoot_base_url && account?.chatwoot_account_id && account?.chatwoot_api_key);
 
-  if (isLoading) {
+  // Check if initial loading (skeleton only on first load)
+  const isInitialLoading = isLoadingTags && isLoadingContacts;
+
+  if (isInitialLoading) {
     return (
-      <div className="page-container h-[calc(100vh-8rem)] flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      <div className="page-container h-[calc(100vh-8rem)]">
+        {/* Skeleton Header */}
+        <div className="page-header">
+          <div className="min-w-0">
+            <Skeleton className="h-8 w-32 mb-2" />
+            <Skeleton className="h-4 w-48" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-9 w-28" />
+            <Skeleton className="h-9 w-48" />
+          </div>
+        </div>
+        {/* Skeleton Columns */}
+        <div className="flex gap-4 overflow-hidden mt-6">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="w-72 flex-shrink-0">
+              <Skeleton className="h-[500px] rounded-lg" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -267,9 +350,16 @@ export default function AdminKanbanPage() {
     <div className="page-container h-[calc(100vh-8rem)]">
       {/* Header */}
       <div className="page-header">
-        <div className="min-w-0">
-          <h1 className="title-responsive text-foreground">Kanban</h1>
-          <p className="text-responsive-sm text-muted-foreground">Gerencie seus leads no funil</p>
+        <div className="min-w-0 flex items-center gap-3">
+          <div>
+            <h1 className="title-responsive text-foreground">Kanban</h1>
+            <p className="text-responsive-sm text-muted-foreground">Gerencie seus leads no funil</p>
+          </div>
+          {/* Sync Indicator - shows when syncing in background */}
+          <SyncIndicator 
+            isSyncing={isSyncingTags || isSyncingContacts} 
+            lastSyncAt={lastTagsSync || lastContactsSync}
+          />
         </div>
         <div className="flex flex-col xs:flex-row items-stretch xs:items-center gap-2 sm:gap-3 w-full xs:w-auto">
           {hasChatwootConfig && (
@@ -278,11 +368,11 @@ export default function AdminKanbanPage() {
                 variant="outline"
                 size="sm"
                 className="gap-2 min-h-[40px] sm:min-h-0"
-                onClick={handleSyncContacts}
-                disabled={isSyncingContacts}
+                onClick={handleSyncChatwoot}
+                disabled={isSyncingChatwoot}
               >
-                {isSyncingContacts ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                {isSyncingChatwoot ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
                 ) : (
                   <RefreshCw className="w-4 h-4" />
                 )}
@@ -422,6 +512,7 @@ export default function AdminKanbanPage() {
                             lead={lead}
                             stage={stage as any}
                             isDragging={draggedLead === lead.id}
+                            isNew={newContactIds.has(lead.id) || newLeadTagIds.has(lead.id)}
                             onClick={() => setSelectedLead(lead)}
                             onDragStart={() => handleDragStart(lead.id)}
                           />
