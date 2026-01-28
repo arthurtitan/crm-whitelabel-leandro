@@ -100,7 +100,7 @@ export const tagsCloudService = {
   },
 
   /**
-   * Create a new stage tag (Kanban column)
+   * Create a new stage tag (Kanban column) and sync to Chatwoot
    */
   async createStageTag(input: {
     accountId: string;
@@ -145,13 +145,73 @@ export const tagsCloudService = {
       throw new Error(error.message);
     }
 
-    return data as Tag;
+    const tag = data as Tag;
+
+    // Push to Chatwoot (non-blocking)
+    this.pushLabelToChatwoot(input.accountId, 'create', {
+      title: input.name,
+      color: input.color,
+    }, tag.id).catch(err => {
+      console.error('Failed to push label to Chatwoot:', err);
+    });
+
+    return tag;
   },
 
   /**
-   * Update a tag
+   * Push label changes to Chatwoot
+   */
+  async pushLabelToChatwoot(
+    accountId: string, 
+    action: 'create' | 'update' | 'delete',
+    label: { title: string; color: string; description?: string },
+    tagId?: string,
+    chatwootLabelId?: number
+  ): Promise<{ success: boolean; chatwoot_label_id?: number }> {
+    const { data: session } = await supabase.auth.getSession();
+    if (!session.session) {
+      console.warn('Not authenticated, skipping Chatwoot sync');
+      return { success: false };
+    }
+
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/push-chatwoot-label`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.session.access_token}`,
+          },
+          body: JSON.stringify({
+            account_id: accountId,
+            action,
+            label,
+            tag_id: tagId,
+            chatwoot_label_id: chatwootLabelId,
+          }),
+        }
+      );
+
+      const result = await response.json();
+      return result;
+    } catch (err) {
+      console.error('Error pushing label to Chatwoot:', err);
+      return { success: false };
+    }
+  },
+
+  /**
+   * Update a tag and sync to Chatwoot
    */
   async updateTag(tagId: string, input: Partial<Pick<Tag, 'name' | 'color' | 'ordem' | 'ativo'>>): Promise<Tag> {
+    // Get current tag first to get chatwoot_label_id
+    const { data: currentTag } = await supabase
+      .from('tags')
+      .select('*')
+      .eq('id', tagId)
+      .single();
+
     const updateData: Record<string, any> = {};
     
     if (input.name !== undefined) {
@@ -174,13 +234,46 @@ export const tagsCloudService = {
       throw new Error(error.message);
     }
 
-    return data as Tag;
+    const tag = data as Tag;
+
+    // If name or color changed and has chatwoot_label_id, sync to Chatwoot
+    if (currentTag && (input.name !== undefined || input.color !== undefined)) {
+      const accountId = currentTag.account_id;
+      const chatwootLabelId = currentTag.chatwoot_label_id;
+      
+      if (chatwootLabelId) {
+        // Update existing label in Chatwoot
+        this.pushLabelToChatwoot(accountId, 'update', {
+          title: tag.name,
+          color: tag.color,
+        }, tagId, chatwootLabelId).catch(err => {
+          console.error('Failed to update label in Chatwoot:', err);
+        });
+      } else {
+        // Create label in Chatwoot if it doesn't exist yet
+        this.pushLabelToChatwoot(accountId, 'create', {
+          title: tag.name,
+          color: tag.color,
+        }, tagId).catch(err => {
+          console.error('Failed to create label in Chatwoot:', err);
+        });
+      }
+    }
+
+    return tag;
   },
 
   /**
-   * Delete a tag (soft delete by setting ativo=false)
+   * Delete a tag (soft delete by setting ativo=false) and remove from Chatwoot
    */
   async deleteTag(tagId: string): Promise<void> {
+    // Get current tag first to get chatwoot_label_id and account_id
+    const { data: currentTag } = await supabase
+      .from('tags')
+      .select('*')
+      .eq('id', tagId)
+      .single();
+
     // Check if there are leads with this tag
     const { data: leadTags, error: checkError } = await supabase
       .from('lead_tags')
@@ -204,6 +297,16 @@ export const tagsCloudService = {
     if (error) {
       console.error('Error deleting tag:', error);
       throw new Error(error.message);
+    }
+
+    // Delete from Chatwoot if it has a chatwoot_label_id
+    if (currentTag?.chatwoot_label_id) {
+      this.pushLabelToChatwoot(currentTag.account_id, 'delete', {
+        title: currentTag.name,
+        color: currentTag.color,
+      }, tagId, currentTag.chatwoot_label_id).catch(err => {
+        console.error('Failed to delete label from Chatwoot:', err);
+      });
     }
   },
 
