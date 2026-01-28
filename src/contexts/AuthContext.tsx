@@ -69,6 +69,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const hydrateUser = useCallback(async (supabaseUser: SupabaseUser): Promise<boolean> => {
     console.log('[Auth] Hydrating user:', supabaseUser.id);
 
+    if (!mountedRef.current) {
+      console.log('[Auth] Component unmounted, aborting hydration');
+      return false;
+    }
+
     try {
       // Fetch profile and role in parallel
       const [profileResult, roleResult] = await Promise.all([
@@ -144,6 +149,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       console.log('[Auth] Hydration complete:', user.email, user.role);
 
+      if (!mountedRef.current) {
+        console.log('[Auth] Component unmounted after fetch, aborting state update');
+        return false;
+      }
+
       setAuthState({
         user,
         account,
@@ -190,9 +200,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               if (!isHydratingRef.current) {
                 isHydratingRef.current = true;
                 console.log('[Auth] Starting hydration for new user...');
-                await hydrateUser(session.user);
+                const success = await hydrateUser(session.user);
                 currentUserRef.current = session.user.id;
                 isHydratingRef.current = false;
+                console.log('[Auth] Hydration finished, success:', success);
               } else {
                 console.log('[Auth] Skipping - already hydrating');
               }
@@ -233,9 +244,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log('[Auth] Found existing session, hydrating...');
         if (!isHydratingRef.current) {
           isHydratingRef.current = true;
-          await hydrateUser(session.user);
+          const success = await hydrateUser(session.user);
           currentUserRef.current = session.user.id;
           isHydratingRef.current = false;
+          console.log('[Auth] Initial hydration finished, success:', success);
         }
       } else if (!session) {
         console.log('[Auth] No existing session');

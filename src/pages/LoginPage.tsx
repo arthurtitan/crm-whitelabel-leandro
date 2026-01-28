@@ -87,8 +87,10 @@ export default function LoginPage() {
   };
 
   // Determine UI state
-  const showLoading = isSubmitting || (isLoading && !error && !authError);
-  const isFormDisabled = showLoading;
+  // Never block typing just because auth is checking an existing session.
+  // Only block while the user is actively submitting.
+  const showLoading = isSubmitting;
+  const isFormDisabled = isSubmitting;
 
   return (
     <div className="dark min-h-screen flex items-center justify-center bg-background p-4">
