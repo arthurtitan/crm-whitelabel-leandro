@@ -521,6 +521,39 @@ export const tagsCloudService = {
       .single();
 
     if (error) {
+      // Try to get any funnel for this account
+      const { data: anyFunnel } = await supabase
+        .from('funnels')
+        .select('id, name')
+        .eq('account_id', accountId)
+        .limit(1)
+        .single();
+      
+      return anyFunnel || null;
+    }
+
+    return data;
+  },
+
+  /**
+   * Create a default funnel for an account
+   */
+  async createDefaultFunnel(accountId: string): Promise<{ id: string; name: string } | null> {
+    const slug = 'atendimento';
+    
+    const { data, error } = await supabase
+      .from('funnels')
+      .insert({
+        account_id: accountId,
+        name: 'Atendimento',
+        slug,
+        is_default: true,
+      })
+      .select('id, name')
+      .single();
+
+    if (error) {
+      console.error('Error creating default funnel:', error);
       return null;
     }
 

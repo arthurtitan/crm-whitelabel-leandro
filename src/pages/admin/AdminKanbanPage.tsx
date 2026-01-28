@@ -428,6 +428,7 @@ export default function AdminKanbanPage() {
                 <span className="xs:hidden">Etapa</span>
               </Button>
             }
+            onStageCreated={() => fetchTagsData(false)}
           />
           <div className="relative w-full xs:w-48 sm:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -466,6 +467,7 @@ export default function AdminKanbanPage() {
                   Criar Etapa
                 </Button>
               }
+              onStageCreated={() => fetchTagsData(false)}
             />
           </div>
         </div>
