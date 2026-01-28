@@ -83,6 +83,9 @@ export default function AdminKanbanPage() {
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
   const accountId = user?.account_id || account?.id;
+  
+  // Check if Chatwoot is configured - moved up for hooks to access
+  const hasChatwootConfig = Boolean(account?.chatwoot_base_url && account?.chatwoot_account_id && account?.chatwoot_api_key);
 
   // Clear new lead tag animation after delay
   const clearNewLeadTagIds = useCallback((ids: string[]) => {
@@ -155,13 +158,40 @@ export default function AdminKanbanPage() {
     fetchTagsData(false);
   }, [fetchTagsData]);
 
-  // Background polling every 30 seconds
-  useEffect(() => {
-    pollingRef.current = setInterval(() => {
-      if (!isFirstTagsLoad.current) {
-        fetchTagsData(true);
-        refetchContacts();
+  // Background sync with Chatwoot every 30 seconds
+  const performBackgroundSync = useCallback(async () => {
+    if (!accountId || !hasChatwootConfig || isFirstTagsLoad.current || isSyncingChatwoot) return;
+    
+    setIsSyncingTags(true);
+    try {
+      // Call the edge function to sync with Chatwoot (the real sync)
+      const result = await tagsCloudService.syncChatwootContacts(accountId);
+      
+      if (result.success) {
+        const hasChanges = result.contacts_created > 0 || 
+                          result.contacts_updated > 0 || 
+                          result.lead_tags_applied > 0 || 
+                          (result.lead_tags_removed || 0) > 0;
+        
+        if (hasChanges) {
+          // Refresh data from database
+          await refetchContacts();
+          await fetchTagsData(true);
+          console.log('[Kanban Auto-Sync] Changes detected:', result);
+        }
       }
+    } catch (error) {
+      console.error('[Kanban Auto-Sync] Error:', error);
+    } finally {
+      setIsSyncingTags(false);
+    }
+  }, [accountId, hasChatwootConfig, isSyncingChatwoot, refetchContacts, fetchTagsData]);
+
+  useEffect(() => {
+    if (!hasChatwootConfig) return;
+    
+    pollingRef.current = setInterval(() => {
+      performBackgroundSync();
     }, 30000);
 
     return () => {
@@ -169,7 +199,7 @@ export default function AdminKanbanPage() {
         clearInterval(pollingRef.current);
       }
     };
-  }, [fetchTagsData, refetchContacts]);
+  }, [performBackgroundSync, hasChatwootConfig]);
 
   // Get stage tag for a lead
   const getLeadStageTag = useCallback((contactId: string): CloudTag | undefined => {
@@ -315,8 +345,6 @@ export default function AdminKanbanPage() {
     }
   };
 
-  // Check if Chatwoot is configured
-  const hasChatwootConfig = Boolean(account?.chatwoot_base_url && account?.chatwoot_account_id && account?.chatwoot_api_key);
 
   // Check if initial loading (skeleton only on first load)
   const isInitialLoading = isLoadingTags && isLoadingContacts;
