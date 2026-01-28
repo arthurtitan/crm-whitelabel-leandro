@@ -335,7 +335,7 @@ export const tagsCloudService = {
   /**
    * Import Chatwoot labels as stage tags
    */
-  async importChatwootLabels(accountId: string): Promise<ImportLabelsResult> {
+  async importChatwootLabels(accountId: string, selectedLabelIds?: number[]): Promise<ImportLabelsResult> {
     const { data: session } = await supabase.auth.getSession();
     if (!session.session) {
       throw new Error('Não autenticado');
@@ -356,6 +356,7 @@ export const tagsCloudService = {
           body: JSON.stringify({
             account_id: accountId,
             action: 'import',
+            selected_label_ids: Array.isArray(selectedLabelIds) && selectedLabelIds.length > 0 ? selectedLabelIds : undefined,
           }),
           signal: controller.signal,
         }
