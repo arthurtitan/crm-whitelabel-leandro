@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,7 +12,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { Plus, Palette } from 'lucide-react';
+import { Plus, Palette, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { tagsCloudService } from '@/services/tags.cloud.service';
 
@@ -29,6 +29,15 @@ const PRESET_COLORS = [
   '#14B8A6', // Teal
 ];
 
+// Convert name to Chatwoot-compatible slug (snake_case)
+const toSlug = (name: string): string => {
+  return name
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // Remove accents
+    .replace(/\s+/g, '_') // Replace spaces with underscores
+    .replace(/[^a-z0-9_]/g, ''); // Remove special characters
+};
+
 interface CreateStageDialogProps {
   trigger?: React.ReactNode;
   onStageCreated?: () => void;
@@ -43,11 +52,15 @@ export function CreateStageDialog({ trigger, onStageCreated }: CreateStageDialog
 
   const accountId = user?.account_id || account?.id;
 
+  // Generate slug preview
+  const slug = useMemo(() => toSlug(name), [name]);
+  const isValidSlug = slug.length > 0;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!name.trim()) {
-      toast.error('Nome da etapa é obrigatório');
+    if (!slug) {
+      toast.error('Nome da etapa deve conter letras ou números');
       return;
     }
 
@@ -131,9 +144,19 @@ export function CreateStageDialog({ trigger, onStageCreated }: CreateStageDialog
               onChange={(e) => setName(e.target.value)}
               autoFocus
             />
-            <p className="text-xs text-muted-foreground">
-              Este nome será usado tanto no Kanban quanto no Chatwoot.
-            </p>
+            
+            {/* Slug Preview */}
+            {name && (
+              <div className="flex items-start gap-2 p-2 rounded-md bg-muted/50 border">
+                <Info className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+                <div className="text-xs text-muted-foreground">
+                  <span>Label no Chatwoot: </span>
+                  <code className={`px-1 py-0.5 rounded ${isValidSlug ? 'bg-primary/10 text-primary font-medium' : 'bg-destructive/10 text-destructive'}`}>
+                    {slug || '(inválido)'}
+                  </code>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Color Picker */}
@@ -191,7 +214,7 @@ export function CreateStageDialog({ trigger, onStageCreated }: CreateStageDialog
             >
               Cancelar
             </Button>
-            <Button type="submit" disabled={isSubmitting || !name.trim()}>
+            <Button type="submit" disabled={isSubmitting || !isValidSlug}>
               {isSubmitting ? 'Criando...' : 'Criar Etapa'}
             </Button>
           </DialogFooter>
