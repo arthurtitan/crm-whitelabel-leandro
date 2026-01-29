@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
@@ -57,7 +58,7 @@ serve(async (req) => {
       throw new Error("Usuário não autenticado");
     }
 
-    // Get user's account_id
+    // Get user's account_id for events
     const { data: profile } = await supabase
       .from("profiles")
       .select("account_id")
@@ -68,7 +69,7 @@ serve(async (req) => {
       throw new Error("Conta não encontrada");
     }
 
-    // Get tokens
+    // Get tokens for this user
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
@@ -77,7 +78,7 @@ serve(async (req) => {
     const { data: tokenData, error: tokenError } = await supabaseAdmin
       .from("google_calendar_tokens")
       .select("*")
-      .eq("account_id", profile.account_id)
+      .eq("user_id", user.id)
       .maybeSingle();
 
     if (!tokenData) {
@@ -103,7 +104,7 @@ serve(async (req) => {
           expires_at: new Date(Date.now() + 3600 * 1000).toISOString(),
           updated_at: new Date().toISOString(),
         })
-        .eq("account_id", profile.account_id);
+        .eq("user_id", user.id);
     }
 
     // Fetch events from Google Calendar
@@ -146,16 +147,17 @@ serve(async (req) => {
         ? (event.end.dateTime || `${event.end.date}T23:59:59Z`)
         : startTime;
 
-      // Check if event already exists
+      // Check if event already exists for this user
       const { data: existingEvent } = await supabaseAdmin
         .from("calendar_events")
         .select("id")
-        .eq("account_id", profile.account_id)
+        .eq("created_by", user.id)
         .eq("google_event_id", event.id)
         .maybeSingle();
 
       const eventData = {
         account_id: profile.account_id,
+        created_by: user.id,
         title: event.summary || "Sem título",
         start_time: startTime,
         end_time: endTime,
@@ -183,6 +185,8 @@ serve(async (req) => {
       }
       synced++;
     }
+
+    console.log(`Sync completed for user ${user.id}: ${synced} events (${created} new, ${updated} updated)`);
 
     return new Response(
       JSON.stringify({ 

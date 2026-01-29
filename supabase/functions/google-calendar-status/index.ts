@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
@@ -29,18 +30,7 @@ serve(async (req) => {
       throw new Error("Usuário não autenticado");
     }
 
-    // Get user's account_id
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("account_id")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    if (!profile?.account_id) {
-      throw new Error("Conta não encontrada");
-    }
-
-    // Check for existing token using service role
+    // Check for existing token using service role (per user)
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
@@ -48,8 +38,8 @@ serve(async (req) => {
 
     const { data: tokenData, error: tokenError } = await supabaseAdmin
       .from("google_calendar_tokens")
-      .select("connected_email, expires_at, calendar_id")
-      .eq("account_id", profile.account_id)
+      .select("connected_email, expires_at, calendar_id, user_id")
+      .eq("user_id", user.id)
       .maybeSingle();
 
     if (tokenError) {

@@ -5,7 +5,7 @@ const GOOGLE_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID");
 const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET");
 const GOOGLE_REDIRECT_URI = Deno.env.get("GOOGLE_REDIRECT_URI") || 
   `${Deno.env.get("SUPABASE_URL")}/functions/v1/google-calendar-callback`;
-const FRONTEND_URL = Deno.env.get("FRONTEND_URL") || "https://testedocrm.lovable.app";
+const DEFAULT_FRONTEND_URL = "https://testedocrm.lovable.app";
 
 serve(async (req) => {
   try {
@@ -14,18 +14,33 @@ serve(async (req) => {
     const state = url.searchParams.get("state");
     const error = url.searchParams.get("error");
 
+    // Default redirect
+    let frontendUrl = DEFAULT_FRONTEND_URL;
+
+    // Decode state to get origin
+    if (state) {
+      try {
+        const stateData = JSON.parse(atob(state));
+        if (stateData.origin) {
+          frontendUrl = stateData.origin;
+        }
+      } catch {
+        // Use default if state parsing fails
+      }
+    }
+
     if (error) {
       console.error("OAuth error:", error);
-      return Response.redirect(`${FRONTEND_URL}/admin/agenda?error=oauth_denied`);
+      return Response.redirect(`${frontendUrl}/admin/agenda?error=oauth_denied`);
     }
 
     if (!code || !state) {
-      return Response.redirect(`${FRONTEND_URL}/admin/agenda?error=invalid_params`);
+      return Response.redirect(`${frontendUrl}/admin/agenda?error=invalid_params`);
     }
 
     if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
       console.error("Google credentials not configured");
-      return Response.redirect(`${FRONTEND_URL}/admin/agenda?error=config_error`);
+      return Response.redirect(`${frontendUrl}/admin/agenda?error=config_error`);
     }
 
     // Decode state
@@ -33,10 +48,20 @@ serve(async (req) => {
     try {
       stateData = JSON.parse(atob(state));
     } catch {
-      return Response.redirect(`${FRONTEND_URL}/admin/agenda?error=invalid_state`);
+      return Response.redirect(`${frontendUrl}/admin/agenda?error=invalid_state`);
     }
 
-    const { accountId, userId } = stateData;
+    const { userId, accountId, origin } = stateData;
+    
+    // Use origin from state if available
+    if (origin) {
+      frontendUrl = origin;
+    }
+
+    if (!userId) {
+      console.error("Missing userId in state");
+      return Response.redirect(`${frontendUrl}/admin/agenda?error=invalid_state`);
+    }
 
     // Exchange code for tokens
     const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
@@ -54,7 +79,7 @@ serve(async (req) => {
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text();
       console.error("Token exchange failed:", errorText);
-      return Response.redirect(`${FRONTEND_URL}/admin/agenda?error=token_exchange`);
+      return Response.redirect(`${frontendUrl}/admin/agenda?error=token_exchange`);
     }
 
     const tokens = await tokenResponse.json();
@@ -62,7 +87,7 @@ serve(async (req) => {
 
     if (!access_token || !refresh_token) {
       console.error("Missing tokens in response");
-      return Response.redirect(`${FRONTEND_URL}/admin/agenda?error=missing_tokens`);
+      return Response.redirect(`${frontendUrl}/admin/agenda?error=missing_tokens`);
     }
 
     // Get user email from Google
@@ -86,11 +111,11 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Clear old Google events before saving new tokens (prevents stale data from previous connection)
+    // Clear old Google events for this user before saving new tokens
     const { error: deleteError } = await supabase
       .from("calendar_events")
       .delete()
-      .eq("account_id", accountId)
+      .eq("created_by", userId)
       .eq("source", "google");
 
     if (deleteError) {
@@ -98,12 +123,13 @@ serve(async (req) => {
       // Continue anyway - this is not critical
     }
 
-    console.log(`Cleared old Google events for account ${accountId}`);
+    console.log(`Cleared old Google events for user ${userId}`);
 
-    // Upsert tokens (insert or update)
+    // Upsert tokens (insert or update) - now keyed by user_id
     const { error: dbError } = await supabase
       .from("google_calendar_tokens")
       .upsert({
+        user_id: userId,
         account_id: accountId,
         access_token,
         refresh_token,
@@ -112,18 +138,20 @@ serve(async (req) => {
         calendar_id: "primary",
         updated_at: new Date().toISOString(),
       }, {
-        onConflict: "account_id",
+        onConflict: "user_id",
       });
 
     if (dbError) {
       console.error("Database error:", dbError);
-      return Response.redirect(`${FRONTEND_URL}/admin/agenda?error=db_error`);
+      return Response.redirect(`${frontendUrl}/admin/agenda?error=db_error`);
     }
 
+    console.log(`Saved Google Calendar token for user ${userId} (${connectedEmail})`);
+
     // Redirect to frontend with success and force sync
-    return Response.redirect(`${FRONTEND_URL}/admin/agenda?google_connected=true&force_sync=true`);
+    return Response.redirect(`${frontendUrl}/admin/agenda?google_connected=true&force_sync=true`);
   } catch (error) {
     console.error("Callback error:", error);
-    return Response.redirect(`${FRONTEND_URL}/admin/agenda?error=unknown`);
+    return Response.redirect(`${DEFAULT_FRONTEND_URL}/admin/agenda?error=unknown`);
   }
 });

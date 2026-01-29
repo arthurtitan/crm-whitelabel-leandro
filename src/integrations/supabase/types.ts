@@ -272,6 +272,7 @@ export type Database = {
           refresh_token: string
           token_type: string | null
           updated_at: string | null
+          user_id: string | null
         }
         Insert: {
           access_token: string
@@ -284,6 +285,7 @@ export type Database = {
           refresh_token: string
           token_type?: string | null
           updated_at?: string | null
+          user_id?: string | null
         }
         Update: {
           access_token?: string
@@ -296,12 +298,13 @@ export type Database = {
           refresh_token?: string
           token_type?: string | null
           updated_at?: string | null
+          user_id?: string | null
         }
         Relationships: [
           {
             foreignKeyName: "google_calendar_tokens_account_id_fkey"
             columns: ["account_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "accounts"
             referencedColumns: ["id"]
           },

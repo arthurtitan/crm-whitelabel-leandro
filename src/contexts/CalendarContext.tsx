@@ -64,6 +64,7 @@ const CalendarContext = createContext<CalendarContextType | undefined>(undefined
 interface CalendarProviderProps {
   children: ReactNode;
   accountId: string;
+  userId: string;
 }
 
 const defaultConnection: GoogleConnection = {
@@ -75,7 +76,7 @@ const defaultConnection: GoogleConnection = {
   lastSync: null,
 };
 
-export function CalendarProvider({ children, accountId }: CalendarProviderProps) {
+export function CalendarProvider({ children, accountId, userId }: CalendarProviderProps) {
   // State
   const [connection, setConnection] = useState<GoogleConnection>(defaultConnection);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -87,21 +88,38 @@ export function CalendarProvider({ children, accountId }: CalendarProviderProps)
   const isConnected = connection.status === 'connected';
 
   // ============= LOAD EVENTS FROM DATABASE =============
+  // Load CRM events from account + Google events from current user
 
   const loadEvents = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      // Load CRM events for the whole account
+      const { data: crmEvents, error: crmError } = await supabase
         .from('calendar_events')
         .select('*')
         .eq('account_id', accountId)
+        .eq('source', 'crm')
         .order('start_time', { ascending: true });
 
-      if (error) {
-        console.error('Error loading events:', error);
-        return;
+      if (crmError) {
+        console.error('Error loading CRM events:', crmError);
       }
 
-      const mappedEvents: CalendarEvent[] = (data || []).map((event) => ({
+      // Load Google events only for the current user
+      const { data: googleEvents, error: googleError } = await supabase
+        .from('calendar_events')
+        .select('*')
+        .eq('created_by', userId)
+        .eq('source', 'google')
+        .order('start_time', { ascending: true });
+
+      if (googleError) {
+        console.error('Error loading Google events:', googleError);
+      }
+
+      // Combine both event types
+      const allEvents = [...(crmEvents || []), ...(googleEvents || [])];
+
+      const mappedEvents: CalendarEvent[] = allEvents.map((event) => ({
         id: event.id,
         title: event.title,
         start: event.start_time,
@@ -120,11 +138,14 @@ export function CalendarProvider({ children, accountId }: CalendarProviderProps)
         contactId: event.contact_id || undefined,
       }));
 
+      // Sort by start time
+      mappedEvents.sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+
       setEvents(mappedEvents);
     } catch (error) {
       console.error('Failed to load events:', error);
     }
-  }, [accountId]);
+  }, [accountId, userId]);
 
   // ============= CHECK CONNECTION STATUS =============
 
@@ -213,7 +234,12 @@ export function CalendarProvider({ children, accountId }: CalendarProviderProps)
         throw new Error(response.error.message || 'Erro ao desconectar');
       }
 
+      // Clear connection state
       setConnection(defaultConnection);
+      
+      // Remove Google events from local state immediately
+      setEvents(prev => prev.filter(event => event.source !== 'google'));
+      
       toast.success('Google Calendar desconectado');
     } catch (error: any) {
       console.error('Disconnect error:', error);
