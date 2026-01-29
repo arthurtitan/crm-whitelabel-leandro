@@ -31,6 +31,7 @@ export default function AdminAgendaPage() {
   // Handle OAuth callback - sync events automatically after connection
   useEffect(() => {
     const googleConnected = searchParams.get('google_connected') || searchParams.get('google');
+    const forceSync = searchParams.get('force_sync');
     const error = searchParams.get('error');
 
     if (googleConnected === 'true' || googleConnected === 'connected') {
@@ -38,15 +39,21 @@ export default function AdminAgendaPage() {
       // Clean up URL first
       setSearchParams({});
       
-      // Check connection status first, then trigger sync after a delay
-      // to ensure the session is properly loaded
-      setTimeout(async () => {
+      // Check connection status first, then trigger sync
+      const runSync = async () => {
         await checkConnectionStatus();
-        // Small delay to ensure connection state is updated
-        setTimeout(() => {
-          syncNow();
-        }, 500);
-      }, 100);
+        // Force sync to fetch fresh events from the newly connected calendar
+        await syncNow();
+        // Double-check status after sync
+        await checkConnectionStatus();
+      };
+      
+      // Small delay to ensure the page is fully loaded
+      setTimeout(runSync, 300);
+    } else if (forceSync === 'true') {
+      // Handle force_sync parameter separately
+      setSearchParams({});
+      setTimeout(() => syncNow(), 300);
     } else if (error) {
       const errorMessages: Record<string, string> = {
         oauth_denied: 'Você cancelou a autorização',
