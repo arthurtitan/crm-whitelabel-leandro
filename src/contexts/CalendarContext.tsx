@@ -193,8 +193,8 @@ export function CalendarProvider({ children, accountId }: CalendarProviderProps)
       }
 
       if (response.data?.authUrl) {
-        // Redirect to Google OAuth
-        window.location.href = response.data.authUrl;
+        // Open Google OAuth in a new tab to avoid iframe restrictions
+        window.open(response.data.authUrl, '_blank');
       } else {
         throw new Error('URL de autorização não recebida');
       }
