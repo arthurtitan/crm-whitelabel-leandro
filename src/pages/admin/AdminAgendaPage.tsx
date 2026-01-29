@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { CalendarView, GoogleConnectModal } from '@/components/calendar';
 import { useCalendar } from '@/contexts/CalendarContext';
@@ -18,6 +18,8 @@ export default function AdminAgendaPage() {
     deleteEvent, 
     isConnected, 
     isLoading,
+    isInitialized,
+    loadEvents,
     connection, 
     connectGoogle, 
     disconnectGoogle, 
@@ -27,6 +29,9 @@ export default function AdminAgendaPage() {
   
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
+  
+  // Ref to track if we've already attempted sync for this callback
+  const syncAttemptedRef = useRef(false);
 
   // Handle OAuth callback - sync events automatically after connection
   useEffect(() => {
@@ -34,27 +39,8 @@ export default function AdminAgendaPage() {
     const forceSync = searchParams.get('force_sync');
     const error = searchParams.get('error');
 
-    if (googleConnected === 'true' || googleConnected === 'connected') {
-      toast.success('Google Calendar conectado! Sincronizando eventos...');
-      // Clean up URL first
-      setSearchParams({});
-      
-      // Check connection status first, then trigger sync
-      const runSync = async () => {
-        await checkConnectionStatus();
-        // Force sync to fetch fresh events from the newly connected calendar
-        await syncNow();
-        // Double-check status after sync
-        await checkConnectionStatus();
-      };
-      
-      // Small delay to ensure the page is fully loaded
-      setTimeout(runSync, 300);
-    } else if (forceSync === 'true') {
-      // Handle force_sync parameter separately
-      setSearchParams({});
-      setTimeout(() => syncNow(), 300);
-    } else if (error) {
+    // Handle errors first
+    if (error) {
       const errorMessages: Record<string, string> = {
         oauth_denied: 'Você cancelou a autorização',
         invalid_params: 'Parâmetros inválidos',
@@ -67,8 +53,51 @@ export default function AdminAgendaPage() {
       };
       toast.error(errorMessages[error] || 'Erro ao conectar');
       setSearchParams({});
+      return;
     }
-  }, [searchParams, setSearchParams, checkConnectionStatus, syncNow]);
+
+    // Handle successful OAuth callback
+    if ((googleConnected === 'true' || googleConnected === 'connected') && !syncAttemptedRef.current) {
+      console.log('[Agenda] OAuth callback detected, google_connected:', googleConnected);
+      
+      // Clear URL immediately to prevent re-triggering
+      setSearchParams({});
+      
+      // Wait for context to be fully initialized before attempting sync
+      if (!isInitialized) {
+        console.log('[Agenda] Waiting for context to initialize...');
+        return;
+      }
+      
+      // Mark as attempted to prevent multiple executions
+      syncAttemptedRef.current = true;
+      
+      toast.success('Google Calendar conectado! Sincronizando eventos...');
+      
+      const runSync = async () => {
+        console.log('[Agenda] Running post-OAuth sync...');
+        await checkConnectionStatus();
+        await syncNow();
+        await loadEvents();
+        console.log('[Agenda] Post-OAuth sync complete');
+      };
+      
+      // Small delay to ensure stability after redirect
+      setTimeout(runSync, 500);
+    } else if (forceSync === 'true' && !syncAttemptedRef.current) {
+      // Handle force_sync parameter
+      console.log('[Agenda] force_sync detected');
+      setSearchParams({});
+      
+      if (!isInitialized) {
+        console.log('[Agenda] Waiting for context to initialize for force_sync...');
+        return;
+      }
+      
+      syncAttemptedRef.current = true;
+      setTimeout(() => syncNow(), 500);
+    }
+  }, [searchParams, setSearchParams, checkConnectionStatus, syncNow, loadEvents, isInitialized]);
 
   const isSyncing = connection.status === 'syncing';
   const isConnecting = connection.status === 'connecting';

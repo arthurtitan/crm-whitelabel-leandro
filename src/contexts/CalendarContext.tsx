@@ -19,6 +19,7 @@ interface CalendarContextType {
   connection: GoogleConnection;
   isConnected: boolean;
   isLoading: boolean;
+  isInitialized: boolean; // true after initial load completes
   
   // Events
   events: CalendarEvent[];
@@ -84,6 +85,7 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [viewMode, setViewMode] = useState<CalendarViewMode>('week');
   const [isLoading, setIsLoading] = useState(true);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   const isConnected = connection.status === 'connected';
 
@@ -196,8 +198,14 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
 
   useEffect(() => {
     if (accountId) {
-      checkConnectionStatus();
-      loadEvents();
+      const init = async () => {
+        console.log('[Calendar] Initializing context...');
+        await checkConnectionStatus();
+        await loadEvents();
+        setIsInitialized(true);
+        console.log('[Calendar] Context initialized');
+      };
+      init();
     }
   }, [accountId, checkConnectionStatus, loadEvents]);
 
@@ -259,19 +267,24 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
   }, [loadEvents]);
 
   const syncNow = useCallback(async () => {
+    console.log('[Calendar] syncNow called');
+    
     // Don't rely on isConnected state (closure bug) - check session and let backend validate
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
-      console.warn('syncNow: No session, aborting');
+      console.warn('[Calendar] syncNow: No session, aborting');
       return;
     }
     
+    console.log('[Calendar] syncNow: Session found, proceeding...');
     setConnection(prev => ({ ...prev, status: 'syncing' }));
 
     try {
+      console.log('[Calendar] Invoking google-calendar-sync...');
       const response = await supabase.functions.invoke('google-calendar-sync', {});
       
       if (response.error) {
+        console.error('[Calendar] Sync error response:', response.error);
         // If backend says not connected, update local state accordingly
         if (response.error.message?.includes('não conectado')) {
           setConnection(defaultConnection);
@@ -281,6 +294,7 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
         throw new Error(response.error.message || 'Erro ao sincronizar');
       }
 
+      console.log('[Calendar] Sync successful, reloading events...');
       // Reload events from database
       await loadEvents();
 
@@ -291,9 +305,10 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
       }));
 
       const { synced, created, updated } = response.data || {};
+      console.log(`[Calendar] Sync complete: ${created || 0} created, ${updated || 0} updated`);
       toast.success(`Sincronizado! ${created || 0} novos, ${updated || 0} atualizados`);
     } catch (error: any) {
-      console.error('Sync error:', error);
+      console.error('[Calendar] Sync error:', error);
       setConnection(prev => ({ ...prev, status: 'connected' }));
       toast.error(error.message || 'Erro ao sincronizar');
     }
@@ -483,6 +498,7 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
     connection,
     isConnected,
     isLoading,
+    isInitialized,
     events,
     selectedEvent,
     currentDate,
@@ -509,6 +525,7 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
     connection,
     isConnected,
     isLoading,
+    isInitialized,
     events,
     selectedEvent,
     currentDate,
