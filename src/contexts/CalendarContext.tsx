@@ -199,19 +199,64 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
     }
   }, []);
 
-  // ============= INITIAL LOAD =============
+  // ============= INITIAL LOAD + AUTO-SYNC POLLING =============
+  // Syncs every 30 seconds when connected (same pattern as Kanban)
 
   useEffect(() => {
-    if (accountId) {
-      const init = async () => {
-        console.log('[Calendar] Initializing context...');
-        await checkConnectionStatus();
-        await loadEvents();
-        setIsInitialized(true);
-        console.log('[Calendar] Context initialized');
-      };
-      init();
-    }
+    if (!accountId) return;
+
+    const init = async () => {
+      console.log('[Calendar] Initializing context...');
+      await checkConnectionStatus();
+      await loadEvents();
+      setIsInitialized(true);
+      console.log('[Calendar] Context initialized');
+    };
+    init();
+
+    // Set up 30-second polling for auto-sync when connected
+    const SYNC_INTERVAL = 30000; // 30 seconds
+    let intervalId: NodeJS.Timeout | null = null;
+
+    const startPolling = () => {
+      if (intervalId) return;
+      
+      intervalId = setInterval(async () => {
+        console.log('[Calendar] Auto-sync polling...');
+        
+        // Check if still connected before syncing
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          console.log('[Calendar] No session, skipping auto-sync');
+          return;
+        }
+
+        try {
+          // Silent sync - don't show toast for auto-sync
+          const response = await supabase.functions.invoke('google-calendar-sync', {});
+          
+          if (!response.error) {
+            console.log('[Calendar] Auto-sync complete, reloading events...');
+            await loadEvents();
+          }
+        } catch (error) {
+          console.warn('[Calendar] Auto-sync failed:', error);
+        }
+      }, SYNC_INTERVAL);
+      
+      console.log('[Calendar] Polling started (30s interval)');
+    };
+
+    // Start polling after initial load
+    const pollingTimeout = setTimeout(startPolling, 2000);
+
+    return () => {
+      clearTimeout(pollingTimeout);
+      if (intervalId) {
+        clearInterval(intervalId);
+        console.log('[Calendar] Polling stopped');
+      }
+    };
   }, [accountId, checkConnectionStatus, loadEvents]);
 
   // ============= CONNECTION ACTIONS =============
