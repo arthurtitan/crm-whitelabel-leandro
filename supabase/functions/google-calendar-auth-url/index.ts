@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
@@ -38,7 +39,7 @@ serve(async (req) => {
       throw new Error("Usuário não autenticado");
     }
 
-    // Get user's account_id
+    // Get user's account_id for events association
     const { data: profile } = await supabase
       .from("profiles")
       .select("account_id")
@@ -49,10 +50,14 @@ serve(async (req) => {
       throw new Error("Conta não encontrada");
     }
 
-    // Create state parameter with account_id (base64 encoded)
+    // Get the origin from the request to redirect back to the correct environment
+    const origin = req.headers.get("origin") || "https://testedocrm.lovable.app";
+
+    // Create state parameter with user_id and account_id (base64 encoded)
     const state = btoa(JSON.stringify({ 
-      accountId: profile.account_id,
       userId: user.id,
+      accountId: profile.account_id,
+      origin: origin,
       timestamp: Date.now()
     }));
 
