@@ -1,45 +1,70 @@
 
+# Plano: Alterar para Escopo Somente Leitura
 
-# Plano: Corrigir Erro 403 do Google OAuth no Preview
+## Objetivo
 
-## Problema Identificado
+Remover a necessidade de verificação do Google alterando os escopos OAuth para usar apenas `calendar.readonly`, que não é classificado como sensível.
 
-O erro 403 acontece porque você está testando no **preview do editor** (iframe). O Google bloqueia fluxos OAuth que acontecem dentro de iframes por segurança.
+## Mudanças Necessárias
 
-O código atual usa `window.location.href` para redirecionar, o que navega dentro do iframe ao invés de abrir em uma nova aba.
+### 1. Edge Function: google-calendar-auth-url
 
-## Solução
+**Arquivo**: `supabase/functions/google-calendar-auth-url/index.ts`
 
-Modificar o código para abrir o fluxo OAuth em uma **nova aba** ao invés de tentar navegar dentro do iframe.
-
-## Alterações Necessárias
-
-### Arquivo: `src/contexts/CalendarContext.tsx`
-
-**Linha ~197** - Alterar de:
-```typescript
-window.location.href = response.data.authUrl;
+**Linhas 60-64** - Alterar escopos de:
+```javascript
+const scopes = [
+  "https://www.googleapis.com/auth/calendar",
+  "https://www.googleapis.com/auth/calendar.events",
+  "https://www.googleapis.com/auth/userinfo.email",
+].join(" ");
 ```
 
 **Para:**
-```typescript
-window.open(response.data.authUrl, '_blank');
+```javascript
+const scopes = [
+  "https://www.googleapis.com/auth/calendar.readonly",
+  "https://www.googleapis.com/auth/userinfo.email",
+].join(" ");
 ```
 
-Isso vai abrir a página de autorização do Google em uma nova aba, onde o OAuth funciona normalmente.
+### 2. Backend Service (opcional, para consistência)
 
-### Comportamento Esperado Após a Correção
+**Arquivo**: `backend/src/services/calendar.service.ts`
 
-1. Usuário clica em "Continuar com Google"
-2. Nova aba abre com a página de login do Google
-3. Usuário autoriza o app
-4. Google redireciona para o callback
-5. Callback salva os tokens e redireciona para `/admin/agenda?google_connected=true`
-6. Usuário fecha a aba e volta ao preview
+Atualizar os escopos no método `getGoogleAuthUrl` para usar `calendar.readonly`.
 
-### Consideração Adicional
+### 3. Google Cloud Console
 
-Como o callback redireciona para o site publicado (`testedocrm.lovable.app`), o usuário precisará verificar a conexão manualmente no preview após completar o fluxo na nova aba. Podemos adicionar um botão "Verificar Conexão" ou detectar automaticamente quando a aba é fechada.
+Após fazer as alterações no código, você precisará:
+
+1. Ir para **APIs e Serviços** > **Tela de consentimento OAuth**
+2. Clicar em **Editar app**
+3. Na seção **Escopos**, remover os escopos sensíveis atuais
+4. Adicionar apenas: `calendar.readonly` e `userinfo.email`
+5. Salvar
+
+---
+
+## O que funciona com calendar.readonly
+
+| Funcionalidade | Disponível |
+|----------------|------------|
+| Ver eventos do calendário | Sim |
+| Ver título, horário, descrição | Sim |
+| Ver link do Google Meet | Sim |
+| Ver participantes | Sim |
+| Ver localização | Sim |
+| Criar novos eventos | Não |
+| Editar eventos | Não |
+| Excluir eventos | Não |
+
+## Resultado Esperado
+
+- Qualquer usuário poderá conectar o Google Calendar
+- Não é necessário adicionar usuários de teste manualmente
+- Não é necessário passar pela verificação do Google
+- A sincronização de eventos continua funcionando normalmente
 
 ---
 
@@ -47,8 +72,7 @@ Como o callback redireciona para o site publicado (`testedocrm.lovable.app`), o 
 
 | Item | Detalhe |
 |------|---------|
-| Arquivo modificado | `src/contexts/CalendarContext.tsx` |
-| Linha alterada | ~197 |
-| Mudança | `window.location.href` → `window.open(..., '_blank')` |
-| Impacto | OAuth abre em nova aba, evitando bloqueio do iframe |
-
+| Arquivos modificados | `supabase/functions/google-calendar-auth-url/index.ts`, `backend/src/services/calendar.service.ts` |
+| Escopo removido | `calendar`, `calendar.events` (sensíveis) |
+| Escopo adicionado | `calendar.readonly` (não-sensível) |
+| Impacto | Remove necessidade de verificação do Google |
