@@ -214,8 +214,16 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
       }
 
       if (response.data?.authUrl) {
-        // Open Google OAuth in a new tab to avoid iframe restrictions
-        window.open(response.data.authUrl, '_blank');
+        // Detect if we're inside an iframe (Preview environment)
+        const isInIframe = window.self !== window.top;
+        
+        if (isInIframe) {
+          // In Preview/iframe: open new tab to bypass security restrictions
+          window.open(response.data.authUrl, '_blank');
+        } else {
+          // In Published site: navigate in same tab for better UX
+          window.location.href = response.data.authUrl;
+        }
       } else {
         throw new Error('URL de autorização não recebida');
       }
@@ -240,15 +248,23 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
       // Remove Google events from local state immediately
       setEvents(prev => prev.filter(event => event.source !== 'google'));
       
+      // Reload events from database to ensure UI reflects backend state
+      await loadEvents();
+      
       toast.success('Google Calendar desconectado');
     } catch (error: any) {
       console.error('Disconnect error:', error);
       toast.error(error.message || 'Erro ao desconectar');
     }
-  }, []);
+  }, [loadEvents]);
 
   const syncNow = useCallback(async () => {
-    if (!isConnected) return;
+    // Don't rely on isConnected state (closure bug) - check session and let backend validate
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      console.warn('syncNow: No session, aborting');
+      return;
+    }
     
     setConnection(prev => ({ ...prev, status: 'syncing' }));
 
@@ -256,6 +272,12 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
       const response = await supabase.functions.invoke('google-calendar-sync', {});
       
       if (response.error) {
+        // If backend says not connected, update local state accordingly
+        if (response.error.message?.includes('não conectado')) {
+          setConnection(defaultConnection);
+          toast.info('Google Calendar não está conectado');
+          return;
+        }
         throw new Error(response.error.message || 'Erro ao sincronizar');
       }
 
@@ -275,7 +297,7 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
       setConnection(prev => ({ ...prev, status: 'connected' }));
       toast.error(error.message || 'Erro ao sincronizar');
     }
-  }, [isConnected, loadEvents]);
+  }, [loadEvents]);
 
   // ============= SETTINGS ACTIONS =============
 
