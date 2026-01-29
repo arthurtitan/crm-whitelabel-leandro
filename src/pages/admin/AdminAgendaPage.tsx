@@ -28,16 +28,25 @@ export default function AdminAgendaPage() {
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Handle OAuth callback
+  // Handle OAuth callback - sync events automatically after connection
   useEffect(() => {
-    const googleConnected = searchParams.get('google_connected');
+    const googleConnected = searchParams.get('google_connected') || searchParams.get('google');
     const error = searchParams.get('error');
 
-    if (googleConnected === 'true') {
-      toast.success('Google Calendar conectado com sucesso!');
-      checkConnectionStatus();
-      // Clean up URL
+    if (googleConnected === 'true' || googleConnected === 'connected') {
+      toast.success('Google Calendar conectado! Sincronizando eventos...');
+      // Clean up URL first
       setSearchParams({});
+      
+      // Check connection status first, then trigger sync after a delay
+      // to ensure the session is properly loaded
+      setTimeout(async () => {
+        await checkConnectionStatus();
+        // Small delay to ensure connection state is updated
+        setTimeout(() => {
+          syncNow();
+        }, 500);
+      }, 100);
     } else if (error) {
       const errorMessages: Record<string, string> = {
         oauth_denied: 'Você cancelou a autorização',
@@ -52,7 +61,7 @@ export default function AdminAgendaPage() {
       toast.error(errorMessages[error] || 'Erro ao conectar');
       setSearchParams({});
     }
-  }, [searchParams, setSearchParams, checkConnectionStatus]);
+  }, [searchParams, setSearchParams, checkConnectionStatus, syncNow]);
 
   const isSyncing = connection.status === 'syncing';
   const isConnecting = connection.status === 'connecting';
