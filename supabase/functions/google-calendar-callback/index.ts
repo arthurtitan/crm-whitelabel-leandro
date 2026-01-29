@@ -86,6 +86,20 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
+    // Clear old Google events before saving new tokens (prevents stale data from previous connection)
+    const { error: deleteError } = await supabase
+      .from("calendar_events")
+      .delete()
+      .eq("account_id", accountId)
+      .eq("source", "google");
+
+    if (deleteError) {
+      console.error("Error clearing old events:", deleteError);
+      // Continue anyway - this is not critical
+    }
+
+    console.log(`Cleared old Google events for account ${accountId}`);
+
     // Upsert tokens (insert or update)
     const { error: dbError } = await supabase
       .from("google_calendar_tokens")
@@ -106,8 +120,8 @@ serve(async (req) => {
       return Response.redirect(`${FRONTEND_URL}/admin/agenda?error=db_error`);
     }
 
-    // Redirect to frontend with success
-    return Response.redirect(`${FRONTEND_URL}/admin/agenda?google_connected=true`);
+    // Redirect to frontend with success and force sync
+    return Response.redirect(`${FRONTEND_URL}/admin/agenda?google_connected=true&force_sync=true`);
   } catch (error) {
     console.error("Callback error:", error);
     return Response.redirect(`${FRONTEND_URL}/admin/agenda?error=unknown`);
