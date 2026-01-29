@@ -196,7 +196,6 @@ class CalendarService {
 
     const scopes = [
       'https://www.googleapis.com/auth/calendar.readonly',
-      'https://www.googleapis.com/auth/calendar.events',
     ];
 
     const params = new URLSearchParams({
