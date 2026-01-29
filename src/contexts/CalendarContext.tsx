@@ -93,6 +93,8 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
   // Load CRM events from account + Google events from current user
 
   const loadEvents = useCallback(async () => {
+    console.log('[Calendar] loadEvents called with accountId:', accountId, 'userId:', userId);
+    
     try {
       // Load CRM events for the whole account
       const { data: crmEvents, error: crmError } = await supabase
@@ -103,8 +105,9 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
         .order('start_time', { ascending: true });
 
       if (crmError) {
-        console.error('Error loading CRM events:', crmError);
+        console.error('[Calendar] Error loading CRM events:', crmError);
       }
+      console.log('[Calendar] CRM events loaded:', crmEvents?.length || 0);
 
       // Load Google events only for the current user
       const { data: googleEvents, error: googleError } = await supabase
@@ -115,11 +118,13 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
         .order('start_time', { ascending: true });
 
       if (googleError) {
-        console.error('Error loading Google events:', googleError);
+        console.error('[Calendar] Error loading Google events:', googleError);
       }
+      console.log('[Calendar] Google events loaded:', googleEvents?.length || 0);
 
       // Combine both event types
       const allEvents = [...(crmEvents || []), ...(googleEvents || [])];
+      console.log('[Calendar] Total events:', allEvents.length);
 
       const mappedEvents: CalendarEvent[] = allEvents.map((event) => ({
         id: event.id,
@@ -145,7 +150,7 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
 
       setEvents(mappedEvents);
     } catch (error) {
-      console.error('Failed to load events:', error);
+      console.error('[Calendar] Failed to load events:', error);
     }
   }, [accountId, userId]);
 
