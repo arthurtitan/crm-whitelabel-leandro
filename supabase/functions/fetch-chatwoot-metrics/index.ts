@@ -285,25 +285,33 @@ serve(async (req) => {
       const hasAgentBotId = !!conv.agent_bot_id;
       const hasHumanAssignee = !!(assignee?.id || conv.assignee_id) && !hasBotAssignee;
       
-      // Check additional_attributes for bot/automation markers
-      // n8n can set these when responding: { "bot_handled": true }
+      // Check BOTH additional_attributes AND custom_attributes for bot/automation markers
+      // n8n sets ai_responded via /custom_attributes endpoint
       const additionalAttrs = conv.additional_attributes || {};
+      const customAttrs = conv.custom_attributes || {};
+      
       const hasBotMarker = additionalAttrs.bot_handled === true || 
                            additionalAttrs.automation_id != null ||
                            additionalAttrs.initiated_by === 'bot' ||
                            additionalAttrs.source === 'automation' ||
-                           additionalAttrs.ai_responded === true;
+                           additionalAttrs.ai_responded === true ||
+                           customAttrs.ai_responded === true ||
+                           customAttrs.bot_handled === true;
       
       // Detect AI by ultra-fast first response time (< 15 seconds suggests automation)
       // Human agents typically take 30+ seconds to respond
       let hasQuickFirstResponse = false;
       let responseTimeSeconds: number | null = null;
       if (conv.first_reply_created_at && conv.created_at) {
-        // first_reply_created_at is Unix timestamp in seconds, created_at is ISO string
-        const createdAtMs = new Date(conv.created_at).getTime();
+        // Handle created_at as either Unix timestamp (number) or ISO string
+        const createdAtMs = typeof conv.created_at === 'number'
+          ? conv.created_at * 1000  // Unix seconds to ms
+          : new Date(conv.created_at).getTime();
+        
         const firstReplyMs = typeof conv.first_reply_created_at === 'number' 
           ? conv.first_reply_created_at * 1000  // Unix seconds to ms
           : new Date(conv.first_reply_created_at).getTime();
+        
         responseTimeSeconds = (firstReplyMs - createdAtMs) / 1000;
         // If response came within 15 seconds, likely automated
         hasQuickFirstResponse = responseTimeSeconds > 0 && responseTimeSeconds < 15;
@@ -391,7 +399,11 @@ serve(async (req) => {
       // Log first 3 conversations for debugging
       const samplesToLog = finalConversations.slice(0, 3);
       samplesToLog.forEach((conv: any, idx: number) => {
-        const createdAtMs = new Date(conv.created_at).getTime();
+        // Handle created_at as either Unix timestamp or ISO string
+        const createdAtMs = typeof conv.created_at === 'number'
+          ? conv.created_at * 1000
+          : new Date(conv.created_at).getTime();
+        
         // first_reply_created_at is Unix timestamp in seconds
         const firstReplyMs = conv.first_reply_created_at 
           ? (typeof conv.first_reply_created_at === 'number' 
@@ -401,13 +413,21 @@ serve(async (req) => {
         const responseTimeSec = firstReplyMs ? (firstReplyMs - createdAtMs) / 1000 : null;
         const isQuickResponse = responseTimeSec !== null && responseTimeSec > 0 && responseTimeSec < 15;
         
+        // Check both custom_attributes and additional_attributes
+        const customAttrs = conv.custom_attributes || {};
+        const additionalAttrs = conv.additional_attributes || {};
+        const hasAiMarker = customAttrs.ai_responded === true || additionalAttrs.ai_responded === true;
+        
         console.log(`[Chatwoot Metrics] Conv ${conv.id}:`, {
           status: conv.status,
           created_at: conv.created_at,
+          created_at_type: typeof conv.created_at,
           first_reply_ts: conv.first_reply_created_at,
           responseTimeSec: responseTimeSec !== null ? responseTimeSec.toFixed(1) : 'N/A',
           isQuickResponse,
           hasAssignee: !!(conv.meta?.assignee?.id || conv.assignee_id),
+          custom_attributes: customAttrs,
+          hasAiMarker,
         });
       });
     }
