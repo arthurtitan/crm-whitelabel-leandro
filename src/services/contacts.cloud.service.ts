@@ -22,6 +22,14 @@ export interface CreateContactResult {
   error?: string;
 }
 
+export interface DeleteLeadResult {
+  success: boolean;
+  chatwoot_attempted?: boolean;
+  chatwoot_deleted?: boolean;
+  chatwoot_error?: string | null;
+  error?: string;
+}
+
 /**
  * Create a contact in Supabase only
  */
@@ -210,8 +218,39 @@ export async function applyStageTagToContact(
   return { success: true };
 }
 
+/**
+ * Delete lead from database and (best-effort) delete corresponding Chatwoot contact.
+ */
+export async function deleteLead(contact_id: string): Promise<DeleteLeadResult> {
+  try {
+    const { data, error } = await supabase.functions.invoke('delete-lead', {
+      body: { contact_id },
+    });
+
+    if (error) {
+      console.error('[contacts.cloud.service] Error deleting lead:', error);
+      return { success: false, error: error.message };
+    }
+
+    if (!data?.success) {
+      return { success: false, error: data?.error || 'Erro ao remover lead' };
+    }
+
+    return {
+      success: true,
+      chatwoot_attempted: data.chatwoot_attempted,
+      chatwoot_deleted: data.chatwoot_deleted,
+      chatwoot_error: data.chatwoot_error,
+    };
+  } catch (err: any) {
+    console.error('[contacts.cloud.service] Unexpected error deleting lead:', err);
+    return { success: false, error: err?.message || 'Erro ao remover lead' };
+  }
+}
+
 export const contactsCloudService = {
   createContact,
   createContactWithChatwoot,
   applyStageTagToContact,
+  deleteLead,
 };
