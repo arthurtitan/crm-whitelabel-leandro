@@ -178,28 +178,30 @@ export default function AdminAgendaPage() {
               )}
             </Button>
           ) : (
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline" className="text-success border-success text-xs">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <Badge variant="outline" className="text-success border-success text-xs shrink-0">
                 ✓ {connection.email}
               </Badge>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={syncNow} 
-                disabled={isSyncing}
-                title="Atualizar agora"
-              >
-                <RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
-                Atualizar
-              </Button>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={handleDisconnect}
-                className="text-muted-foreground hover:text-destructive"
-              >
-                Desconectar
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={syncNow} 
+                  disabled={isSyncing}
+                  title="Atualizar agora"
+                >
+                  <RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
+                  Atualizar
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={handleDisconnect}
+                  className="text-muted-foreground hover:text-destructive"
+                >
+                  Desconectar
+                </Button>
+              </div>
             </div>
           )}
         </div>
