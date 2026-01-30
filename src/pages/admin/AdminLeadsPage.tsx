@@ -72,6 +72,7 @@ export default function AdminLeadsPage() {
     deleteContact,
     getContactFunnelStageOrder,
     getContactSales,
+    refetchContacts,
   } = useFinance();
   const accountId = account?.id || '';
 
@@ -179,9 +180,9 @@ export default function AdminLeadsPage() {
     return stageOrder >= 3;
   };
 
-  const handleLeadCreated = () => {
-    // Trigger a page refresh or data reload if needed
-    toast.success('Lead criado com sucesso!');
+  const handleLeadCreated = async () => {
+    // Reload contacts list after creation
+    await refetchContacts();
   };
 
   const handleUpdate = () => {

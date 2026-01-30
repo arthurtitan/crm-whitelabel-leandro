@@ -478,15 +478,21 @@ serve(async (req) => {
 
     // Step 2: "Strict mirror" - Check contacts WITHOUT chatwoot_contact_id
     // Search Chatwoot by phone/email, if not found -> delete from Kanban
+    // IMPORTANT: Skip contacts created less than 5 minutes ago (grace period for Chatwoot integration)
     console.log('[Sync Contacts] Starting strict mirror - checking unlinked contacts...');
+    
+    // Calculate cutoff time (5 minutes ago)
+    const gracePeriodMinutes = 5;
+    const cutoffTime = new Date(Date.now() - gracePeriodMinutes * 60 * 1000).toISOString();
     
     const { data: unlinkedContacts } = await supabaseAdmin
       .from('contacts')
-      .select('id, nome, telefone, email')
+      .select('id, nome, telefone, email, created_at')
       .eq('account_id', account_id)
-      .is('chatwoot_contact_id', null);
+      .is('chatwoot_contact_id', null)
+      .lt('created_at', cutoffTime); // Only process contacts older than grace period
     
-    console.log('[Sync Contacts] Found', unlinkedContacts?.length || 0, 'unlinked contacts to verify in Chatwoot');
+    console.log('[Sync Contacts] Found', unlinkedContacts?.length || 0, 'unlinked contacts to verify in Chatwoot (excluding contacts < 5min old)');
     
     // Helper function to normalize phone for search
     const normalizePhoneForSearch = (phone: string | null): string | null => {
