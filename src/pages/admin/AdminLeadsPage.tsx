@@ -61,6 +61,7 @@ import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import type { Tag as CloudTag } from '@/services/tags.cloud.service';
+import { contactsCloudService } from '@/services/contacts.cloud.service';
 
 export default function AdminLeadsPage() {
   const { account, user } = useAuth();
@@ -69,7 +70,6 @@ export default function AdminLeadsPage() {
     contacts, 
     leadFunnelStates, 
     updateContact,
-    deleteContact,
     getContactFunnelStageOrder,
     getContactSales,
     refetchContacts,
@@ -203,19 +203,26 @@ export default function AdminLeadsPage() {
     }
   };
 
-  const handleDelete = (contactId: string) => {
+  const handleDelete = async (contactId: string) => {
     const contactSales = getContactSales(contactId);
     if (contactSales.length > 0) {
       toast.error('Não é possível remover lead com vendas registradas');
       return;
     }
 
-    const result = deleteContact(contactId);
-    if (result.success) {
-      toast.success('Lead removido com sucesso!');
-    } else {
+    const result = await contactsCloudService.deleteLead(contactId);
+    if (!result.success) {
       toast.error(result.error || 'Erro ao remover lead');
+      return;
     }
+
+    if (result.chatwoot_attempted && result.chatwoot_deleted === false) {
+      toast.warning(`Lead removido do CRM, mas não consegui remover no Chatwoot: ${result.chatwoot_error || 'erro desconhecido'}`);
+    } else {
+      toast.success('Lead removido com sucesso!');
+    }
+
+    await refetchContacts();
   };
 
   const handleOpenChatwoot = (contact: Contact) => {
@@ -393,7 +400,7 @@ export default function AdminLeadsPage() {
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             className="text-destructive"
-                            onClick={() => handleDelete(contact.id)}
+                            onClick={() => void handleDelete(contact.id)}
                           >
                             <Trash2 className="w-4 h-4 mr-2" />
                             Remover
