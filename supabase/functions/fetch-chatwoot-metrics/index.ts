@@ -308,8 +308,20 @@ serve(async (req) => {
       hourlyCount[hour]++;
 
       // Backlog (open conversations waiting for response)
-      if (conv.status === 'open' && conv.waiting_since) {
-        const waitingMs = now - (conv.waiting_since * 1000);
+      if (conv.status === 'open') {
+        let waitingMs: number;
+        
+        if (conv.waiting_since) {
+          // Usar waiting_since se disponível (timestamp Unix em segundos)
+          waitingMs = now - (conv.waiting_since * 1000);
+        } else {
+          // Fallback: usar last_activity_at ou created_at
+          const lastActivity = conv.last_activity_at 
+            ? conv.last_activity_at * 1000 
+            : new Date(conv.created_at).getTime();
+          waitingMs = now - lastActivity;
+        }
+        
         const waitingMinutes = waitingMs / 60000;
         
         if (waitingMinutes <= 15) backlog.ate15min++;
@@ -317,6 +329,13 @@ serve(async (req) => {
         else backlog.acima60min++;
       }
     }
+
+    // Debug log para backlog
+    console.log('[Chatwoot Metrics] Backlog calculation:', {
+      openConversations: finalConversations.filter((c: any) => c.status === 'open').length,
+      withWaitingSince: finalConversations.filter((c: any) => c.waiting_since).length,
+      backlog,
+    });
 
     // Calculate percentages
     const totalAssigned = botConversations + humanConversations;
