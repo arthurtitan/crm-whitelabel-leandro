@@ -199,8 +199,7 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
     }
   }, []);
 
-  // ============= INITIAL LOAD + AUTO-SYNC POLLING =============
-  // Syncs every 30 seconds when connected (same pattern as Kanban)
+  // ============= INITIAL LOAD =============
 
   useEffect(() => {
     if (!accountId) return;
@@ -213,51 +212,52 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
       console.log('[Calendar] Context initialized');
     };
     init();
-
-    // Set up 30-second polling for auto-sync when connected
-    const SYNC_INTERVAL = 30000; // 30 seconds
-    let intervalId: NodeJS.Timeout | null = null;
-
-    const startPolling = () => {
-      if (intervalId) return;
-      
-      intervalId = setInterval(async () => {
-        console.log('[Calendar] Auto-sync polling...');
-        
-        // Check if still connected before syncing
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-          console.log('[Calendar] No session, skipping auto-sync');
-          return;
-        }
-
-        try {
-          // Silent sync - don't show toast for auto-sync
-          const response = await supabase.functions.invoke('google-calendar-sync', {});
-          
-          if (!response.error) {
-            console.log('[Calendar] Auto-sync complete, reloading events...');
-            await loadEvents();
-          }
-        } catch (error) {
-          console.warn('[Calendar] Auto-sync failed:', error);
-        }
-      }, SYNC_INTERVAL);
-      
-      console.log('[Calendar] Polling started (30s interval)');
-    };
-
-    // Start polling after initial load
-    const pollingTimeout = setTimeout(startPolling, 2000);
-
     return () => {
-      clearTimeout(pollingTimeout);
-      if (intervalId) {
-        clearInterval(intervalId);
-        console.log('[Calendar] Polling stopped');
-      }
     };
   }, [accountId, checkConnectionStatus, loadEvents]);
+
+  // ============= AUTO-SYNC POLLING =============
+  // Syncs every 30 seconds ONLY when connected.
+  // Important: polling must never change connection state (only user clicks can disconnect).
+
+  useEffect(() => {
+    if (!accountId) return;
+    if (!isConnected) return;
+
+    const SYNC_INTERVAL = 30000; // 30 seconds
+
+    const intervalId = setInterval(async () => {
+      console.log('[Calendar] Auto-sync polling...');
+
+      // Check if still authenticated before syncing
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        console.log('[Calendar] No session, skipping auto-sync');
+        return;
+      }
+
+      try {
+        // Silent sync - don't show toast for auto-sync
+        const response = await supabase.functions.invoke('google-calendar-sync', {});
+
+        if (!response.error) {
+          console.log('[Calendar] Auto-sync complete, reloading events...');
+          await loadEvents();
+        } else {
+          console.warn('[Calendar] Auto-sync error (ignored):', response.error);
+        }
+      } catch (error) {
+        console.warn('[Calendar] Auto-sync failed (ignored):', error);
+      }
+    }, SYNC_INTERVAL);
+
+    console.log('[Calendar] Polling started (30s interval)');
+
+    return () => {
+      clearInterval(intervalId);
+      console.log('[Calendar] Polling stopped');
+    };
+  }, [accountId, isConnected, loadEvents]);
 
   // ============= CONNECTION ACTIONS =============
 
@@ -335,10 +335,10 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
       
       if (response.error) {
         console.error('[Calendar] Sync error response:', response.error);
-        // If backend says not connected, update local state accordingly
-        if (response.error.message?.includes('não conectado')) {
-          setConnection(defaultConnection);
-          toast.info('Google Calendar não está conectado');
+        // Never hard-disconnect on sync errors; only mark as "error" (reauth needed) when applicable.
+        if (response.error.message?.toLowerCase().includes('não conectado')) {
+          setConnection(prev => ({ ...prev, status: 'error' }));
+          toast.error('Sua conexão com o Google Calendar expirou. Clique em “Reconectar”.');
           return;
         }
         throw new Error(response.error.message || 'Erro ao sincronizar');

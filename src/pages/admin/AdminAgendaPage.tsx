@@ -183,13 +183,14 @@ export default function AdminAgendaPage() {
                 ✓ {connection.email}
               </Badge>
               <Button 
-                variant="ghost" 
+                variant="outline" 
                 size="sm" 
                 onClick={syncNow} 
                 disabled={isSyncing}
-                title="Sincronizar agora"
+                title="Atualizar agora"
               >
-                <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
+                Atualizar
               </Button>
               <Button 
                 variant="ghost" 
