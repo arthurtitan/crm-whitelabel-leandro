@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -50,11 +50,16 @@ interface UseChatwootMetricsParams {
   dateTo: Date;
   inboxId?: number;
   agentId?: number;
+  pollingInterval?: number;
+  enablePolling?: boolean;
 }
 
 interface UseChatwootMetricsResult {
   data: DashboardMetrics | null;
   isLoading: boolean;
+  isSyncing: boolean;
+  lastSyncAt: string | null;
+  isTabActive: boolean;
   error: string | null;
   isConfigured: boolean;
   refetch: () => void;
@@ -78,23 +83,43 @@ const DEFAULT_METRICS: DashboardMetrics = {
   qualidade: { conversasSemResposta: 0, taxaAtendimentoVenda: '0%' },
 };
 
+const DEFAULT_POLLING_INTERVAL = 30000; // 30 seconds
+
 export function useChatwootMetrics({
   dateFrom,
   dateTo,
   inboxId,
   agentId,
+  pollingInterval = DEFAULT_POLLING_INTERVAL,
+  enablePolling = true,
 }: UseChatwootMetricsParams): UseChatwootMetricsResult {
   const { account } = useAuth();
   const { toast } = useToast();
   const [data, setData] = useState<DashboardMetrics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
+  const [isTabActive, setIsTabActive] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const isConfigured = Boolean(
     account?.chatwoot_base_url &&
     account?.chatwoot_account_id &&
     account?.chatwoot_api_key
   );
+
+  // Track tab visibility
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      setIsTabActive(document.visibilityState === 'visible');
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
   const fetchMetrics = useCallback(async () => {
     if (!isConfigured || !account) {
@@ -183,18 +208,72 @@ export function useChatwootMetrics({
       });
     } finally {
       setIsLoading(false);
+      setIsSyncing(false);
+      setLastSyncAt(new Date().toISOString());
     }
   }, [account, dateFrom, dateTo, inboxId, agentId, isConfigured, toast]);
 
+  // Initial fetch
   useEffect(() => {
     fetchMetrics();
   }, [fetchMetrics]);
 
+  // Polling with visibility detection
+  useEffect(() => {
+    if (!isConfigured || !enablePolling) return;
+
+    const startPolling = () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+
+      intervalRef.current = setInterval(() => {
+        if (document.visibilityState === 'visible') {
+          setIsSyncing(true);
+          fetchMetrics();
+        }
+      }, pollingInterval);
+    };
+
+    if (isTabActive) {
+      startPolling();
+    } else if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, [isConfigured, enablePolling, pollingInterval, isTabActive, fetchMetrics]);
+
+  // Manual refetch that resets polling timer
+  const refetch = useCallback(() => {
+    setIsSyncing(true);
+    fetchMetrics();
+    
+    // Reset polling timer
+    if (intervalRef.current && enablePolling && isConfigured) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = setInterval(() => {
+        if (document.visibilityState === 'visible') {
+          setIsSyncing(true);
+          fetchMetrics();
+        }
+      }, pollingInterval);
+    }
+  }, [fetchMetrics, enablePolling, isConfigured, pollingInterval]);
+
   return {
     data,
     isLoading,
+    isSyncing,
+    lastSyncAt,
+    isTabActive,
     error,
     isConfigured,
-    refetch: fetchMetrics,
+    refetch,
   };
 }

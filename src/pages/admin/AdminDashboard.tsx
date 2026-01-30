@@ -11,12 +11,12 @@ import {
   Bot,
   X,
   AlertCircle,
-  RefreshCw,
 } from 'lucide-react';
 import { subDays, isWithinInterval, parseISO } from 'date-fns';
 import { DateRange } from 'react-day-picker';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { SyncIndicatorWithButton } from '@/components/ui/sync-indicator';
 
 // Dashboard Components
 import { DashboardFilters } from '@/components/dashboard/DashboardFilters';
@@ -40,10 +40,13 @@ export default function AdminDashboard() {
   const [selectedAgent, setSelectedAgent] = useState('all');
   const [selectedAgentFromTable, setSelectedAgentFromTable] = useState<string | null>(null);
 
-  // Fetch real metrics from Chatwoot
+  // Fetch real metrics from Chatwoot with auto-polling
   const {
     data: metricsData,
     isLoading,
+    isSyncing,
+    lastSyncAt,
+    isTabActive,
     error: metricsError,
     isConfigured,
     refetch,
@@ -51,6 +54,8 @@ export default function AdminDashboard() {
     dateFrom: dateRange?.from || subDays(new Date(), 7),
     dateTo: dateRange?.to || new Date(),
     inboxId: channel !== 'all' ? getInboxIdFromChannel(channel) : undefined,
+    enablePolling: true,
+    pollingInterval: 30000,
   });
 
   // Helper to map channel name to inbox ID (will be dynamic when we have real inboxes)
@@ -198,16 +203,14 @@ export default function AdminDashboard() {
           </p>
         </div>
         {isConfigured && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => refetch()}
-            disabled={isLoading}
-            className="shrink-0"
-          >
-            <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-            Atualizar
-          </Button>
+          <SyncIndicatorWithButton
+            isSyncing={isSyncing}
+            lastSyncAt={lastSyncAt}
+            isTabActive={isTabActive}
+            error={metricsError ? new Error(metricsError) : null}
+            onRefresh={refetch}
+            refreshLabel="Atualizar"
+          />
         )}
       </div>
 
