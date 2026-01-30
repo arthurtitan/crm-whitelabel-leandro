@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useAuth, useRoleAccess } from '@/contexts/AuthContext';
 import { useFinance } from '@/contexts/FinanceContext';
 import { CreateSaleDialog } from '@/components/finance/CreateSaleDialog';
 import { LeadProfileSheet } from '@/components/leads/LeadProfileSheet';
+import { CreateLeadDialog } from '@/components/kanban/CreateLeadDialog';
 import { AgentFilter } from '@/components/dashboard/AgentFilter';
 import { mockFunnelStages, mockUsers } from '@/data/mockData';
 import { Contact, ContactOrigin } from '@/types/crm';
@@ -25,7 +26,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import {
   DropdownMenu,
@@ -52,15 +52,15 @@ import {
   Trash2,
   Phone,
   Mail,
-  MessageSquare,
   DollarSign,
   Eye,
   ExternalLink,
-  User as UserIcon,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+import type { Tag as CloudTag } from '@/services/tags.cloud.service';
 
 export default function AdminLeadsPage() {
   const { account, user } = useAuth();
@@ -68,28 +68,61 @@ export default function AdminLeadsPage() {
   const { 
     contacts, 
     leadFunnelStates, 
-    createContact, 
     updateContact,
     deleteContact,
     getContactFunnelStageOrder,
     getContactSales,
   } = useFinance();
-  const accountId = account?.id || 'acc-1';
+  const accountId = account?.id || '';
 
   const [searchTerm, setSearchTerm] = useState('');
   const [originFilter, setOriginFilter] = useState<string>('all');
   const [selectedAgent, setSelectedAgent] = useState<string>('all');
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [saleContactId, setSaleContactId] = useState<string | null>(null);
   const [profileContact, setProfileContact] = useState<Contact | null>(null);
+  
+  // Kanban stages for CreateLeadDialog
+  const [stages, setStages] = useState<CloudTag[]>([]);
+  const [hasChatwootConfig, setHasChatwootConfig] = useState(false);
 
-  const [formData, setFormData] = useState({
-    nome: '',
-    telefone: '',
-    email: '',
-    origem: 'indicacao' as ContactOrigin,
-  });
+  // Load stages and check Chatwoot config
+  useEffect(() => {
+    if (!accountId) return;
+
+    const loadData = async () => {
+      // Check Chatwoot config
+      setHasChatwootConfig(
+        !!account?.chatwoot_base_url && 
+        !!account?.chatwoot_api_key && 
+        !!account?.chatwoot_account_id
+      );
+
+      // Load stages from default funnel
+      const { data: funnelData } = await supabase
+        .from('funnels')
+        .select('id')
+        .eq('account_id', accountId)
+        .eq('is_default', true)
+        .maybeSingle();
+
+      if (funnelData?.id) {
+        const { data: tagsData } = await supabase
+          .from('tags')
+          .select('*')
+          .eq('funnel_id', funnelData.id)
+          .eq('type', 'stage')
+          .eq('ativo', true)
+          .order('ordem', { ascending: true });
+
+        if (tagsData) {
+          setStages(tagsData as CloudTag[]);
+        }
+      }
+    };
+
+    loadData();
+  }, [accountId, account]);
 
   // Filter by agent if selected (based on sales association)
   const filteredContacts = useMemo(() => {
@@ -146,34 +179,9 @@ export default function AdminLeadsPage() {
     return stageOrder >= 3;
   };
 
-  const resetForm = () => {
-    setFormData({ nome: '', telefone: '', email: '', origem: 'indicacao' });
-  };
-
-  const handleCreate = () => {
-    if (!formData.nome.trim()) {
-      toast.error('Nome é obrigatório');
-      return;
-    }
-    if (!formData.telefone.trim()) {
-      toast.error('Telefone é obrigatório');
-      return;
-    }
-
-    const result = createContact({
-      nome: formData.nome.trim(),
-      telefone: formData.telefone.trim(),
-      email: formData.email.trim() || null,
-      origem: formData.origem || 'manual',
-    });
-
-    if (result.success) {
-      setIsCreateOpen(false);
-      resetForm();
-      toast.success('Lead cadastrado com sucesso!');
-    } else {
-      toast.error(result.error || 'Erro ao cadastrar lead');
-    }
+  const handleLeadCreated = () => {
+    // Trigger a page refresh or data reload if needed
+    toast.success('Lead criado com sucesso!');
   };
 
   const handleUpdate = () => {
@@ -236,78 +244,21 @@ export default function AdminLeadsPage() {
           <h1 className="title-responsive text-foreground">Leads</h1>
           <p className="text-responsive-sm text-muted-foreground">Gerencie todos os leads da conta</p>
         </div>
-        <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2 min-h-[40px] sm:min-h-0">
-              <Plus className="w-4 h-4" />
-              <span className="hidden xs:inline">Novo Lead</span>
-              <span className="xs:hidden">Novo</span>
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Cadastrar Lead</DialogTitle>
-              <DialogDescription>Adicione um novo lead manualmente</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="nome">Nome *</Label>
-                <Input
-                  id="nome"
-                  value={formData.nome}
-                  onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
-                  placeholder="Nome completo"
-                />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="telefone">Telefone *</Label>
-                  <Input
-                    id="telefone"
-                    value={formData.telefone}
-                    onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
-                    placeholder="+55 11 99999-9999"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    placeholder="email@exemplo.com"
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="origem">Origem</Label>
-                <Select
-                  value={formData.origem || 'indicacao'}
-                  onValueChange={(v) => setFormData({ ...formData, origem: v as ContactOrigin })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="whatsapp">WhatsApp</SelectItem>
-                    <SelectItem value="instagram">Instagram</SelectItem>
-                    <SelectItem value="site">Site</SelectItem>
-                    <SelectItem value="indicacao">Indicação</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <DialogFooter className="flex-col sm:flex-row gap-2">
-              <Button variant="outline" onClick={() => { setIsCreateOpen(false); resetForm(); }} className="w-full sm:w-auto">
-                Cancelar
+        {accountId && (
+          <CreateLeadDialog
+            accountId={accountId}
+            stages={stages}
+            hasChatwootConfig={hasChatwootConfig}
+            onLeadCreated={handleLeadCreated}
+            trigger={
+              <Button className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2 min-h-[40px] sm:min-h-0">
+                <Plus className="w-4 h-4" />
+                <span className="hidden xs:inline">Novo Lead</span>
+                <span className="xs:hidden">Novo</span>
               </Button>
-              <Button onClick={handleCreate} disabled={!formData.nome || !formData.telefone} className="w-full sm:w-auto">
-                Cadastrar
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            }
+          />
+        )}
       </div>
 
       {/* Filters */}
