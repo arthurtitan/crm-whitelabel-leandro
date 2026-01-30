@@ -1,94 +1,194 @@
 
+## Plano: Sistema de Sincronização Central com Auto-Refresh para Dashboard
 
-## Plano: Correção do Backlog de Atendimento
+### Objetivo
+Implementar um sistema de sincronização unificado que:
+1. Adicione polling automático ao Dashboard de Atendimento (30s)
+2. Crie um hook reutilizável de sincronização central
+3. Exiba um indicador visual de sincronização consistente em todo o sistema
 
-### Problema Identificado
-O **Backlog de Atendimento** depende do campo `waiting_since` da API do Chatwoot, que pode não estar disponível em todas as conversas ou versões do Chatwoot. Se este campo não estiver presente, o backlog retornará sempre **zeros**.
+---
 
-### Solução Proposta
-Implementar uma lógica de **fallback** que calcule o tempo de espera de forma alternativa quando `waiting_since` não estiver disponível.
+### Arquitetura Proposta
+
+```text
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                         useSyncManager (Central Hook)                        │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│   ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐  │
+│   │  Dashboard  │    │   Kanban    │    │   Agenda    │    │   Leads     │  │
+│   │  Metrics    │    │   Sync      │    │   Sync      │    │   Sync      │  │
+│   └──────┬──────┘    └──────┬──────┘    └──────┬──────┘    └──────┬──────┘  │
+│          │                  │                  │                  │          │
+│          └──────────────────┴──────────────────┴──────────────────┘          │
+│                                    │                                         │
+│                        ┌───────────▼───────────┐                             │
+│                        │  Polling Controller   │                             │
+│                        │  (30s interval)       │                             │
+│                        │  - Stale-while-rev    │                             │
+│                        │  - Background sync    │                             │
+│                        │  - Visual indicator   │                             │
+│                        └───────────────────────┘                             │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
 ### Alterações Técnicas
 
-#### 1. Edge Function: `fetch-chatwoot-metrics/index.ts`
-Atualizar a lógica de cálculo do backlog (linhas 310-318):
+#### 1. Novo Hook: `src/hooks/useSyncManager.ts`
+Hook central para gerenciar sincronização de múltiplos recursos:
 
-**De:**
 ```typescript
-if (conv.status === 'open' && conv.waiting_since) {
-  const waitingMs = now - (conv.waiting_since * 1000);
-  // ...
+interface SyncResource {
+  name: string;
+  fetchFn: () => Promise<void>;
+  interval?: number; // Default: 30000
+  enabled?: boolean;
+}
+
+interface UseSyncManagerReturn {
+  isSyncing: boolean;
+  lastSyncAt: string | null;
+  registerResource: (resource: SyncResource) => void;
+  unregisterResource: (name: string) => void;
+  triggerSync: (resourceName?: string) => Promise<void>;
+  triggerSyncAll: () => Promise<void>;
 }
 ```
 
-**Para:**
+#### 2. Atualizar `useChatwootMetrics.ts`
+Adicionar polling automático de 30 segundos:
+
 ```typescript
-if (conv.status === 'open') {
-  let waitingMs: number;
+// Adicionar polling automático
+useEffect(() => {
+  if (!isConfigured || !enablePolling) return;
   
-  if (conv.waiting_since) {
-    // Usar waiting_since se disponível (timestamp Unix em segundos)
-    waitingMs = now - (conv.waiting_since * 1000);
-  } else {
-    // Fallback: usar last_activity_at ou created_at
-    const lastActivity = conv.last_activity_at 
-      ? conv.last_activity_at * 1000 
-      : new Date(conv.created_at).getTime();
-    waitingMs = now - lastActivity;
-  }
-  
-  const waitingMinutes = waitingMs / 60000;
-  
-  if (waitingMinutes <= 15) backlog.ate15min++;
-  else if (waitingMinutes <= 60) backlog.de15a60min++;
-  else backlog.acima60min++;
+  const intervalId = setInterval(() => {
+    fetchMetrics();
+  }, pollingInterval);
+
+  return () => clearInterval(intervalId);
+}, [isConfigured, enablePolling, pollingInterval, fetchMetrics]);
+```
+
+Novo parâmetro na interface:
+```typescript
+interface UseChatwootMetricsParams {
+  dateFrom: Date;
+  dateTo: Date;
+  inboxId?: number;
+  agentId?: number;
+  pollingInterval?: number;  // Default: 30000
+  enablePolling?: boolean;   // Default: true
 }
 ```
 
-#### 2. Adicionar Log de Debug
-Para ajudar a diagnosticar problemas futuros:
-```typescript
-console.log('[Chatwoot Metrics] Backlog calculation:', {
-  openConversations: finalConversations.filter(c => c.status === 'open').length,
-  withWaitingSince: finalConversations.filter(c => c.waiting_since).length,
-  backlog,
+#### 3. Atualizar `AdminDashboard.tsx`
+- Remover necessidade de botão "Atualizar" manual como ação primária
+- Adicionar indicador de sincronização visual (similar ao Kanban)
+- Exibir timestamp da última atualização
+
+```tsx
+// Adicionar ao useChatwootMetrics
+const { 
+  data: metricsData, 
+  isLoading, 
+  isSyncing,           // NOVO
+  lastSyncAt,          // NOVO
+  error: metricsError, 
+  isConfigured, 
+  refetch 
+} = useChatwootMetrics({
+  dateFrom: dateRange?.from || subDays(new Date(), 7),
+  dateTo: dateRange?.to || new Date(),
+  enablePolling: true,      // NOVO
+  pollingInterval: 30000,   // NOVO
 });
+```
+
+#### 4. Componente `SyncIndicator` Reutilizável
+Criar um componente visual consistente para toda a aplicação:
+
+```tsx
+// src/components/ui/SyncIndicator.tsx
+interface SyncIndicatorProps {
+  isSyncing: boolean;
+  lastSyncAt: string | null;
+  onManualSync?: () => void;
+  label?: string;
+}
 ```
 
 ---
 
-### Fluxo Atualizado
+### Fluxo de Sincronização
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│               Cálculo do Backlog de Atendimento             │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  Para cada conversa com status = 'open':                    │
-│                                                             │
-│  1. waiting_since existe?                                   │
-│     ├─ SIM → usar waiting_since como referência             │
-│     └─ NÃO → usar last_activity_at ou created_at            │
-│                                                             │
-│  2. Calcular tempo de espera em minutos                     │
-│                                                             │
-│  3. Classificar:                                            │
-│     ├─ ≤ 15 min  → ate15min (verde)                         │
-│     ├─ 15-60 min → de15a60min (amarelo)                     │
-│     └─ > 60 min  → acima60min (vermelho)                    │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────┐
+│                         Ciclo de Sincronização                             │
+├────────────────────────────────────────────────────────────────────────────┤
+│                                                                            │
+│  1. Carregamento Inicial                                                   │
+│     └─ isLoading = true                                                    │
+│     └─ Fetch dados                                                         │
+│     └─ isLoading = false                                                   │
+│                                                                            │
+│  2. Polling a cada 30s (background)                                        │
+│     └─ isSyncing = true                                                    │
+│     └─ Fetch dados (sem loading spinner)                                   │
+│     └─ Merge com dados existentes                                          │
+│     └─ isSyncing = false                                                   │
+│     └─ lastSyncAt = timestamp                                              │
+│                                                                            │
+│  3. Atualização Manual (botão)                                             │
+│     └─ Força sync imediato                                                 │
+│     └─ Reseta timer do polling                                             │
+│                                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ### Benefícios
-- Backlog funciona mesmo sem o campo `waiting_since`
-- Compatível com diferentes versões do Chatwoot
-- Log de debug para diagnosticar problemas futuros
 
-### Arquivos a Modificar
-- `supabase/functions/fetch-chatwoot-metrics/index.ts`
+1. **Consistência Visual**: Todos os módulos terão o mesmo comportamento de sincronização
+2. **Performance**: Polling silencioso não interrompe a experiência do usuário
+3. **Feedback Claro**: Usuário sempre sabe quando os dados foram atualizados
+4. **Manutenibilidade**: Hook central facilita mudanças de intervalo ou lógica
+5. **Extensível**: Fácil adicionar novos recursos ao sistema de sincronização
 
+---
+
+### Configurações Padrão
+
+| Recurso | Intervalo | Ativo por Padrão |
+|---------|-----------|------------------|
+| Dashboard Chatwoot | 30s | Sim |
+| Kanban Chatwoot | 30s | Sim (se configurado) |
+| Google Calendar | 30s | Sim (se conectado) |
+| Contatos DB | 30s | Sim |
+
+---
+
+### Arquivos a Criar/Modificar
+
+**Criar:**
+- `src/hooks/useSyncManager.ts` - Hook central de sincronização
+
+**Modificar:**
+- `src/hooks/useChatwootMetrics.ts` - Adicionar polling automático
+- `src/pages/admin/AdminDashboard.tsx` - Integrar polling e indicador visual
+- `src/components/kanban/SyncIndicator.tsx` - Mover para `src/components/ui/` e tornar reutilizável
+
+---
+
+### Consideração de Performance
+
+Para evitar sobrecarga:
+- O polling só ocorre quando a aba está ativa (usar `document.visibilityState`)
+- Requisições em background são canceladas se uma nova for iniciada
+- Timeout de 45s para Chatwoot (já implementado)
