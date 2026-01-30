@@ -9,6 +9,12 @@ export interface DashboardMetrics {
   conversasResolvidas: number;
   conversasPendentes: number;
   conversasSemResposta: number;
+
+  // Contagens absolutas (preferir no UI para evitar arredondamento)
+  atendimentosIA?: number;
+  atendimentosHumano?: number;
+  atendimentosClassificados?: number;
+
   percentualIA: number;
   percentualHumano: number;
   tempoMedioPrimeiraResposta: string;
@@ -71,6 +77,9 @@ const DEFAULT_METRICS: DashboardMetrics = {
   conversasResolvidas: 0,
   conversasPendentes: 0,
   conversasSemResposta: 0,
+  atendimentosIA: 0,
+  atendimentosHumano: 0,
+  atendimentosClassificados: 0,
   percentualIA: 0,
   percentualHumano: 0,
   tempoMedioPrimeiraResposta: '0s',
