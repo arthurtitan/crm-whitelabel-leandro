@@ -298,9 +298,7 @@ serve(async (req) => {
                            customAttrs.ai_responded === true ||
                            customAttrs.bot_handled === true;
       
-      // Detect AI by ultra-fast first response time (< 15 seconds suggests automation)
-      // Human agents typically take 30+ seconds to respond
-      let hasQuickFirstResponse = false;
+      // Response time tracking (for agent stats only, not for AI detection)
       let responseTimeSeconds: number | null = null;
       if (conv.first_reply_created_at && conv.created_at) {
         // Handle created_at as either Unix timestamp (number) or ISO string
@@ -313,16 +311,14 @@ serve(async (req) => {
           : new Date(conv.first_reply_created_at).getTime();
         
         responseTimeSeconds = (firstReplyMs - createdAtMs) / 1000;
-        // If response came within 15 seconds, likely automated
-        hasQuickFirstResponse = responseTimeSeconds > 0 && responseTimeSeconds < 15;
       }
       
-      // Determine conversation type
-      const isBotConversation = hasBotAssignee || hasAgentBotId || hasBotMarker || hasQuickFirstResponse;
+      // Determine conversation type - ONLY trust explicit markers, not response time heuristics
+      const isBotConversation = hasBotAssignee || hasAgentBotId || hasBotMarker;
       const isHumanConversation = hasHumanAssignee && !isBotConversation;
       
-      if (hasBotMarker || hasQuickFirstResponse) {
-        // AI handled (either marked or detected by quick response)
+      if (hasBotMarker) {
+        // AI handled (explicitly marked via custom_attributes or additional_attributes)
         if (hasHumanAssignee) {
           // AI responded but human agent is assigned (may have taken over or AI uses human account)
           mixedConversations++;
@@ -411,7 +407,6 @@ serve(async (req) => {
               : new Date(conv.first_reply_created_at).getTime())
           : null;
         const responseTimeSec = firstReplyMs ? (firstReplyMs - createdAtMs) / 1000 : null;
-        const isQuickResponse = responseTimeSec !== null && responseTimeSec > 0 && responseTimeSec < 15;
         
         // Check both custom_attributes and additional_attributes
         const customAttrs = conv.custom_attributes || {};
@@ -420,11 +415,7 @@ serve(async (req) => {
         
         console.log(`[Chatwoot Metrics] Conv ${conv.id}:`, {
           status: conv.status,
-          created_at: conv.created_at,
-          created_at_type: typeof conv.created_at,
-          first_reply_ts: conv.first_reply_created_at,
           responseTimeSec: responseTimeSec !== null ? responseTimeSec.toFixed(1) : 'N/A',
-          isQuickResponse,
           hasAssignee: !!(conv.meta?.assignee?.id || conv.assignee_id),
           custom_attributes: customAttrs,
           hasAiMarker,
