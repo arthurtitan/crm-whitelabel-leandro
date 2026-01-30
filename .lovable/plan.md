@@ -1,156 +1,94 @@
 
-# Correção do Auto-Sync do Google Calendar Após OAuth
 
-## Resumo do Problema
+## Plano: Correção do Backlog de Atendimento
 
-Após o fluxo de autenticação OAuth com o Google Calendar, a sincronização automática de eventos **não está sendo disparada**, mesmo com o parâmetro `google_connected=true` na URL. O usuário precisa clicar manualmente no botão de sincronização para ver seus eventos.
+### Problema Identificado
+O **Backlog de Atendimento** depende do campo `waiting_since` da API do Chatwoot, que pode não estar disponível em todas as conversas ou versões do Chatwoot. Se este campo não estiver presente, o backlog retornará sempre **zeros**.
 
-## Evidências Coletadas Durante os Testes
-
-| Componente | Status | Observação |
-|------------|--------|------------|
-| Conexão OAuth | OK | Redireciona corretamente para o Google |
-| Callback | OK | Salva tokens no banco de dados |
-| Sync Manual | OK | Funciona perfeitamente (5 eventos sincronizados) |
-| Auto-Sync Callback | FALHA | Não dispara após retorno do OAuth |
-| Desconexão | OK | Remove tokens e eventos corretamente |
-
-## Causa Raiz Identificada
-
-O fluxo atual tem uma **condição de corrida** no useEffect do `AdminAgendaPage`:
-
-1. O callback do Google redireciona para `/admin/agenda?google_connected=true&force_sync=true`
-2. O useEffect detecta o parâmetro e chama `runSync()` 
-3. Porém, o componente ainda está em fase de montagem inicial
-4. O `CalendarContext` pode não estar completamente hidratado quando `syncNow()` é chamado
-5. Embora `syncNow` agora verifique a sessão diretamente, a execução pode ocorrer antes da sessão estar disponível
-
-## Solução Proposta
-
-### 1. Adicionar logs de debug para rastrear o fluxo
-Inserir console.logs estratégicos para identificar exatamente onde o fluxo está falhando.
-
-### 2. Usar estado de "pronto" para o sync
-Criar um flag `isInitialized` no CalendarContext que só fica true após a hidratação completa, garantindo que o sync só seja tentado quando tudo estiver pronto.
-
-### 3. Melhorar a detecção do callback
-Usar um ref para evitar múltiplas execuções e garantir que o sync seja tentado até funcionar (com retry limitado).
-
-### 4. Sincronizar diretamente no callback (fallback)
-Se o frontend não conseguir disparar o sync após 2 tentativas, exibir mensagem orientando o usuário a clicar no botão de sincronização.
+### Solução Proposta
+Implementar uma lógica de **fallback** que calcule o tempo de espera de forma alternativa quando `waiting_since` não estiver disponível.
 
 ---
 
-## Arquivos que Serão Modificados
+### Alterações Técnicas
 
-### `src/contexts/CalendarContext.tsx`
-- Adicionar estado `isInitialized` para indicar quando o contexto está pronto
-- Adicionar logs de debug no `syncNow` para rastrear execução
-- Expor `isInitialized` no contexto
+#### 1. Edge Function: `fetch-chatwoot-metrics/index.ts`
+Atualizar a lógica de cálculo do backlog (linhas 310-318):
 
-### `src/pages/admin/AdminAgendaPage.tsx`  
-- Usar `isInitialized` do contexto para aguardar antes de tentar sync
-- Adicionar retry com limite para o auto-sync
-- Melhorar feedback visual durante o processo de sincronização pós-callback
-- Usar `useRef` para prevenir múltiplas execuções do useEffect
-
----
-
-## Detalhes Técnicos da Implementação
-
-### CalendarContext.tsx - Mudanças
-
+**De:**
 ```typescript
-// Adicionar estado de inicialização
-const [isInitialized, setIsInitialized] = useState(false);
-
-// No useEffect inicial, marcar como inicializado após checkConnectionStatus
-useEffect(() => {
-  if (accountId) {
-    const init = async () => {
-      await checkConnectionStatus();
-      await loadEvents();
-      setIsInitialized(true);
-      console.log('[Calendar] Context initialized');
-    };
-    init();
-  }
-}, [accountId, checkConnectionStatus, loadEvents]);
-
-// Adicionar logs ao syncNow
-const syncNow = useCallback(async () => {
-  console.log('[Calendar] syncNow called');
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) {
-    console.warn('[Calendar] syncNow: No session, aborting');
-    return;
-  }
-  console.log('[Calendar] syncNow: Session found, proceeding...');
-  // ... resto do código
-}, [loadEvents]);
+if (conv.status === 'open' && conv.waiting_since) {
+  const waitingMs = now - (conv.waiting_since * 1000);
+  // ...
+}
 ```
 
-### AdminAgendaPage.tsx - Mudanças
-
+**Para:**
 ```typescript
-const { 
-  // ... outros
-  syncNow,
-  checkConnectionStatus,
-  isInitialized, // novo
-} = useCalendar();
-
-const syncAttemptedRef = useRef(false);
-
-useEffect(() => {
-  const googleConnected = searchParams.get('google_connected') || searchParams.get('google');
+if (conv.status === 'open') {
+  let waitingMs: number;
   
-  if ((googleConnected === 'true' || googleConnected === 'connected') && !syncAttemptedRef.current) {
-    // Limpar URL imediatamente
-    setSearchParams({});
-    
-    // Aguardar contexto estar pronto
-    if (!isInitialized) {
-      console.log('[Agenda] Waiting for context to initialize...');
-      return;
-    }
-    
-    syncAttemptedRef.current = true;
-    toast.success('Google Calendar conectado! Sincronizando eventos...');
-    
-    const runSync = async () => {
-      console.log('[Agenda] Running post-OAuth sync...');
-      await checkConnectionStatus();
-      await syncNow();
-      await loadEvents();
-      console.log('[Agenda] Post-OAuth sync complete');
-    };
-    
-    // Pequeno delay para garantir estabilidade
-    setTimeout(runSync, 500);
+  if (conv.waiting_since) {
+    // Usar waiting_since se disponível (timestamp Unix em segundos)
+    waitingMs = now - (conv.waiting_since * 1000);
+  } else {
+    // Fallback: usar last_activity_at ou created_at
+    const lastActivity = conv.last_activity_at 
+      ? conv.last_activity_at * 1000 
+      : new Date(conv.created_at).getTime();
+    waitingMs = now - lastActivity;
   }
-}, [searchParams, setSearchParams, checkConnectionStatus, syncNow, isInitialized]);
+  
+  const waitingMinutes = waitingMs / 60000;
+  
+  if (waitingMinutes <= 15) backlog.ate15min++;
+  else if (waitingMinutes <= 60) backlog.de15a60min++;
+  else backlog.acima60min++;
+}
+```
+
+#### 2. Adicionar Log de Debug
+Para ajudar a diagnosticar problemas futuros:
+```typescript
+console.log('[Chatwoot Metrics] Backlog calculation:', {
+  openConversations: finalConversations.filter(c => c.status === 'open').length,
+  withWaitingSince: finalConversations.filter(c => c.waiting_since).length,
+  backlog,
+});
 ```
 
 ---
 
-## Validação Pós-Implementação
+### Fluxo Atualizado
 
-1. **Teste no site publicado**: Login -> Agenda -> Desconectar -> Reconectar com Google -> Verificar se eventos aparecem automaticamente
-
-2. **Verificar logs do console**: Confirmar que as mensagens `[Calendar] syncNow called` e `[Agenda] Post-OAuth sync complete` aparecem
-
-3. **Verificar logs do backend**: Confirmar que `google-calendar-sync` é chamada após o callback OAuth
-
-4. **Teste de troca de conta**: Desconectar -> Conectar com outra conta Google -> Verificar se apenas eventos da nova conta aparecem
+```text
+┌─────────────────────────────────────────────────────────────┐
+│               Cálculo do Backlog de Atendimento             │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Para cada conversa com status = 'open':                    │
+│                                                             │
+│  1. waiting_since existe?                                   │
+│     ├─ SIM → usar waiting_since como referência             │
+│     └─ NÃO → usar last_activity_at ou created_at            │
+│                                                             │
+│  2. Calcular tempo de espera em minutos                     │
+│                                                             │
+│  3. Classificar:                                            │
+│     ├─ ≤ 15 min  → ate15min (verde)                         │
+│     ├─ 15-60 min → de15a60min (amarelo)                     │
+│     └─ > 60 min  → acima60min (vermelho)                    │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## Riscos e Mitigações
+### Benefícios
+- Backlog funciona mesmo sem o campo `waiting_since`
+- Compatível com diferentes versões do Chatwoot
+- Log de debug para diagnosticar problemas futuros
 
-| Risco | Mitigação |
-|-------|-----------|
-| Delay muito curto | Usar 500ms em vez de 300ms para garantir estabilidade |
-| Múltiplas execuções do useEffect | Usar useRef para controlar estado de tentativa |
-| Contexto não inicializa | Aguardar isInitialized antes de tentar sync |
-| Usuário fecha aba antes do sync | Toast informativo explicando que eventos estão sendo sincronizados |
+### Arquivos a Modificar
+- `supabase/functions/fetch-chatwoot-metrics/index.ts`
+
