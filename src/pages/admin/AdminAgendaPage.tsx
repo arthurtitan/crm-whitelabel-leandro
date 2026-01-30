@@ -102,6 +102,8 @@ export default function AdminAgendaPage() {
   const isSyncing = connection.status === 'syncing';
   const isConnecting = connection.status === 'connecting';
   const hasError = connection.status === 'error';
+  // Consider connected if status is connected OR syncing (to keep email visible during sync)
+  const isEffectivelyConnected = isConnected || isSyncing;
 
   const handleCopyLink = () => {
     if (selectedEvent?.meetingLink) {
@@ -153,7 +155,7 @@ export default function AdminAgendaPage() {
           </p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          {!isConnected ? (
+          {!isEffectivelyConnected ? (
             <Button
               variant={hasError ? "destructive" : "outline"}
               size="sm"
