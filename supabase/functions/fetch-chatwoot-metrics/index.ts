@@ -223,6 +223,7 @@ serve(async (req) => {
     let unattendedCount = 0;
     let botConversations = 0;
     let humanConversations = 0;
+    let mixedConversations = 0; // Conversas com IA + Humano
 
     // Agent performance tracking
     const agentStats: Record<number, {
@@ -275,14 +276,40 @@ serve(async (req) => {
         unattendedCount++;
       }
 
-      // Bot vs Human
+      // Bot vs Human detection - IMPROVED LOGIC
+      // Check multiple indicators for bot involvement
       const assignee = conv.meta?.assignee;
-      if (assignee?.type === 'AgentBot' || conv.agent_bot_id) {
+      const hasBotAssignee = assignee?.type === 'AgentBot';
+      const hasAgentBotId = !!conv.agent_bot_id;
+      const hasHumanAssignee = !!(assignee?.id || conv.assignee_id) && !hasBotAssignee;
+      
+      // Check additional_attributes for bot/automation info (some Chatwoot configs use this)
+      const additionalAttrs = conv.additional_attributes || {};
+      const hasBotActivity = additionalAttrs.bot_handled === true || 
+                             additionalAttrs.automation_id != null ||
+                             additionalAttrs.initiated_by === 'bot' ||
+                             additionalAttrs.source === 'automation';
+      
+      // Check if first reply was from bot (common pattern)
+      const firstReplyByBot = conv.first_reply_created_at && !hasHumanAssignee && !conv.agent_last_seen_at;
+      
+      // Determine conversation type
+      const isBotConversation = hasBotAssignee || hasAgentBotId || hasBotActivity;
+      const isHumanConversation = hasHumanAssignee;
+      
+      if (isBotConversation && isHumanConversation) {
+        // Mixed: both bot and human involved (transbordo)
+        mixedConversations++;
+        humanConversations++; // Count as human since human took over
+      } else if (isBotConversation) {
         botConversations++;
-      } else if (assignee?.id || conv.assignee_id) {
+      } else if (isHumanConversation) {
         humanConversations++;
-        
-        // Track agent stats
+      }
+      // Note: conversations without any assignee are not counted in either category
+      
+      // Track agent stats (human agents only)
+      if (hasHumanAssignee) {
         const agentIdVal = assignee?.id || conv.assignee_id;
         if (agentStats[agentIdVal]) {
           agentStats[agentIdVal].conversations++;
@@ -330,12 +357,30 @@ serve(async (req) => {
       }
     }
 
-    // Debug log para backlog
-    console.log('[Chatwoot Metrics] Backlog calculation:', {
+    // Debug log para backlog e IA detection
+    console.log('[Chatwoot Metrics] Bot detection results:', {
+      botConversations,
+      humanConversations,
+      mixedConversations,
       openConversations: finalConversations.filter((c: any) => c.status === 'open').length,
       withWaitingSince: finalConversations.filter((c: any) => c.waiting_since).length,
       backlog,
     });
+
+    // Log sample conversation for debugging IA detection
+    if (finalConversations.length > 0) {
+      const sampleConv = finalConversations[0];
+      console.log('[Chatwoot Metrics] Sample conversation structure:', {
+        id: sampleConv.id,
+        status: sampleConv.status,
+        assignee: sampleConv.meta?.assignee,
+        agent_bot_id: sampleConv.agent_bot_id,
+        assignee_id: sampleConv.assignee_id,
+        additional_attributes: sampleConv.additional_attributes,
+        first_reply_created_at: sampleConv.first_reply_created_at,
+        agent_last_seen_at: sampleConv.agent_last_seen_at,
+      });
+    }
 
     // Calculate percentages
     const totalAssigned = botConversations + humanConversations;
