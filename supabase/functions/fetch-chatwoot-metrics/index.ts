@@ -183,10 +183,19 @@ serve(async (req) => {
       inboxes: inboxes.length,
     });
 
-    // Filter conversations by date range
+    // Filter conversations by date range (using last_activity_at OR created_at for better coverage)
     const conversations = allConversations.filter((conv: any) => {
+      // Use last_activity_at if available, otherwise fall back to created_at
+      const activityDate = conv.last_activity_at 
+        ? new Date(conv.last_activity_at * 1000) // Unix timestamp in seconds
+        : new Date(conv.created_at);
       const createdAt = new Date(conv.created_at);
-      return createdAt >= dateFromParsed && createdAt <= dateToParsed;
+      
+      // Include if created in range OR had activity in range
+      const createdInRange = createdAt >= dateFromParsed && createdAt <= dateToParsed;
+      const activeInRange = activityDate >= dateFromParsed && activityDate <= dateToParsed;
+      
+      return createdInRange || activeInRange;
     });
 
     // Apply inbox filter if provided
