@@ -276,34 +276,53 @@ serve(async (req) => {
         unattendedCount++;
       }
 
-      // Bot vs Human detection - IMPROVED LOGIC
-      // Check multiple indicators for bot involvement
+      // Bot vs Human detection - IMPROVED LOGIC for external AI integrations
+      // Since AI responds via n8n using a human agent account (Arthur),
+      // we need to detect automation through other signals
+      
       const assignee = conv.meta?.assignee;
       const hasBotAssignee = assignee?.type === 'AgentBot';
       const hasAgentBotId = !!conv.agent_bot_id;
       const hasHumanAssignee = !!(assignee?.id || conv.assignee_id) && !hasBotAssignee;
       
-      // Check additional_attributes for bot/automation info (some Chatwoot configs use this)
+      // Check additional_attributes for bot/automation markers
+      // n8n can set these when responding: { "bot_handled": true }
       const additionalAttrs = conv.additional_attributes || {};
-      const hasBotActivity = additionalAttrs.bot_handled === true || 
-                             additionalAttrs.automation_id != null ||
-                             additionalAttrs.initiated_by === 'bot' ||
-                             additionalAttrs.source === 'automation';
+      const hasBotMarker = additionalAttrs.bot_handled === true || 
+                           additionalAttrs.automation_id != null ||
+                           additionalAttrs.initiated_by === 'bot' ||
+                           additionalAttrs.source === 'automation' ||
+                           additionalAttrs.ai_responded === true;
       
-      // Check if first reply was from bot (common pattern)
-      const firstReplyByBot = conv.first_reply_created_at && !hasHumanAssignee && !conv.agent_last_seen_at;
+      // Detect AI by ultra-fast first response time (< 15 seconds suggests automation)
+      // Human agents typically take 30+ seconds to respond
+      let hasQuickFirstResponse = false;
+      let responseTimeSeconds: number | null = null;
+      if (conv.first_reply_created_at && conv.created_at) {
+        // first_reply_created_at is Unix timestamp in seconds, created_at is ISO string
+        const createdAtMs = new Date(conv.created_at).getTime();
+        const firstReplyMs = typeof conv.first_reply_created_at === 'number' 
+          ? conv.first_reply_created_at * 1000  // Unix seconds to ms
+          : new Date(conv.first_reply_created_at).getTime();
+        responseTimeSeconds = (firstReplyMs - createdAtMs) / 1000;
+        // If response came within 15 seconds, likely automated
+        hasQuickFirstResponse = responseTimeSeconds > 0 && responseTimeSeconds < 15;
+      }
       
       // Determine conversation type
-      const isBotConversation = hasBotAssignee || hasAgentBotId || hasBotActivity;
-      const isHumanConversation = hasHumanAssignee;
+      const isBotConversation = hasBotAssignee || hasAgentBotId || hasBotMarker || hasQuickFirstResponse;
+      const isHumanConversation = hasHumanAssignee && !isBotConversation;
       
-      if (isBotConversation && isHumanConversation) {
-        // Mixed: both bot and human involved (transbordo)
-        mixedConversations++;
-        humanConversations++; // Count as human since human took over
-      } else if (isBotConversation) {
+      if (hasBotMarker || hasQuickFirstResponse) {
+        // AI handled (either marked or detected by quick response)
+        if (hasHumanAssignee) {
+          // AI responded but human agent is assigned (may have taken over or AI uses human account)
+          mixedConversations++;
+        }
         botConversations++;
-      } else if (isHumanConversation) {
+      } else if (hasBotAssignee || hasAgentBotId) {
+        botConversations++;
+      } else if (hasHumanAssignee) {
         humanConversations++;
       }
       // Note: conversations without any assignee are not counted in either category
@@ -367,18 +386,29 @@ serve(async (req) => {
       backlog,
     });
 
-    // Log sample conversation for debugging IA detection
+    // Log sample conversations for debugging IA detection
     if (finalConversations.length > 0) {
-      const sampleConv = finalConversations[0];
-      console.log('[Chatwoot Metrics] Sample conversation structure:', {
-        id: sampleConv.id,
-        status: sampleConv.status,
-        assignee: sampleConv.meta?.assignee,
-        agent_bot_id: sampleConv.agent_bot_id,
-        assignee_id: sampleConv.assignee_id,
-        additional_attributes: sampleConv.additional_attributes,
-        first_reply_created_at: sampleConv.first_reply_created_at,
-        agent_last_seen_at: sampleConv.agent_last_seen_at,
+      // Log first 3 conversations for debugging
+      const samplesToLog = finalConversations.slice(0, 3);
+      samplesToLog.forEach((conv: any, idx: number) => {
+        const createdAtMs = new Date(conv.created_at).getTime();
+        // first_reply_created_at is Unix timestamp in seconds
+        const firstReplyMs = conv.first_reply_created_at 
+          ? (typeof conv.first_reply_created_at === 'number' 
+              ? conv.first_reply_created_at * 1000 
+              : new Date(conv.first_reply_created_at).getTime())
+          : null;
+        const responseTimeSec = firstReplyMs ? (firstReplyMs - createdAtMs) / 1000 : null;
+        const isQuickResponse = responseTimeSec !== null && responseTimeSec > 0 && responseTimeSec < 15;
+        
+        console.log(`[Chatwoot Metrics] Conv ${conv.id}:`, {
+          status: conv.status,
+          created_at: conv.created_at,
+          first_reply_ts: conv.first_reply_created_at,
+          responseTimeSec: responseTimeSec !== null ? responseTimeSec.toFixed(1) : 'N/A',
+          isQuickResponse,
+          hasAssignee: !!(conv.meta?.assignee?.id || conv.assignee_id),
+        });
       });
     }
 
