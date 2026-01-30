@@ -111,6 +111,9 @@ export default function AdminDashboard() {
         kpis: {
           totalLeads: 0,
           conversasAtivas: 0,
+          atendimentosIA: 0,
+          atendimentosHumano: 0,
+          atendimentosClassificados: 0,
           percentualIA: 0,
           percentualHumano: 0,
           tempoMedioPrimeiraResposta: '0s',
@@ -153,6 +156,9 @@ export default function AdminDashboard() {
       kpis: {
         totalLeads: metricsData.totalLeads,
         conversasAtivas: metricsData.conversasAtivas,
+        atendimentosIA: metricsData.atendimentosIA ?? 0,
+        atendimentosHumano: metricsData.atendimentosHumano ?? 0,
+        atendimentosClassificados: metricsData.atendimentosClassificados ?? 0,
         percentualIA: metricsData.percentualIA,
         percentualHumano: metricsData.percentualHumano,
         tempoMedioPrimeiraResposta: metricsData.tempoMedioPrimeiraResposta,
@@ -168,10 +174,9 @@ export default function AdminDashboard() {
 
   // Calculate AI service count based on percentage and total leads
   const aiServiceCount = useMemo(() => {
-    const totalLeads = displayedData.kpis.totalLeads;
-    const percentualIA = displayedData.kpis.percentualIA;
-    return Math.round((totalLeads * percentualIA) / 100);
-  }, [displayedData.kpis.totalLeads, displayedData.kpis.percentualIA]);
+    // Preferir contagem absoluta vinda do backend (evita arredondamento e inclui só conversas classificadas)
+    return displayedData.kpis.atendimentosIA ?? 0;
+  }, [displayedData.kpis.atendimentosIA]);
 
   // Format agents for the performance table
   const agentPerformanceData = useMemo(() => {

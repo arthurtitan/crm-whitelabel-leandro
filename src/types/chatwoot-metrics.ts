@@ -38,6 +38,12 @@ export interface DashboardMetricsResponse {
   data?: {
     totalLeads: number;
     conversasAtivas: number;
+
+    // Contagens absolutas (para UI)
+    atendimentosIA?: number;
+    atendimentosHumano?: number;
+    atendimentosClassificados?: number;
+
     percentualIA: number;
     percentualHumano: number;
     tempoMedioPrimeiraResposta: string;

@@ -505,6 +505,11 @@ serve(async (req) => {
         conversasResolvidas: resolvedCount,
         conversasPendentes: pendingCount,
         conversasSemResposta: unattendedCount,
+
+        // Contagens absolutas (evita arredondamento no frontend)
+        atendimentosIA: botConversations,
+        atendimentosHumano: humanConversations,
+        atendimentosClassificados: totalAssigned,
         
         // IA vs Human
         percentualIA,
