@@ -1,194 +1,124 @@
 
-## Plano: Sistema de Sincronização Central com Auto-Refresh para Dashboard
 
-### Objetivo
-Implementar um sistema de sincronização unificado que:
-1. Adicione polling automático ao Dashboard de Atendimento (30s)
-2. Crie um hook reutilizável de sincronização central
-3. Exiba um indicador visual de sincronização consistente em todo o sistema
+## Plano: Corrigir Detecção de IA no Dashboard
+
+### Diagnóstico
+
+Encontrei **2 bugs críticos** que explicam por que as conversas da IA não estão sendo contabilizadas:
 
 ---
 
-### Arquitetura Proposta
+### Bug 1: Campo Errado para Atributos Customizados
 
-```text
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                         useSyncManager (Central Hook)                        │
-├──────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│   ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐  │
-│   │  Dashboard  │    │   Kanban    │    │   Agenda    │    │   Leads     │  │
-│   │  Metrics    │    │   Sync      │    │   Sync      │    │   Sync      │  │
-│   └──────┬──────┘    └──────┬──────┘    └──────┬──────┘    └──────┬──────┘  │
-│          │                  │                  │                  │          │
-│          └──────────────────┴──────────────────┴──────────────────┘          │
-│                                    │                                         │
-│                        ┌───────────▼───────────┐                             │
-│                        │  Polling Controller   │                             │
-│                        │  (30s interval)       │                             │
-│                        │  - Stale-while-rev    │                             │
-│                        │  - Background sync    │                             │
-│                        │  - Visual indicator   │                             │
-│                        └───────────────────────┘                             │
-│                                                                              │
-└──────────────────────────────────────────────────────────────────────────────┘
+**Problema**: O código verifica `additional_attributes`, mas o endpoint que você configurou no n8n (`/custom_attributes`) salva os dados em `custom_attributes`.
+
+**Código atual (linha 290)**:
+```typescript
+const additionalAttrs = conv.additional_attributes || {};
+const hasBotMarker = additionalAttrs.ai_responded === true;
+```
+
+**Correção**:
+```typescript
+// Verificar AMBOS os campos
+const additionalAttrs = conv.additional_attributes || {};
+const customAttrs = conv.custom_attributes || {};
+
+const hasBotMarker = additionalAttrs.ai_responded === true || 
+                     customAttrs.ai_responded === true ||
+                     // ... outros marcadores
+```
+
+---
+
+### Bug 2: Parsing Incorreto de Timestamps
+
+**Problema**: O `created_at` é retornado como Unix timestamp em segundos (ex: `1769631015`), mas o código trata como string ISO.
+
+**Evidência nos logs**:
+```
+created_at: 1769631015  ← Timestamp Unix em segundos
+responseTimeSec: "1767861660.0"  ← Valor absurdo (56 anos!)
+```
+
+**Código atual (linha 303)**:
+```typescript
+const createdAtMs = new Date(conv.created_at).getTime();  // ❌ Errado!
+```
+
+**Correção**:
+```typescript
+// Detectar se é Unix timestamp ou ISO string
+const createdAtMs = typeof conv.created_at === 'number'
+  ? conv.created_at * 1000  // Unix seconds → ms
+  : new Date(conv.created_at).getTime();
 ```
 
 ---
 
 ### Alterações Técnicas
 
-#### 1. Novo Hook: `src/hooks/useSyncManager.ts`
-Hook central para gerenciar sincronização de múltiplos recursos:
+**Arquivo**: `supabase/functions/fetch-chatwoot-metrics/index.ts`
 
-```typescript
-interface SyncResource {
-  name: string;
-  fetchFn: () => Promise<void>;
-  interval?: number; // Default: 30000
-  enabled?: boolean;
-}
+1. **Corrigir leitura de atributos customizados**:
+   - Verificar `conv.custom_attributes.ai_responded`
+   - Manter fallback para `additional_attributes` por compatibilidade
 
-interface UseSyncManagerReturn {
-  isSyncing: boolean;
-  lastSyncAt: string | null;
-  registerResource: (resource: SyncResource) => void;
-  unregisterResource: (name: string) => void;
-  triggerSync: (resourceName?: string) => Promise<void>;
-  triggerSyncAll: () => Promise<void>;
-}
-```
+2. **Corrigir parsing de timestamps**:
+   - Detectar se `created_at` é número ou string
+   - Aplicar mesma lógica em todos os lugares que usam timestamps
 
-#### 2. Atualizar `useChatwootMetrics.ts`
-Adicionar polling automático de 30 segundos:
-
-```typescript
-// Adicionar polling automático
-useEffect(() => {
-  if (!isConfigured || !enablePolling) return;
-  
-  const intervalId = setInterval(() => {
-    fetchMetrics();
-  }, pollingInterval);
-
-  return () => clearInterval(intervalId);
-}, [isConfigured, enablePolling, pollingInterval, fetchMetrics]);
-```
-
-Novo parâmetro na interface:
-```typescript
-interface UseChatwootMetricsParams {
-  dateFrom: Date;
-  dateTo: Date;
-  inboxId?: number;
-  agentId?: number;
-  pollingInterval?: number;  // Default: 30000
-  enablePolling?: boolean;   // Default: true
-}
-```
-
-#### 3. Atualizar `AdminDashboard.tsx`
-- Remover necessidade de botão "Atualizar" manual como ação primária
-- Adicionar indicador de sincronização visual (similar ao Kanban)
-- Exibir timestamp da última atualização
-
-```tsx
-// Adicionar ao useChatwootMetrics
-const { 
-  data: metricsData, 
-  isLoading, 
-  isSyncing,           // NOVO
-  lastSyncAt,          // NOVO
-  error: metricsError, 
-  isConfigured, 
-  refetch 
-} = useChatwootMetrics({
-  dateFrom: dateRange?.from || subDays(new Date(), 7),
-  dateTo: dateRange?.to || new Date(),
-  enablePolling: true,      // NOVO
-  pollingInterval: 30000,   // NOVO
-});
-```
-
-#### 4. Componente `SyncIndicator` Reutilizável
-Criar um componente visual consistente para toda a aplicação:
-
-```tsx
-// src/components/ui/SyncIndicator.tsx
-interface SyncIndicatorProps {
-  isSyncing: boolean;
-  lastSyncAt: string | null;
-  onManualSync?: () => void;
-  label?: string;
-}
-```
+3. **Adicionar log detalhado de debug**:
+   - Logar `custom_attributes` das primeiras conversas para confirmar que o atributo está chegando
 
 ---
 
-### Fluxo de Sincronização
+### Fluxo Corrigido
 
 ```text
-┌────────────────────────────────────────────────────────────────────────────┐
-│                         Ciclo de Sincronização                             │
-├────────────────────────────────────────────────────────────────────────────┤
-│                                                                            │
-│  1. Carregamento Inicial                                                   │
-│     └─ isLoading = true                                                    │
-│     └─ Fetch dados                                                         │
-│     └─ isLoading = false                                                   │
-│                                                                            │
-│  2. Polling a cada 30s (background)                                        │
-│     └─ isSyncing = true                                                    │
-│     └─ Fetch dados (sem loading spinner)                                   │
-│     └─ Merge com dados existentes                                          │
-│     └─ isSyncing = false                                                   │
-│     └─ lastSyncAt = timestamp                                              │
-│                                                                            │
-│  3. Atualização Manual (botão)                                             │
-│     └─ Força sync imediato                                                 │
-│     └─ Reseta timer do polling                                             │
-│                                                                            │
-└────────────────────────────────────────────────────────────────────────────┘
+Conversa chega
+     │
+     ▼
+┌────────────────────────────────────────┐
+│ Verificar custom_attributes            │
+│ └─ ai_responded === true ?             │
+│    └─ SIM → Contar como IA             │
+└────────────────────────────────────────┘
+     │ NÃO
+     ▼
+┌────────────────────────────────────────┐
+│ Verificar tempo de resposta            │
+│ └─ < 15 segundos ?                     │
+│    └─ SIM → Contar como IA             │
+└────────────────────────────────────────┘
+     │ NÃO
+     ▼
+┌────────────────────────────────────────┐
+│ Verificar assignee                     │
+│ └─ type === 'AgentBot' ?               │
+│    └─ SIM → Contar como IA             │
+│    └─ NÃO → Contar como Humano         │
+└────────────────────────────────────────┘
 ```
 
 ---
 
-### Benefícios
+### Validação
 
-1. **Consistência Visual**: Todos os módulos terão o mesmo comportamento de sincronização
-2. **Performance**: Polling silencioso não interrompe a experiência do usuário
-3. **Feedback Claro**: Usuário sempre sabe quando os dados foram atualizados
-4. **Manutenibilidade**: Hook central facilita mudanças de intervalo ou lógica
-5. **Extensível**: Fácil adicionar novos recursos ao sistema de sincronização
+Após a correção, os logs devem mostrar:
+```
+Conv 11: {
+  status: "open",
+  custom_attributes: { ai_responded: true },
+  responseTimeSec: "0.5",  ← Valor correto agora
+  isQuickResponse: true,
+  detectedAsBot: true
+}
 
----
+Bot detection results: {
+  botConversations: 2,  ← Agora contabilizando!
+  humanConversations: 1,
+  ...
+}
+```
 
-### Configurações Padrão
-
-| Recurso | Intervalo | Ativo por Padrão |
-|---------|-----------|------------------|
-| Dashboard Chatwoot | 30s | Sim |
-| Kanban Chatwoot | 30s | Sim (se configurado) |
-| Google Calendar | 30s | Sim (se conectado) |
-| Contatos DB | 30s | Sim |
-
----
-
-### Arquivos a Criar/Modificar
-
-**Criar:**
-- `src/hooks/useSyncManager.ts` - Hook central de sincronização
-
-**Modificar:**
-- `src/hooks/useChatwootMetrics.ts` - Adicionar polling automático
-- `src/pages/admin/AdminDashboard.tsx` - Integrar polling e indicador visual
-- `src/components/kanban/SyncIndicator.tsx` - Mover para `src/components/ui/` e tornar reutilizável
-
----
-
-### Consideração de Performance
-
-Para evitar sobrecarga:
-- O polling só ocorre quando a aba está ativa (usar `document.visibilityState`)
-- Requisições em background são canceladas se uma nova for iniciada
-- Timeout de 45s para Chatwoot (já implementado)
