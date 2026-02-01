@@ -21,7 +21,8 @@ import { SyncIndicatorWithButton } from '@/components/ui/sync-indicator';
 // Dashboard Components
 import { DashboardFilters } from '@/components/dashboard/DashboardFilters';
 import { KPICard } from '@/components/dashboard/KPICard';
-import { IAvsHumanCard } from '@/components/dashboard/IAvsHumanCard';
+import { AtendimentoRealtimeCard } from '@/components/dashboard/AtendimentoRealtimeCard';
+import { ResolucaoCard } from '@/components/dashboard/ResolucaoCard';
 import { HourlyPeakChart } from '@/components/dashboard/HourlyPeakChart';
 import { BacklogCard } from '@/components/dashboard/BacklogCard';
 import { AgentPerformanceTable } from '@/components/dashboard/AgentPerformanceTable';
@@ -120,6 +121,26 @@ export default function AdminDashboard() {
           tempoMedioResolucao: '0s',
           taxaTransbordo: '0%',
         },
+        atendimento: {
+          total: 0,
+          ia: 0,
+          humano: 0,
+          semAssignee: 0,
+          transbordoEmAndamento: 0,
+        },
+        resolucao: {
+          total: 0,
+          ia: { total: 0, explicito: 0, botNativo: 0, inferido: 0 },
+          humano: { total: 0, explicito: 0, inferido: 0 },
+          naoClassificado: 0,
+          transbordoFinalizado: 0,
+        },
+        taxas: {
+          resolucaoIA: '0%',
+          resolucaoHumano: '0%',
+          transbordo: '0%',
+          eficienciaIA: '0%',
+        },
         picoPorHora: [],
         backlog: { ate15min: 0, de15a60min: 0, acima60min: 0 },
         qualidade: { conversasSemResposta: 0, taxaAtendimentoVenda: '0%' },
@@ -144,6 +165,9 @@ export default function AdminDashboard() {
             tempoMedioResolucao: metricsData.tempoMedioResolucao,
             taxaTransbordo: metricsData.taxaTransbordo,
           },
+          atendimento: metricsData.atendimento,
+          resolucao: metricsData.resolucao,
+          taxas: metricsData.taxas,
           picoPorHora: metricsData.picoPorHora,
           backlog: metricsData.backlog,
           qualidade: metricsData.qualidade,
@@ -165,18 +189,15 @@ export default function AdminDashboard() {
         tempoMedioResolucao: metricsData.tempoMedioResolucao,
         taxaTransbordo: metricsData.taxaTransbordo,
       },
+      atendimento: metricsData.atendimento,
+      resolucao: metricsData.resolucao,
+      taxas: metricsData.taxas,
       picoPorHora: metricsData.picoPorHora,
       backlog: metricsData.backlog,
       qualidade: metricsData.qualidade,
       agentes: metricsData.agentes,
     };
   }, [metricsData, selectedAgentFromTable]);
-
-  // Calculate AI service count based on percentage and total leads
-  const aiServiceCount = useMemo(() => {
-    // Preferir contagem absoluta vinda do backend (evita arredondamento e inclui só conversas classificadas)
-    return displayedData.kpis.atendimentosIA ?? 0;
-  }, [displayedData.kpis.atendimentosIA]);
 
   // Format agents for the performance table
   const agentPerformanceData = useMemo(() => {
@@ -304,12 +325,12 @@ export default function AdminDashboard() {
           isLoading={isLoading}
         />
         <KPICard
-          title="Atendimentos IA"
-          subtitle={getAgentContextSubtitle('Via automação')}
-          value={aiServiceCount}
-          icon={Bot}
-          iconColor="text-info"
-          iconBgColor="bg-info/10"
+          title="Tempo Médio Resposta"
+          subtitle={getAgentContextSubtitle('Primeira resposta')}
+          value={displayedData.kpis.tempoMedioPrimeiraResposta}
+          icon={Clock}
+          iconColor="text-primary"
+          iconBgColor="bg-primary/10"
           isLoading={isLoading}
         />
         <KPICard
@@ -323,32 +344,15 @@ export default function AdminDashboard() {
         />
       </div>
 
-      {/* KPI Cards - Row 2 (Time metrics + IA vs Human) */}
+      {/* DUAS CAMADAS: Atendimento (Tempo Real) + Resolução (Histórico) */}
       <div className="chart-grid">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <KPICard
-            title="Tempo Médio Primeira Resposta"
-            subtitle={getAgentContextSubtitle('Primeira resposta após mensagem do lead')}
-            value={displayedData.kpis.tempoMedioPrimeiraResposta}
-            icon={Clock}
-            iconColor="text-primary"
-            iconBgColor="bg-primary/10"
-            isLoading={isLoading}
-            className="min-w-0"
-          />
-          <KPICard
-            title="Tempo Médio de Resolução"
-            subtitle={getAgentContextSubtitle('Tempo médio até finalizar atendimento')}
-            value={displayedData.kpis.tempoMedioResolucao}
-            icon={Clock}
-            iconColor="text-success"
-            iconBgColor="bg-success/10"
-            isLoading={isLoading}
-          />
-        </div>
-        <IAvsHumanCard
-          percentualIA={displayedData.kpis.percentualIA}
-          percentualHumano={displayedData.kpis.percentualHumano}
+        <AtendimentoRealtimeCard
+          data={displayedData.atendimento}
+          isLoading={isLoading}
+        />
+        <ResolucaoCard
+          resolucao={displayedData.resolucao}
+          taxas={displayedData.taxas}
           isLoading={isLoading}
         />
       </div>
