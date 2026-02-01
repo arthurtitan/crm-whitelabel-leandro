@@ -1,141 +1,274 @@
 
-# Plano: Migrar para TanStack Query nativo para polling de métricas
+# Plano: Métricas de Atendimento (Tempo Real) + Métricas de Resolução (Quem Fechou)
 
-## Resumo
+## Conceito
 
-A implementação atual do `useChatwootMetrics` usa `setInterval` manual para polling, o que causou as falhas intermitentes que você observou. O projeto já tem o **TanStack Query** instalado e configurado, mas não está aproveitando suas funcionalidades nativas. 
+Separar as métricas em duas dimensões complementares que contam histórias diferentes:
 
-A migração para o TanStack Query vai resolver os problemas de forma mais elegante e com menos código.
-
----
-
-## Benefícios da migração
-
-| Problema atual | Solução com TanStack Query |
-|----------------|---------------------------|
-| Polling manual com `setInterval` (propenso a bugs) | `refetchInterval` nativo com pausa automática |
-| Controle de concorrência manual (`inFlightRef`, `AbortController`) | Gerenciamento automático de requests duplicadas |
-| Retry manual com backoff | `retry` e `retryDelay` nativos |
-| Cache manual (`lastGoodDataRef`) | Cache automático com `staleTime` e `gcTime` |
-| Lógica de loading/syncing manual | Estados `isLoading`, `isFetching`, `isRefetching` nativos |
-| ~200 linhas de código | ~50 linhas de código |
-
----
-
-## Como vai funcionar
-
-```text
-┌─────────────────────────────────────────────────────────────┐
-│                    TanStack Query                           │
-├─────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐     │
-│  │   Cache     │    │   Polling   │    │   Retry     │     │
-│  │  staleTime  │    │refetchInterval│  │  3 attempts │     │
-│  │   30 seg    │    │   30 seg    │    │  backoff    │     │
-│  └─────────────┘    └─────────────┘    └─────────────┘     │
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  Pausa automática quando aba está inativa           │   │
-│  │  (refetchIntervalInBackground: false)               │   │
-│  └─────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         DUAS CAMADAS DE MÉTRICAS                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  CAMADA 1: ATENDIMENTO (Tempo Real)                                        │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  • Quem ESTÁ atendendo agora? (baseado no assignee)                 │   │
+│  │  • Oscilação em tempo real durante o dia                            │   │
+│  │  • Mostra transferências (transbordo) acontecendo                   │   │
+│  │  • Usa: assignee atual + ai_responded                               │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+│  CAMADA 2: RESOLUÇÃO (Quem Fechou)                                         │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  • Quem RESOLVEU a conversa? (baseado no resolved_by do n8n)        │   │
+│  │  • Métrica de eficiência e ROI da IA                                │   │
+│  │  • Usado para análise histórica e relatórios                        │   │
+│  │  • Usa: custom_attributes.resolved_by (explícito)                   │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
----
+## Por que isso é mais inteligente?
 
-## Etapas de implementação
+| Aspecto | Camada 1 (Atendimento) | Camada 2 (Resolução) |
+|---------|------------------------|----------------------|
+| Pergunta | "Quem está atendendo agora?" | "Quem resolveu o problema?" |
+| Fonte | assignee + ai_responded | resolved_by do n8n |
+| Tempo | Tempo real, muda durante atendimento | Após fechamento (imutável) |
+| Uso | Monitorar operação ao vivo | Análise de ROI e eficiência |
+| Transbordo | "IA transferiu para humano (em andamento)" | "IA não conseguiu, humano finalizou" |
 
-### 1. Criar hook `useChatwootMetricsQuery`
+## Nova Estrutura de Dados
 
-Novo hook usando TanStack Query com:
-
-- **`queryKey`**: Identificador único baseado em `accountId`, `dateFrom`, `dateTo`, `inboxId`, `agentId`
-- **`refetchInterval: 30000`**: Polling automático a cada 30 segundos
-- **`refetchIntervalInBackground: false`**: Pausa quando aba está inativa
-- **`staleTime: 25000`**: Dados considerados frescos por 25s (evita refetch imediato ao trocar de aba)
-- **`retry: 3`**: Até 3 tentativas em caso de falha
-- **`retryDelay`**: Backoff exponencial com jitter
-- **`placeholderData: keepPreviousData`**: Mantém dados anteriores durante refetch
-
-### 2. Atualizar `AdminDashboard.tsx`
-
-Substituir chamada ao hook antigo pelo novo, mapeando os estados:
-
-- `isLoading` → `isPending` (carregamento inicial)
-- `isSyncing` → `isFetching && !isPending` (polling em background)
-- `error` → `error?.message`
-- `refetch` → `refetch` (nativo)
-
-### 3. Manter retrocompatibilidade
-
-O novo hook vai manter a mesma interface de retorno para minimizar mudanças no Dashboard.
-
----
-
-## Seção técnica
-
-### Código do novo hook (resumido)
+### Edge Function - Novos campos retornados
 
 ```typescript
-import { useQuery, keepPreviousData } from '@tanstack/react-query';
-
-export function useChatwootMetricsQuery({
-  dateFrom, dateTo, inboxId, agentId,
-  pollingInterval = 30000,
-  enablePolling = true,
-}) {
-  const { account } = useAuth();
-  
-  const query = useQuery({
-    queryKey: ['chatwoot-metrics', account?.id, dateFrom, dateTo, inboxId, agentId],
-    queryFn: async ({ signal }) => {
-      // Fetch com AbortSignal nativo do React Query
-      const response = await fetch(..., { signal });
-      return response.json();
-    },
-    enabled: Boolean(account?.chatwoot_api_key),
-    refetchInterval: enablePolling ? pollingInterval : false,
-    refetchIntervalInBackground: false, // Pausa quando aba inativa
-    staleTime: 25000, // Dados frescos por 25s
-    retry: 3,
-    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
-    placeholderData: keepPreviousData, // Mantém dados durante refetch
-  });
-  
-  return {
-    data: query.data ?? DEFAULT_METRICS,
-    isLoading: query.isPending,
-    isSyncing: query.isFetching && !query.isPending,
-    lastSyncAt: query.dataUpdatedAt ? new Date(query.dataUpdatedAt).toISOString() : null,
-    isTabActive: true, // TanStack Query gerencia automaticamente
-    error: query.error?.message ?? null,
-    isConfigured: Boolean(account?.chatwoot_api_key),
-    refetch: query.refetch,
+interface DashboardMetrics {
+  // CAMADA 1: Atendimento (tempo real - quem ESTÁ atendendo)
+  atendimento: {
+    total: number;              // Total de conversas abertas
+    ia: number;                 // Sendo atendidas por IA agora
+    humano: number;             // Sendo atendidas por humanos agora
+    semAssignee: number;        // Aguardando atribuição
+    transbordoEmAndamento: number; // IA iniciou, humano assumiu (ainda aberta)
   };
+  
+  // CAMADA 2: Resolução (histórico - quem RESOLVEU)
+  resolucao: {
+    total: number;              // Total resolvidas no período
+    ia: {
+      total: number;
+      explicito: number;        // resolved_by = 'ai' (n8n)
+      botNativo: number;        // agent_bot do Chatwoot
+    };
+    humano: {
+      total: number;
+      explicito: number;        // resolved_by = 'human' (n8n)
+    };
+    naoClassificado: number;    // Sem resolved_by (conversas antigas)
+    transbordoFinalizado: number; // IA iniciou, humano fechou
+  };
+  
+  // Taxas calculadas
+  taxas: {
+    resolucaoIA: string;        // % resolvidas por IA
+    resolucaoHumano: string;    // % resolvidas por humano
+    transbordo: string;         // % de transbordo (IA -> Humano que fechou)
+    eficienciaIA: string;       // % de conversas que IA resolveu sozinha
+  };
+  
+  // Mantém campos existentes para compatibilidade
+  // ...
 }
 ```
 
-### Benefícios técnicos adicionais
+## Implementacao
 
-1. **DevTools**: Com o TanStack Query DevTools, você pode inspecionar cache, estados e histórico de requests em tempo real durante desenvolvimento
-2. **Deduplicação**: Se dois componentes usarem o mesmo `queryKey`, apenas uma request será feita
-3. **Garbage Collection**: Dados não utilizados são limpos automaticamente após 5 minutos
+### Etapa 1: Atualizar Edge Function
 
----
+Arquivo: `supabase/functions/fetch-chatwoot-metrics/index.ts`
 
-## Arquivos a serem modificados
+Adicionar duas funções de classificacao separadas:
 
-1. **`src/hooks/useChatwootMetrics.ts`** - Reescrever usando TanStack Query
-2. **`src/pages/admin/AdminDashboard.tsx`** - Ajustar mapeamento de estados (se necessário)
-3. **`src/App.tsx`** - Adicionar configuração global de retry/staleTime (opcional)
+```typescript
+// CAMADA 1: Quem ESTÁ atendendo (tempo real)
+function classifyCurrentHandler(conv: any): 'ai' | 'human' | 'none' {
+  const hasBotAssignee = conv.meta?.assignee?.type === 'AgentBot' || !!conv.agent_bot_id;
+  const aiResponded = conv.custom_attributes?.ai_responded === true;
+  const hasHumanAssignee = !!(conv.meta?.assignee?.id) && !hasBotAssignee;
+  
+  if (hasBotAssignee) return 'ai';
+  if (hasHumanAssignee) return 'human';
+  if (aiResponded && !hasHumanAssignee) return 'ai';
+  return 'none';
+}
 
----
+// CAMADA 2: Quem RESOLVEU (baseado em resolved_by explícito)
+function classifyResolver(conv: any): 'ai' | 'human' | 'unclassified' {
+  if (conv.status !== 'resolved') return 'unclassified';
+  
+  const resolvedBy = conv.custom_attributes?.resolved_by || 
+                     conv.additional_attributes?.resolved_by;
+  
+  if (resolvedBy === 'ai') return 'ai';
+  if (resolvedBy === 'human') return 'human';
+  
+  // Bot nativo do Chatwoot
+  if (conv.meta?.assignee?.type === 'AgentBot' || conv.agent_bot_id) return 'ai';
+  
+  return 'unclassified';
+}
+```
 
-## Resultado esperado
+Processar conversas com ambas as classificacoes:
 
-Após a migração:
-- O Dashboard terá polling mais estável e confiável
-- Falhas de rede serão tratadas automaticamente com retry
-- Ao trocar de aba e voltar, os dados permanecerão em tela (cache)
-- Código mais simples e fácil de manter
-- Menos bugs relacionados a concorrência e estado
+```typescript
+for (const conv of finalConversations) {
+  // CAMADA 1: Atendimento (todas as conversas abertas)
+  if (conv.status === 'open') {
+    const handler = classifyCurrentHandler(conv);
+    if (handler === 'ai') atendimento.ia++;
+    else if (handler === 'human') atendimento.humano++;
+    else atendimento.semAssignee++;
+    
+    // Detectar transbordo em andamento
+    const aiResponded = conv.custom_attributes?.ai_responded === true;
+    const hasHumanAssignee = !!(conv.meta?.assignee?.id);
+    if (aiResponded && hasHumanAssignee) {
+      atendimento.transbordoEmAndamento++;
+    }
+  }
+  
+  // CAMADA 2: Resolucao (apenas conversas resolvidas)
+  if (conv.status === 'resolved') {
+    const resolver = classifyResolver(conv);
+    if (resolver === 'ai') resolucao.ia.total++;
+    else if (resolver === 'human') resolucao.humano.total++;
+    else resolucao.naoClassificado++;
+    
+    // Transbordo finalizado
+    const aiResponded = conv.custom_attributes?.ai_responded === true;
+    const handoffMarked = conv.custom_attributes?.handoff_to_human === true;
+    if ((aiResponded || handoffMarked) && resolver === 'human') {
+      resolucao.transbordoFinalizado++;
+    }
+  }
+}
+```
+
+### Etapa 2: Atualizar Tipos TypeScript
+
+Arquivo: `src/types/chatwoot-metrics.ts`
+
+Adicionar novas interfaces:
+
+```typescript
+export interface AtendimentoMetrics {
+  total: number;
+  ia: number;
+  humano: number;
+  semAssignee: number;
+  transbordoEmAndamento: number;
+}
+
+export interface ResolucaoMetrics {
+  total: number;
+  ia: {
+    total: number;
+    explicito: number;
+    botNativo: number;
+  };
+  humano: {
+    total: number;
+    explicito: number;
+  };
+  naoClassificado: number;
+  transbordoFinalizado: number;
+}
+
+export interface TaxasMetrics {
+  resolucaoIA: string;
+  resolucaoHumano: string;
+  transbordo: string;
+  eficienciaIA: string;
+}
+```
+
+### Etapa 3: Atualizar Hook
+
+Arquivo: `src/hooks/useChatwootMetrics.ts`
+
+Adicionar novos campos na interface DashboardMetrics e garantir retrocompatibilidade.
+
+### Etapa 4: Criar Novos Cards de UI
+
+#### Card: Atendimento em Tempo Real
+
+Arquivo: `src/components/dashboard/AtendimentoRealtimeCard.tsx`
+
+- Mostra quem ESTA atendendo agora
+- Barra de progresso animada IA vs Humano
+- Contador de transbordo em andamento
+- Atualiza a cada 30s
+
+#### Card: Resolucao (Quem Fechou)
+
+Atualizar `IAvsHumanCard.tsx` ou criar novo:
+
+- Mostra quem RESOLVEU as conversas
+- Indicador de metodologia (Explicito vs Nao Classificado)
+- Aviso quando muitas conversas sem resolved_by
+
+### Etapa 5: Atualizar Dashboard
+
+Arquivo: `src/pages/admin/AdminDashboard.tsx`
+
+Reorganizar layout para mostrar as duas camadas:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  KPIs Gerais: Total Leads | Conversas Ativas | Agendamentos | etc          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────────────────────────┐  ┌─────────────────────────────┐          │
+│  │   ATENDIMENTO AO VIVO      │  │   RESOLUCAO (Historico)     │          │
+│  │   Quem está atendendo?     │  │   Quem fechou?              │          │
+│  │                            │  │                              │          │
+│  │   IA: 12 (45%)             │  │   IA: 85 (68%)               │          │
+│  │   Humano: 15 (55%)         │  │   Humano: 40 (32%)           │          │
+│  │                            │  │                              │          │
+│  │   Transbordo: 3 em curso   │  │   Transbordo: 15 finalizados │          │
+│  └─────────────────────────────┘  └─────────────────────────────┘          │
+│                                                                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Graficos: Pico Horario | Backlog | Performance Agentes                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+## Resumo das Mudancas
+
+| Arquivo | Mudanca |
+|---------|---------|
+| `supabase/functions/fetch-chatwoot-metrics/index.ts` | Duas funcoes de classificacao + novos campos |
+| `src/types/chatwoot-metrics.ts` | Novas interfaces AtendimentoMetrics e ResolucaoMetrics |
+| `src/hooks/useChatwootMetrics.ts` | Novos campos + retrocompatibilidade |
+| `src/components/dashboard/AtendimentoRealtimeCard.tsx` | Novo componente para atendimento ao vivo |
+| `src/components/dashboard/IAvsHumanCard.tsx` | Atualizar para mostrar resolucao |
+| `src/pages/admin/AdminDashboard.tsx` | Reorganizar layout com duas camadas |
+
+## Contrato n8n (Inalterado)
+
+O n8n continua enviando os mesmos campos:
+
+- `ai_responded: true` - Quando IA responde (usado na Camada 1)
+- `handoff_to_human: true` - Quando transfere para humano
+- `resolved_by: "ai" | "human"` - Antes de fechar conversa (usado na Camada 2)
+
+## Beneficios Finais
+
+- Metricas de atendimento mostram operacao em tempo real
+- Metricas de resolucao mostram eficiencia historica
+- Transbordo aparece em ambas as camadas (em andamento vs finalizado)
+- Sem ambiguidade sobre quem resolveu
+- Compativel com conversas antigas (Camada 1 funciona mesmo sem n8n atualizado)
