@@ -20,6 +20,15 @@ export function AtendimentoRealtimeCard({
   data,
   isLoading = false,
 }: AtendimentoRealtimeCardProps) {
+  // Safe defaults
+  const safeData = data ?? {
+    total: 0,
+    ia: 0,
+    humano: 0,
+    semAssignee: 0,
+    transbordoEmAndamento: 0,
+  };
+
   if (isLoading) {
     return (
       <Card>
@@ -39,9 +48,9 @@ export function AtendimentoRealtimeCard({
     );
   }
 
-  const total = data.total || 1; // Avoid division by zero
-  const percentIA = Math.round((data.ia / total) * 100);
-  const percentHumano = Math.round((data.humano / total) * 100);
+  const total = safeData.total || 1; // Avoid division by zero
+  const percentIA = Math.round((safeData.ia / total) * 100);
+  const percentHumano = Math.round((safeData.humano / total) * 100);
   const percentSemAssignee = 100 - percentIA - percentHumano;
 
   return (
@@ -59,12 +68,12 @@ export function AtendimentoRealtimeCard({
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-xs text-muted-foreground">
-          Quem está atendendo agora? ({data.total} conversas abertas)
+          Quem está atendendo agora? ({safeData.total} conversas abertas)
         </p>
 
         {/* Stacked Progress Bar */}
         <div className="relative h-6 rounded-full overflow-hidden bg-muted">
-          {data.total > 0 ? (
+          {safeData.total > 0 ? (
             <div className="flex h-full">
               {/* IA Segment */}
               <div 
@@ -127,7 +136,7 @@ export function AtendimentoRealtimeCard({
               <Bot className="w-4 h-4" style={{ color: CHART_BLUE }} />
             </div>
             <span className="text-lg font-bold" style={{ color: CHART_BLUE }}>
-              {data.ia}
+              {safeData.ia}
             </span>
             <span className="text-[10px] text-muted-foreground">IA</span>
           </div>
@@ -141,7 +150,7 @@ export function AtendimentoRealtimeCard({
               <User className="w-4 h-4" style={{ color: CHART_GREEN }} />
             </div>
             <span className="text-lg font-bold" style={{ color: CHART_GREEN }}>
-              {data.humano}
+              {safeData.humano}
             </span>
             <span className="text-[10px] text-muted-foreground">Humano</span>
           </div>
@@ -155,18 +164,18 @@ export function AtendimentoRealtimeCard({
               <Clock className="w-4 h-4" style={{ color: CHART_MUTED }} />
             </div>
             <span className="text-lg font-bold" style={{ color: CHART_MUTED }}>
-              {data.semAssignee}
+              {safeData.semAssignee}
             </span>
             <span className="text-[10px] text-muted-foreground">Aguardando</span>
           </div>
         </div>
 
         {/* Transbordo em andamento */}
-        {data.transbordoEmAndamento > 0 && (
+        {safeData.transbordoEmAndamento > 0 && (
           <div className="flex items-center gap-2 p-2 rounded-lg bg-warning/10 border border-warning/20">
             <ArrowRightLeft className="w-4 h-4 text-warning" />
             <span className="text-xs text-warning">
-              <strong>{data.transbordoEmAndamento}</strong> transbordo{data.transbordoEmAndamento !== 1 ? 's' : ''} em andamento
+              <strong>{safeData.transbordoEmAndamento}</strong> transbordo{safeData.transbordoEmAndamento !== 1 ? 's' : ''} em andamento
             </span>
           </div>
         )}
