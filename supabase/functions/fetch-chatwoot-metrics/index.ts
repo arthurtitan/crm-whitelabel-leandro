@@ -16,6 +16,76 @@ interface MetricsRequest {
   agentId?: number;
 }
 
+interface ClassificationResult {
+  type: 'ai' | 'human' | 'unclassified';
+  method: 'explicit' | 'inferred' | 'bot_native' | 'fallback' | 'none';
+  handoff: boolean;
+}
+
+// Nova função de classificação com modelo híbrido
+function classifyConversation(conv: any): ClassificationResult {
+  const custom = conv.custom_attributes || {};
+  const additional = conv.additional_attributes || {};
+  
+  // PRIORIDADE 1: Campo explícito resolved_by (gravado pelo n8n)
+  const resolvedBy = custom.resolved_by || additional.resolved_by;
+  const handoffToHuman = custom.handoff_to_human === true || additional.handoff_to_human === true;
+  
+  if (resolvedBy === 'ai') {
+    return { 
+      type: 'ai', 
+      method: 'explicit', 
+      handoff: handoffToHuman
+    };
+  }
+  if (resolvedBy === 'human') {
+    return { 
+      type: 'human', 
+      method: 'explicit', 
+      handoff: handoffToHuman
+    };
+  }
+  
+  // PRIORIDADE 2: Bot nativo do Chatwoot
+  const hasBotAssignee = conv.meta?.assignee?.type === 'AgentBot';
+  const hasAgentBotId = !!conv.agent_bot_id;
+  
+  if (hasBotAssignee || hasAgentBotId) {
+    return { type: 'ai', method: 'bot_native', handoff: false };
+  }
+  
+  // PRIORIDADE 3: Marcadores existentes (ai_responded) + Inferência
+  const aiResponded = custom.ai_responded === true || additional.ai_responded === true;
+  const hasHumanAssignee = !!(conv.meta?.assignee?.id || conv.assignee_id) && !hasBotAssignee;
+  const isResolved = conv.status === 'resolved';
+  
+  if (aiResponded) {
+    // IA respondeu mas não temos resolved_by explícito
+    // Se há assignee humano e foi resolvido, humano encerrou (transbordo)
+    if (hasHumanAssignee && isResolved) {
+      return { type: 'human', method: 'inferred', handoff: true };
+    }
+    // Se foi resolvido sem assignee humano, IA encerrou
+    if (isResolved) {
+      return { type: 'ai', method: 'inferred', handoff: false };
+    }
+    // Ainda aberta, iniciada por IA
+    return { type: 'ai', method: 'inferred', handoff: false };
+  }
+  
+  // PRIORIDADE 4: Fallback - Assignee humano resolveu
+  if (hasHumanAssignee && isResolved) {
+    return { type: 'human', method: 'fallback', handoff: false };
+  }
+  
+  // Conversas abertas com assignee humano
+  if (hasHumanAssignee) {
+    return { type: 'human', method: 'fallback', handoff: false };
+  }
+  
+  return { type: 'unclassified', method: 'none', handoff: false };
+}
+
 async function fetchWithRetry(url: string, options: RequestInit, retries = 2): Promise<Response> {
   let lastError: Error | null = null;
   
@@ -221,9 +291,25 @@ serve(async (req) => {
     let resolvedCount = 0;
     let pendingCount = 0;
     let unattendedCount = 0;
-    let botConversations = 0;
-    let humanConversations = 0;
-    let mixedConversations = 0; // Conversas com IA + Humano
+
+    // Contadores de classificação
+    const resolucoes = {
+      ia: { total: 0, explicito: 0, inferido: 0 },
+      humano: { total: 0, explicito: 0, inferido: 0 },
+      naoClassificado: 0,
+    };
+    
+    // Transbordo tracking
+    let transbordoCount = 0;
+    let iniciadasPorIA = 0;
+
+    // Classification method audit
+    const classificacao = {
+      metodologiaExplicita: 0,
+      metodologiaInferida: 0,
+      metodologiaFallback: 0,
+      metodologiaBotNativo: 0,
+    };
 
     // Agent performance tracking
     const agentStats: Record<number, {
@@ -276,64 +362,47 @@ serve(async (req) => {
         unattendedCount++;
       }
 
-      // Bot vs Human detection - IMPROVED LOGIC for external AI integrations
-      // Since AI responds via n8n using a human agent account (Arthur),
-      // we need to detect automation through other signals
+      // NOVA LÓGICA: Classificação híbrida
+      const classification = classifyConversation(conv);
       
-      const assignee = conv.meta?.assignee;
-      const hasBotAssignee = assignee?.type === 'AgentBot';
-      const hasAgentBotId = !!conv.agent_bot_id;
-      const hasHumanAssignee = !!(assignee?.id || conv.assignee_id) && !hasBotAssignee;
-      
-      // Check BOTH additional_attributes AND custom_attributes for bot/automation markers
-      // n8n sets ai_responded via /custom_attributes endpoint
-      const additionalAttrs = conv.additional_attributes || {};
-      const customAttrs = conv.custom_attributes || {};
-      
-      const hasBotMarker = additionalAttrs.bot_handled === true || 
-                           additionalAttrs.automation_id != null ||
-                           additionalAttrs.initiated_by === 'bot' ||
-                           additionalAttrs.source === 'automation' ||
-                           additionalAttrs.ai_responded === true ||
-                           customAttrs.ai_responded === true ||
-                           customAttrs.bot_handled === true;
-      
-      // Response time tracking (for agent stats only, not for AI detection)
-      let responseTimeSeconds: number | null = null;
-      if (conv.first_reply_created_at && conv.created_at) {
-        // Handle created_at as either Unix timestamp (number) or ISO string
-        const createdAtMs = typeof conv.created_at === 'number'
-          ? conv.created_at * 1000  // Unix seconds to ms
-          : new Date(conv.created_at).getTime();
-        
-        const firstReplyMs = typeof conv.first_reply_created_at === 'number' 
-          ? conv.first_reply_created_at * 1000  // Unix seconds to ms
-          : new Date(conv.first_reply_created_at).getTime();
-        
-        responseTimeSeconds = (firstReplyMs - createdAtMs) / 1000;
-      }
-      
-      // Determine conversation type - ONLY trust explicit markers, not response time heuristics
-      const isBotConversation = hasBotAssignee || hasAgentBotId || hasBotMarker;
-      const isHumanConversation = hasHumanAssignee && !isBotConversation;
-      
-      if (hasBotMarker) {
-        // AI handled (explicitly marked via custom_attributes or additional_attributes)
-        if (hasHumanAssignee) {
-          // AI responded but human agent is assigned (may have taken over or AI uses human account)
-          mixedConversations++;
+      // Contabilizar por tipo
+      if (classification.type === 'ai') {
+        resolucoes.ia.total++;
+        if (classification.method === 'explicit') {
+          resolucoes.ia.explicito++;
+          classificacao.metodologiaExplicita++;
+        } else if (classification.method === 'bot_native') {
+          classificacao.metodologiaBotNativo++;
+        } else {
+          resolucoes.ia.inferido++;
+          classificacao.metodologiaInferida++;
         }
-        botConversations++;
-      } else if (hasBotAssignee || hasAgentBotId) {
-        botConversations++;
-      } else if (hasHumanAssignee) {
-        humanConversations++;
+        iniciadasPorIA++;
+      } else if (classification.type === 'human') {
+        resolucoes.humano.total++;
+        if (classification.method === 'explicit') {
+          resolucoes.humano.explicito++;
+          classificacao.metodologiaExplicita++;
+        } else if (classification.method === 'fallback') {
+          classificacao.metodologiaFallback++;
+        } else {
+          resolucoes.humano.inferido++;
+          classificacao.metodologiaInferida++;
+        }
+      } else {
+        resolucoes.naoClassificado++;
       }
-      // Note: conversations without any assignee are not counted in either category
+      
+      // Transbordo: conversas que tiveram handoff
+      if (classification.handoff) {
+        transbordoCount++;
+      }
       
       // Track agent stats (human agents only)
+      const hasHumanAssignee = !!(conv.meta?.assignee?.id || conv.assignee_id) && 
+                               conv.meta?.assignee?.type !== 'AgentBot';
       if (hasHumanAssignee) {
-        const agentIdVal = assignee?.id || conv.assignee_id;
+        const agentIdVal = conv.meta?.assignee?.id || conv.assignee_id;
         if (agentStats[agentIdVal]) {
           agentStats[agentIdVal].conversations++;
           if (conv.status === 'resolved') {
@@ -342,8 +411,13 @@ serve(async (req) => {
           
           // Calculate response time if available
           if (conv.first_reply_created_at && conv.created_at) {
-            const responseTime = new Date(conv.first_reply_created_at).getTime() - 
-                                 new Date(conv.created_at).getTime();
+            const createdAtMs = typeof conv.created_at === 'number'
+              ? conv.created_at * 1000
+              : new Date(conv.created_at).getTime();
+            const firstReplyMs = typeof conv.first_reply_created_at === 'number'
+              ? conv.first_reply_created_at * 1000
+              : new Date(conv.first_reply_created_at).getTime();
+            const responseTime = firstReplyMs - createdAtMs;
             if (responseTime > 0) {
               agentStats[agentIdVal].totalResponseTime += responseTime;
               agentStats[agentIdVal].responseCount++;
@@ -362,10 +436,8 @@ serve(async (req) => {
         let waitingMs: number;
         
         if (conv.waiting_since) {
-          // Usar waiting_since se disponível (timestamp Unix em segundos)
           waitingMs = now - (conv.waiting_since * 1000);
         } else {
-          // Fallback: usar last_activity_at ou created_at
           const lastActivity = conv.last_activity_at 
             ? conv.last_activity_at * 1000 
             : new Date(conv.created_at).getTime();
@@ -380,53 +452,40 @@ serve(async (req) => {
       }
     }
 
-    // Debug log para backlog e IA detection
-    console.log('[Chatwoot Metrics] Bot detection results:', {
-      botConversations,
-      humanConversations,
-      mixedConversations,
-      openConversations: finalConversations.filter((c: any) => c.status === 'open').length,
-      withWaitingSince: finalConversations.filter((c: any) => c.waiting_since).length,
+    // Debug log para classificação
+    console.log('[Chatwoot Metrics] Classification results:', {
+      resolucoes,
+      transbordoCount,
+      iniciadasPorIA,
+      classificacao,
+      openConversations: openCount,
       backlog,
     });
 
-    // Log sample conversations for debugging IA detection
+    // Log sample conversations for debugging
     if (finalConversations.length > 0) {
-      // Log first 3 conversations for debugging
       const samplesToLog = finalConversations.slice(0, 3);
       samplesToLog.forEach((conv: any, idx: number) => {
-        // Handle created_at as either Unix timestamp or ISO string
-        const createdAtMs = typeof conv.created_at === 'number'
-          ? conv.created_at * 1000
-          : new Date(conv.created_at).getTime();
-        
-        // first_reply_created_at is Unix timestamp in seconds
-        const firstReplyMs = conv.first_reply_created_at 
-          ? (typeof conv.first_reply_created_at === 'number' 
-              ? conv.first_reply_created_at * 1000 
-              : new Date(conv.first_reply_created_at).getTime())
-          : null;
-        const responseTimeSec = firstReplyMs ? (firstReplyMs - createdAtMs) / 1000 : null;
-        
-        // Check both custom_attributes and additional_attributes
-        const customAttrs = conv.custom_attributes || {};
-        const additionalAttrs = conv.additional_attributes || {};
-        const hasAiMarker = customAttrs.ai_responded === true || additionalAttrs.ai_responded === true;
-        
+        const classification = classifyConversation(conv);
         console.log(`[Chatwoot Metrics] Conv ${conv.id}:`, {
           status: conv.status,
-          responseTimeSec: responseTimeSec !== null ? responseTimeSec.toFixed(1) : 'N/A',
-          hasAssignee: !!(conv.meta?.assignee?.id || conv.assignee_id),
-          custom_attributes: customAttrs,
-          hasAiMarker,
+          classification: classification.type,
+          method: classification.method,
+          handoff: classification.handoff,
+          custom_attributes: conv.custom_attributes || {},
         });
       });
     }
 
-    // Calculate percentages
-    const totalAssigned = botConversations + humanConversations;
-    const percentualIA = totalAssigned > 0 ? Math.round((botConversations / totalAssigned) * 100) : 0;
-    const percentualHumano = totalAssigned > 0 ? 100 - percentualIA : 0;
+    // Calculate percentages (usando totais classificados)
+    const totalClassificado = resolucoes.ia.total + resolucoes.humano.total;
+    const percentualIA = totalClassificado > 0 ? Math.round((resolucoes.ia.total / totalClassificado) * 100) : 0;
+    const percentualHumano = totalClassificado > 0 ? 100 - percentualIA : 0;
+    
+    // Taxa de transbordo real (% de conversas iniciadas por IA que tiveram handoff)
+    const taxaTransbordoReal = iniciadasPorIA > 0 
+      ? Math.round((transbordoCount / iniciadasPorIA) * 100) 
+      : 0;
 
     // Format time helper
     const formatTime = (ms: number): string => {
@@ -506,23 +565,31 @@ serve(async (req) => {
         conversasPendentes: pendingCount,
         conversasSemResposta: unattendedCount,
 
-        // Contagens absolutas (evita arredondamento no frontend)
-        atendimentosIA: botConversations,
-        atendimentosHumano: humanConversations,
-        atendimentosClassificados: totalAssigned,
+        // NOVA ESTRUTURA: Resoluções detalhadas
+        resolucoes,
         
-        // IA vs Human
+        // Contagens absolutas (retrocompatibilidade)
+        atendimentosIA: resolucoes.ia.total,
+        atendimentosHumano: resolucoes.humano.total,
+        atendimentosClassificados: totalClassificado,
+        
+        // IA vs Human percentages
         percentualIA,
         percentualHumano,
+        
+        // Transbordo
+        transbordo: {
+          total: transbordoCount,
+          iniciadasPorIA,
+          taxa: `${taxaTransbordoReal}%`,
+        },
         
         // Time metrics
         tempoMedioPrimeiraResposta: formatTime(avgFirstResponseMs),
         tempoMedioResolucao: '0s', // Would need message-level data
         
-        // Transbordo rate
-        taxaTransbordo: totalAssigned > 0 
-          ? `${Math.round((unattendedCount / totalAssigned) * 100)}%`
-          : '0%',
+        // Legacy transbordo rate (mantido para compatibilidade)
+        taxaTransbordo: `${taxaTransbordoReal}%`,
         
         // Channel breakdown
         conversasPorCanal,
@@ -542,12 +609,12 @@ serve(async (req) => {
           taxaAtendimentoVenda: '0%',
         },
         
-        // Debug info
+        // Debug/Auditoria
         _debug: {
           totalConversationsRaw: allConversations.length,
           totalConversationsFiltered: finalConversations.length,
-          botConversations,
-          humanConversations,
+          resolucoes,
+          classificacao,
           inboxesCount: inboxes.length,
           agentsCount: agents.length,
           dateRange: { from: dateFrom, to: dateTo },
@@ -558,6 +625,8 @@ serve(async (req) => {
     console.log('[Chatwoot Metrics] Response ready:', {
       totalLeads: response.data.totalLeads,
       conversasAtivas: response.data.conversasAtivas,
+      resolucoes: response.data.resolucoes,
+      transbordo: response.data.transbordo,
       agentes: response.data.agentes.length,
     });
 

@@ -33,35 +33,108 @@ export interface DashboardMetricsParams {
 /**
  * Resposta das métricas do dashboard
  */
+/**
+ * Estrutura de resoluções detalhadas
+ * Separando métricas explícitas (n8n) das inferidas (heurística)
+ */
+export interface ResolucoesDetalhadas {
+  ia: {
+    total: number;
+    explicito: number;  // resolved_by = 'ai'
+    inferido: number;   // via heurística
+  };
+  humano: {
+    total: number;
+    explicito: number;  // resolved_by = 'human'
+    inferido: number;   // via heurística
+  };
+  naoClassificado: number;
+}
+
+/**
+ * Métricas de transbordo (handoff)
+ */
+export interface TransbordoMetrics {
+  total: number;           // handoff_to_human = true
+  iniciadasPorIA: number;  // conversas iniciadas por IA
+  taxa: string;            // % do total iniciado por IA
+}
+
+/**
+ * Auditoria de metodologia de classificação
+ */
+export interface ClassificacaoAudit {
+  metodologiaExplicita: number;
+  metodologiaInferida: number;
+  metodologiaFallback: number;
+  metodologiaBotNativo: number;
+}
+
 export interface DashboardMetricsResponse {
   success: boolean;
   data?: {
     totalLeads: number;
     conversasAtivas: number;
+    conversasResolvidas?: number;
+    conversasPendentes?: number;
+    conversasSemResposta?: number;
 
-    // Contagens absolutas (para UI)
+    // NOVA ESTRUTURA: Resoluções detalhadas
+    resolucoes?: ResolucoesDetalhadas;
+
+    // Contagens absolutas (retrocompatibilidade)
     atendimentosIA?: number;
     atendimentosHumano?: number;
     atendimentosClassificados?: number;
 
+    // Percentuais
     percentualIA: number;
     percentualHumano: number;
+    
+    // Transbordo detalhado
+    transbordo?: TransbordoMetrics;
+    
+    // Tempo
     tempoMedioPrimeiraResposta: string;
     tempoMedioResolucao: string;
     taxaTransbordo: string;
+    
+    // Por canal
     conversasPorCanal: Array<{ 
       inboxId: number; 
       canal: string; 
+      inboxName?: string;
       totalConversas: number;
     }>;
+    
+    // Pico horário
     picoPorHora: Array<{ 
       hora: number; 
       totalConversas: number;
     }>;
+    
+    // Backlog
     backlog: { 
       ate15min: number; 
       de15a60min: number; 
       acima60min: number;
+    };
+    
+    // Performance de agentes
+    agentes?: AgentPerformanceMetrics[];
+    
+    // Qualidade
+    qualidade?: QualityMetrics;
+    
+    // Debug/Auditoria
+    _debug?: {
+      totalConversationsRaw: number;
+      totalConversationsFiltered: number;
+      resolucoes: ResolucoesDetalhadas;
+      classificacao: ClassificacaoAudit;
+      inboxesCount: number;
+      agentsCount: number;
+      dateRange: { from: string; to: string };
     };
   };
   error?: string;
