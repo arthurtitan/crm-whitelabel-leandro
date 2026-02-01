@@ -26,7 +26,6 @@ export function AtendimentoRealtimeCard({
     ia: 0,
     humano: 0,
     semAssignee: 0,
-    transbordoEmAndamento: 0,
   };
 
   if (isLoading) {
@@ -170,15 +169,6 @@ export function AtendimentoRealtimeCard({
           </div>
         </div>
 
-        {/* Transbordo em andamento */}
-        {safeData.transbordoEmAndamento > 0 && (
-          <div className="flex items-center gap-2 p-2 rounded-lg bg-warning/10 border border-warning/20">
-            <ArrowRightLeft className="w-4 h-4 text-warning" />
-            <span className="text-xs text-warning">
-              <strong>{safeData.transbordoEmAndamento}</strong> transbordo{safeData.transbordoEmAndamento !== 1 ? 's' : ''} em andamento
-            </span>
-          </div>
-        )}
       </CardContent>
     </Card>
   );
