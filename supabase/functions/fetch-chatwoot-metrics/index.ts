@@ -22,32 +22,21 @@ interface MetricsRequest {
 // ============================================================================
 function classifyCurrentHandler(conv: any): 'ai' | 'human' | 'none' {
   const hasBotAssignee = conv.meta?.assignee?.type === 'AgentBot' || !!conv.agent_bot_id;
-
-  const custom = conv.custom_attributes || {};
-  const additional = conv.additional_attributes || {};
-
-  // Marcadores vindos da integração externa (ex: n8n)
-  const aiResponded = custom.ai_responded === true || additional.ai_responded === true;
-  const handoffMarked = custom.handoff_to_human === true || additional.handoff_to_human === true;
-
   const hasHumanAssignee = !!(conv.meta?.assignee?.id || conv.assignee_id) && !hasBotAssignee;
 
   // 1) Bot nativo sempre conta como IA
   if (hasBotAssignee) return 'ai';
 
-  // 2) Se existe handoff explícito, consideramos operação humana (ou aguardando)
-  //    Isso evita que "ai_responded" sozinho seja tratado como transbordo.
-  if (handoffMarked) {
-    return hasHumanAssignee ? 'human' : 'none';
-  }
-
-  // 3) Se a integração marcou que a IA respondeu e NÃO houve handoff explícito,
-  //    contamos como atendimento por IA mesmo que o assignee seja humano
-  //    (caso comum quando a IA opera usando uma conta humana no Chatwoot).
-  if (aiResponded) return 'ai';
-
-  // 4) Caso contrário, se existe assignee humano, é humano
+  // 2) ASSIGNEE MANDA: se há humano atribuído, é atendimento humano
+  //    (mesmo que ai_responded exista - o humano "assumiu" a conversa)
   if (hasHumanAssignee) return 'human';
+
+  // 3) Se não há assignee humano mas a IA respondeu, conta como IA
+  const custom = conv.custom_attributes || {};
+  const additional = conv.additional_attributes || {};
+  const aiResponded = custom.ai_responded === true || additional.ai_responded === true;
+  
+  if (aiResponded) return 'ai';
 
   return 'none';
 }
@@ -416,9 +405,10 @@ serve(async (req) => {
           atendimento.semAssignee++;
         }
         
-        // Detectar transbordo em andamento APENAS com marcador explícito
-        // (ai_responded sozinho não implica handoff)
-        if (handoffMarked && hasHumanAssignee) {
+        // Detectar transbordo em andamento:
+        // IA respondeu (ai_responded) + humano assumiu (hasHumanAssignee)
+        // Isso indica que houve handoff da IA para o humano
+        if (aiResponded && hasHumanAssignee) {
           atendimento.transbordoEmAndamento++;
         }
       }
