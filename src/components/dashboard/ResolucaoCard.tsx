@@ -25,6 +25,22 @@ export function ResolucaoCard({
 }: ResolucaoCardProps) {
   const [hoveredSegment, setHoveredSegment] = useState<'ia' | 'humano' | null>(null);
 
+  // Safe defaults
+  const safeResolucao = resolucao ?? {
+    total: 0,
+    ia: { total: 0, explicito: 0, botNativo: 0, inferido: 0 },
+    humano: { total: 0, explicito: 0, inferido: 0 },
+    naoClassificado: 0,
+    transbordoFinalizado: 0,
+  };
+  
+  const safeTaxas = taxas ?? {
+    resolucaoIA: '0%',
+    resolucaoHumano: '0%',
+    transbordo: '0%',
+    eficienciaIA: '0%',
+  };
+
   if (isLoading) {
     return (
       <Card>
@@ -42,9 +58,9 @@ export function ResolucaoCard({
     );
   }
 
-  const totalClassificado = resolucao.ia.total + resolucao.humano.total;
+  const totalClassificado = safeResolucao.ia.total + safeResolucao.humano.total;
   const percentIA = totalClassificado > 0 
-    ? Math.round((resolucao.ia.total / totalClassificado) * 100) 
+    ? Math.round((safeResolucao.ia.total / totalClassificado) * 100) 
     : 0;
   const percentHumano = totalClassificado > 0 ? 100 - percentIA : 0;
 
@@ -58,9 +74,9 @@ export function ResolucaoCard({
   const displayColor = hoveredSegment === 'humano' ? CHART_GREEN : CHART_BLUE;
 
   // Calculate methodology breakdown
-  const totalExplicito = resolucao.ia.explicito + resolucao.humano.explicito;
-  const percentExplicito = resolucao.total > 0 
-    ? Math.round((totalExplicito / resolucao.total) * 100) 
+  const totalExplicito = safeResolucao.ia.explicito + safeResolucao.humano.explicito;
+  const percentExplicito = safeResolucao.total > 0 
+    ? Math.round((totalExplicito / safeResolucao.total) * 100) 
     : 0;
 
   return (
@@ -79,7 +95,7 @@ export function ResolucaoCard({
                 </Badge>
               </TooltipTrigger>
               <TooltipContent>
-                <p className="text-xs">Baseado em {resolucao.total} conversas resolvidas</p>
+                <p className="text-xs">Baseado em {safeResolucao.total} conversas resolvidas</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -175,7 +191,7 @@ export function ResolucaoCard({
               <div className="flex-1 min-w-0">
                 <p className="text-xs sm:text-sm font-medium text-foreground">IA</p>
                 <p className="text-[10px] sm:text-xs text-muted-foreground truncate">
-                  {resolucao.ia.total} resolvidas
+                  {safeResolucao.ia.total} resolvidas
                 </p>
               </div>
               <span 
@@ -206,7 +222,7 @@ export function ResolucaoCard({
               <div className="flex-1 min-w-0">
                 <p className="text-xs sm:text-sm font-medium text-foreground">Humano</p>
                 <p className="text-[10px] sm:text-xs text-muted-foreground truncate">
-                  {resolucao.humano.total} resolvidas
+                  {safeResolucao.humano.total} resolvidas
                 </p>
               </div>
               <span 
@@ -229,21 +245,21 @@ export function ResolucaoCard({
               <ArrowRightLeft className="w-3 h-3" />
               <span>Transbordo finalizado</span>
             </div>
-            <span className="font-medium">{resolucao.transbordoFinalizado}</span>
+            <span className="font-medium">{safeResolucao.transbordoFinalizado}</span>
           </div>
           <div className="flex items-center justify-between text-xs">
             <div className="flex items-center gap-1.5 text-muted-foreground">
               <TrendingUp className="w-3 h-3" />
               <span>Eficiência da IA</span>
             </div>
-            <span className="font-medium text-primary">{taxas.eficienciaIA}</span>
+            <span className="font-medium text-primary">{safeTaxas.eficienciaIA}</span>
           </div>
           
           {/* Methodology indicator */}
-          {resolucao.naoClassificado > 0 && (
+          {safeResolucao.naoClassificado > 0 && (
             <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mt-2">
               <HelpCircle className="w-3 h-3" />
-              <span>{resolucao.naoClassificado} sem classificação ({percentExplicito}% explícito via n8n)</span>
+              <span>{safeResolucao.naoClassificado} sem classificação ({percentExplicito}% explícito via n8n)</span>
             </div>
           )}
         </div>
