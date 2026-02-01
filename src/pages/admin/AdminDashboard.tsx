@@ -126,7 +126,6 @@ export default function AdminDashboard() {
           ia: 0,
           humano: 0,
           semAssignee: 0,
-          transbordoEmAndamento: 0,
         },
         resolucao: {
           total: 0,

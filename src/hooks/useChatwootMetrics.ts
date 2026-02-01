@@ -95,7 +95,6 @@ const DEFAULT_METRICS: DashboardMetrics = {
     ia: 0,
     humano: 0,
     semAssignee: 0,
-    transbordoEmAndamento: 0,
   },
   // CAMADA 2: Resolução
   resolucao: {
@@ -115,7 +114,6 @@ const DEFAULT_METRICS: DashboardMetrics = {
   // Transbordo
   transbordo: {
     total: 0,
-    emAndamento: 0,
     iniciadasPorIA: 0,
     taxa: '0%',
   },

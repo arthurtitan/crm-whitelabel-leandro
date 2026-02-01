@@ -312,7 +312,6 @@ serve(async (req) => {
       ia: 0,
       humano: 0,
       semAssignee: 0,
-      transbordoEmAndamento: 0,
     };
 
     // CAMADA 2: Resolução (conversas resolvidas)
@@ -404,13 +403,7 @@ serve(async (req) => {
         } else {
           atendimento.semAssignee++;
         }
-        
-        // Detectar transbordo em andamento:
-        // IA respondeu (ai_responded) + humano assumiu (hasHumanAssignee)
-        // Isso indica que houve handoff da IA para o humano
-        if (aiResponded && hasHumanAssignee) {
-          atendimento.transbordoEmAndamento++;
-        }
+        // Transbordo só é contabilizado em conversas RESOLVIDAS (Camada 2)
       }
 
       // ======================================================================
@@ -638,10 +631,9 @@ serve(async (req) => {
         percentualHumano: taxaResolucaoHumano,
         taxaTransbordo: taxas.transbordo,
         
-        // Transbordo detalhado
+        // Transbordo detalhado (só em resoluções)
         transbordo: {
           total: resolucao.transbordoFinalizado,
-          emAndamento: atendimento.transbordoEmAndamento,
           iniciadasPorIA: iniciadasPorIACount,
           taxa: taxas.transbordo,
         },

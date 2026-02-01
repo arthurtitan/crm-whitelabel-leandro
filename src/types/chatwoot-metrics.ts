@@ -42,7 +42,6 @@ export interface AtendimentoMetrics {
   ia: number;                 // Sendo atendidas por IA agora
   humano: number;             // Sendo atendidas por humanos agora
   semAssignee: number;        // Aguardando atribuição
-  transbordoEmAndamento: number; // IA iniciou, humano assumiu (ainda aberta)
 }
 
 /**
@@ -97,8 +96,7 @@ export interface ResolucoesDetalhadas {
  * Métricas de transbordo (handoff)
  */
 export interface TransbordoMetrics {
-  total: number;           // handoff_to_human = true
-  emAndamento: number;     // conversas em transbordo ativo
+  total: number;           // Conversas onde IA iniciou e humano finalizou
   iniciadasPorIA: number;  // conversas iniciadas por IA
   taxa: string;            // % do total iniciado por IA
 }
