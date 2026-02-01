@@ -1,11 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 export interface DashboardMetrics {
   totalLeads: number;
@@ -98,6 +93,65 @@ const DEFAULT_METRICS: DashboardMetrics = {
 
 const DEFAULT_POLLING_INTERVAL = 30000; // 30 seconds
 
+async function fetchChatwootMetrics(
+  account: {
+    chatwoot_base_url?: string | null;
+    chatwoot_account_id?: string | null;
+    chatwoot_api_key?: string | null;
+  },
+  dateFrom: Date,
+  dateTo: Date,
+  inboxId?: number,
+  agentId?: number,
+  signal?: AbortSignal
+): Promise<DashboardMetrics> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+  console.log('[useChatwootMetrics] Fetching metrics...', {
+    online: typeof navigator !== 'undefined' ? navigator.onLine : true,
+    dateFrom: dateFrom.toISOString(),
+    dateTo: dateTo.toISOString(),
+    inboxId,
+    agentId,
+  });
+
+  const response = await fetch(`${supabaseUrl}/functions/v1/fetch-chatwoot-metrics`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': session?.access_token
+        ? `Bearer ${session.access_token}`
+        : `Bearer ${supabaseKey}`,
+      'apikey': supabaseKey,
+    },
+    body: JSON.stringify({
+      baseUrl: account.chatwoot_base_url,
+      accountId: account.chatwoot_account_id,
+      apiKey: account.chatwoot_api_key,
+      dateFrom: dateFrom.toISOString(),
+      dateTo: dateTo.toISOString(),
+      inboxId,
+      agentId,
+    }),
+    signal,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`HTTP ${response.status}: ${errorText}`);
+  }
+
+  const result = await response.json();
+  
+  if (result.success && result.data) {
+    return result.data as DashboardMetrics;
+  }
+
+  throw new Error(result.error || 'Erro ao carregar métricas');
+}
+
 export function useChatwootMetrics({
   dateFrom,
   dateTo,
@@ -107,17 +161,6 @@ export function useChatwootMetrics({
   enablePolling = true,
 }: UseChatwootMetricsParams): UseChatwootMetricsResult {
   const { account } = useAuth();
-  const { toast } = useToast();
-  const [data, setData] = useState<DashboardMetrics | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
-  const [isTabActive, setIsTabActive] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
-  const inFlightRef = useRef(false);
-  const lastGoodDataRef = useRef<DashboardMetrics | null>(null);
 
   const isConfigured = Boolean(
     account?.chatwoot_base_url &&
@@ -125,245 +168,78 @@ export function useChatwootMetrics({
     account?.chatwoot_api_key
   );
 
-  // Track tab visibility
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      setIsTabActive(document.visibilityState === 'visible');
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, []);
-
-  type FetchReason = 'initial' | 'poll' | 'manual';
-
-  const fetchMetrics = useCallback(async (reason: FetchReason = 'manual') => {
-    if (!isConfigured || !account) {
-      setIsLoading(false);
-      setData(DEFAULT_METRICS);
-      return;
-    }
-
-    try {
-      // Evita concorrência (principal causa de falhas intermitentes em polling)
-      if (inFlightRef.current) {
-        // Em ação manual, cancela a request anterior e faz a nova.
-        if (reason === 'manual') {
-          abortRef.current?.abort();
-        } else {
-          return;
-        }
+  const query = useQuery({
+    queryKey: [
+      'chatwoot-metrics',
+      account?.id,
+      dateFrom.toISOString(),
+      dateTo.toISOString(),
+      inboxId,
+      agentId,
+    ],
+    queryFn: async ({ signal }) => {
+      if (!account || !isConfigured) {
+        return DEFAULT_METRICS;
       }
-
-      inFlightRef.current = true;
-      setError(null);
-
-      const isInitialLoad = lastGoodDataRef.current == null && data == null;
-      if (reason === 'initial' || isInitialLoad) {
-        setIsLoading(true);
-      }
-      if (reason !== 'initial') {
-        setIsSyncing(true);
-      }
-
-      const { data: { session } } = await supabase.auth.getSession();
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-
-      console.log('[useChatwootMetrics] Fetching metrics...', {
-        reason,
-        online: typeof navigator !== 'undefined' ? navigator.onLine : true,
-        dateFrom: dateFrom.toISOString(),
-        dateTo: dateTo.toISOString(),
-        inboxId,
-        agentId,
-      });
-
-      const maxAttempts = reason === 'poll' ? 2 : 3;
-      let lastErr: unknown = null;
-
-      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        // Timeout por tentativa
-        const TIMEOUT_MS = 45000; // mantém compatível com instâncias lentas
-        const controller = new AbortController();
-        abortRef.current = controller;
-        const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-        try {
-          const response = await fetch(`${supabaseUrl}/functions/v1/fetch-chatwoot-metrics`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              // JWT quando disponível; fallback mantém comportamento atual
-              'Authorization': session?.access_token
-                ? `Bearer ${session.access_token}`
-                : `Bearer ${supabaseKey}`,
-              'apikey': supabaseKey,
-            },
-            body: JSON.stringify({
-              baseUrl: account.chatwoot_base_url,
-              accountId: account.chatwoot_account_id,
-              apiKey: account.chatwoot_api_key,
-              dateFrom: dateFrom.toISOString(),
-              dateTo: dateTo.toISOString(),
-              inboxId,
-              agentId,
-            }),
-            signal: controller.signal,
-          });
-
-          if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`HTTP ${response.status}: ${errorText}`);
-          }
-
-          const result = await response.json();
-          if (result.success && result.data) {
-            lastGoodDataRef.current = result.data as DashboardMetrics;
-            setData(result.data);
-            setError(null);
-            setLastSyncAt(new Date().toISOString());
-            return;
-          }
-
-          throw new Error(result.error || 'Erro ao carregar métricas');
-        } catch (err: any) {
-          lastErr = err;
-
-          // Abort/timeout: não adianta retry imediato
-          if (err?.name === 'AbortError') {
-            throw err;
-          }
-
-          const msg = String(err?.message || '');
-          const isNetworkFail = msg.toLowerCase().includes('failed to fetch') || msg.toLowerCase().includes('networkerror');
-          const is5xx = msg.includes('HTTP 5');
-          const is429 = msg.includes('HTTP 429');
-          const shouldRetry = attempt < maxAttempts && (isNetworkFail || is5xx || is429);
-
-          if (!shouldRetry) {
-            throw err;
-          }
-
-          // backoff com jitter
-          const backoffMs = 800 * attempt + Math.floor(Math.random() * 400);
-          console.warn('[useChatwootMetrics] Retry fetch metrics...', { attempt, maxAttempts, backoffMs, msg });
-          await sleep(backoffMs);
-        } finally {
-          clearTimeout(timeoutId);
-          // Só limpa se ainda for a controladora atual
-          if (abortRef.current === controller) {
-            abortRef.current = null;
-          }
-        }
-      }
-
-      throw lastErr instanceof Error ? lastErr : new Error('Erro desconhecido ao carregar métricas');
-    } catch (err: any) {
-      console.error('[useChatwootMetrics] Error:', err);
-
-      const online = typeof navigator !== 'undefined' ? navigator.onLine : true;
-      const rawMsg = String(err?.message || '');
-      const rawMsgLower = rawMsg.toLowerCase();
-      const message = err?.name === 'AbortError'
-        ? 'Timeout ao buscar métricas. O Chatwoot pode estar lento.'
-        : (!online
-          ? 'Sem conexão com a internet.'
-          : (rawMsgLower.includes('failed to fetch') || rawMsgLower.includes('networkerror')
-            ? 'Falha de conexão ao buscar métricas. Tente novamente em alguns segundos.'
-            : (rawMsg || 'Erro de conexão')));
-
-      setError(message);
-
-      // Mantém o último dado válido em tela (evita “zerar” o dashboard em falhas transitórias)
-      if (lastGoodDataRef.current) {
-        setData(lastGoodDataRef.current);
-      } else {
-        setData(DEFAULT_METRICS);
-      }
-
-      // Evita “spam” de toast em falhas do polling
-      if (reason !== 'poll') {
-        toast({
-          title: 'Erro ao carregar métricas',
-          description: message,
-          variant: 'destructive',
-        });
-      }
-    } finally {
-      inFlightRef.current = false;
-      setIsLoading(false);
-      setIsSyncing(false);
-    }
-  }, [account, dateFrom, dateTo, inboxId, agentId, isConfigured, toast]);
-
-  // Initial fetch
-  useEffect(() => {
-    fetchMetrics('initial');
-  }, [fetchMetrics]);
-
-  // Polling with visibility detection
-  useEffect(() => {
-    if (!isConfigured || !enablePolling) return;
-
-    const startPolling = () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-
-      intervalRef.current = setInterval(() => {
-        if (document.visibilityState === 'visible') {
-          fetchMetrics('poll');
-        }
-      }, pollingInterval);
-    };
-
-    if (isTabActive) {
-      startPolling();
-    } else if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [isConfigured, enablePolling, pollingInterval, isTabActive, fetchMetrics]);
-
-  // Manual refetch that resets polling timer
-  const refetch = useCallback(() => {
-    fetchMetrics('manual');
+      return fetchChatwootMetrics(account, dateFrom, dateTo, inboxId, agentId, signal);
+    },
+    enabled: isConfigured,
     
-    // Reset polling timer
-    if (intervalRef.current && enablePolling && isConfigured) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = setInterval(() => {
-        if (document.visibilityState === 'visible') {
-          fetchMetrics('poll');
-        }
-      }, pollingInterval);
-    }
-  }, [fetchMetrics, enablePolling, isConfigured, pollingInterval]);
+    // Polling: atualiza a cada 30s quando aba está ativa
+    refetchInterval: enablePolling ? pollingInterval : false,
+    refetchIntervalInBackground: false, // Pausa quando aba está inativa
+    
+    // Cache: dados considerados frescos por 25s (evita refetch imediato ao voltar na aba)
+    staleTime: 25000,
+    gcTime: 5 * 60 * 1000, // 5 minutos
+    
+    // Retry: 3 tentativas com backoff exponencial
+    retry: 3,
+    retryDelay: (attemptIndex) => {
+      const baseDelay = Math.min(1000 * 2 ** attemptIndex, 10000);
+      const jitter = Math.floor(Math.random() * 500);
+      return baseDelay + jitter;
+    },
+    
+    // Mantém dados anteriores enquanto faz refetch (evita flash de loading)
+    placeholderData: keepPreviousData,
+  });
 
-  // Cleanup: abort request on unmount
-  useEffect(() => {
-    return () => {
-      abortRef.current?.abort();
-    };
-  }, []);
+  // Mapear estados do TanStack Query para interface existente
+  const isLoading = query.isPending;
+  const isSyncing = query.isFetching && !query.isPending;
+  const lastSyncAt = query.dataUpdatedAt 
+    ? new Date(query.dataUpdatedAt).toISOString() 
+    : null;
+  
+  // Extrair mensagem de erro formatada
+  let errorMessage: string | null = null;
+  if (query.error) {
+    const rawMsg = String(query.error?.message || '');
+    const rawMsgLower = rawMsg.toLowerCase();
+    const online = typeof navigator !== 'undefined' ? navigator.onLine : true;
+    
+    if (query.error.name === 'AbortError') {
+      errorMessage = 'Timeout ao buscar métricas. O Chatwoot pode estar lento.';
+    } else if (!online) {
+      errorMessage = 'Sem conexão com a internet.';
+    } else if (rawMsgLower.includes('failed to fetch') || rawMsgLower.includes('networkerror')) {
+      errorMessage = 'Falha de conexão ao buscar métricas. Tente novamente em alguns segundos.';
+    } else {
+      errorMessage = rawMsg || 'Erro de conexão';
+    }
+    
+    console.error('[useChatwootMetrics] Error:', query.error);
+  }
 
   return {
-    data,
+    data: query.data ?? DEFAULT_METRICS,
     isLoading,
     isSyncing,
     lastSyncAt,
-    isTabActive,
-    error,
+    isTabActive: true, // TanStack Query gerencia automaticamente via refetchIntervalInBackground
+    error: errorMessage,
     isConfigured,
-    refetch,
+    refetch: query.refetch,
   };
 }
