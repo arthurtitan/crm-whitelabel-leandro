@@ -34,19 +34,61 @@ export interface DashboardMetricsParams {
  * Resposta das métricas do dashboard
  */
 /**
- * Estrutura de resoluções detalhadas
- * Separando métricas explícitas (n8n) das inferidas (heurística)
+ * CAMADA 1: Atendimento em Tempo Real
+ * Quem ESTÁ atendendo agora?
+ */
+export interface AtendimentoMetrics {
+  total: number;              // Total de conversas abertas
+  ia: number;                 // Sendo atendidas por IA agora
+  humano: number;             // Sendo atendidas por humanos agora
+  semAssignee: number;        // Aguardando atribuição
+  transbordoEmAndamento: number; // IA iniciou, humano assumiu (ainda aberta)
+}
+
+/**
+ * CAMADA 2: Resolução (Histórico)
+ * Quem RESOLVEU o problema?
+ */
+export interface ResolucaoMetrics {
+  total: number;              // Total resolvidas no período
+  ia: {
+    total: number;
+    explicito: number;        // resolved_by = 'ai' (n8n)
+    botNativo: number;        // agent_bot do Chatwoot
+    inferido: number;         // via heurística
+  };
+  humano: {
+    total: number;
+    explicito: number;        // resolved_by = 'human' (n8n)
+    inferido: number;         // via heurística
+  };
+  naoClassificado: number;    // Sem resolved_by (conversas antigas)
+  transbordoFinalizado: number; // IA iniciou, humano fechou
+}
+
+/**
+ * Taxas calculadas
+ */
+export interface TaxasMetrics {
+  resolucaoIA: string;        // % resolvidas por IA
+  resolucaoHumano: string;    // % resolvidas por humano
+  transbordo: string;         // % de transbordo (IA -> Humano que fechou)
+  eficienciaIA: string;       // % de conversas que IA resolveu sozinha
+}
+
+/**
+ * Estrutura de resoluções detalhadas (retrocompatibilidade)
  */
 export interface ResolucoesDetalhadas {
   ia: {
     total: number;
-    explicito: number;  // resolved_by = 'ai'
-    inferido: number;   // via heurística
+    explicito: number;
+    inferido: number;
   };
   humano: {
     total: number;
-    explicito: number;  // resolved_by = 'human'
-    inferido: number;   // via heurística
+    explicito: number;
+    inferido: number;
   };
   naoClassificado: number;
 }
@@ -56,6 +98,7 @@ export interface ResolucoesDetalhadas {
  */
 export interface TransbordoMetrics {
   total: number;           // handoff_to_human = true
+  emAndamento: number;     // conversas em transbordo ativo
   iniciadasPorIA: number;  // conversas iniciadas por IA
   taxa: string;            // % do total iniciado por IA
 }
@@ -79,8 +122,14 @@ export interface DashboardMetricsResponse {
     conversasPendentes?: number;
     conversasSemResposta?: number;
 
-    // NOVA ESTRUTURA: Resoluções detalhadas
-    resolucoes?: ResolucoesDetalhadas;
+    // CAMADA 1: Atendimento em tempo real
+    atendimento?: AtendimentoMetrics;
+    
+    // CAMADA 2: Resolução (histórico)
+    resolucao?: ResolucaoMetrics;
+    
+    // Taxas calculadas
+    taxas?: TaxasMetrics;
 
     // Contagens absolutas (retrocompatibilidade)
     atendimentosIA?: number;
@@ -130,7 +179,8 @@ export interface DashboardMetricsResponse {
     _debug?: {
       totalConversationsRaw: number;
       totalConversationsFiltered: number;
-      resolucoes: ResolucoesDetalhadas;
+      atendimento: AtendimentoMetrics;
+      resolucao: ResolucaoMetrics;
       classificacao: ClassificacaoAudit;
       inboxesCount: number;
       agentsCount: number;

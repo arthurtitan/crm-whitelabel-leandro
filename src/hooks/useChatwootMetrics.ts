@@ -1,6 +1,7 @@
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import type { AtendimentoMetrics, ResolucaoMetrics, TaxasMetrics, TransbordoMetrics } from '@/types/chatwoot-metrics';
 
 export interface DashboardMetrics {
   totalLeads: number;
@@ -9,7 +10,19 @@ export interface DashboardMetrics {
   conversasPendentes: number;
   conversasSemResposta: number;
 
-  // Contagens absolutas (preferir no UI para evitar arredondamento)
+  // CAMADA 1: Atendimento em tempo real
+  atendimento: AtendimentoMetrics;
+  
+  // CAMADA 2: Resolução (histórico)
+  resolucao: ResolucaoMetrics;
+  
+  // Taxas calculadas
+  taxas: TaxasMetrics;
+  
+  // Transbordo detalhado
+  transbordo: TransbordoMetrics;
+
+  // Contagens absolutas (retrocompatibilidade)
   atendimentosIA?: number;
   atendimentosHumano?: number;
   atendimentosClassificados?: number;
@@ -76,6 +89,37 @@ const DEFAULT_METRICS: DashboardMetrics = {
   conversasResolvidas: 0,
   conversasPendentes: 0,
   conversasSemResposta: 0,
+  // CAMADA 1: Atendimento em tempo real
+  atendimento: {
+    total: 0,
+    ia: 0,
+    humano: 0,
+    semAssignee: 0,
+    transbordoEmAndamento: 0,
+  },
+  // CAMADA 2: Resolução
+  resolucao: {
+    total: 0,
+    ia: { total: 0, explicito: 0, botNativo: 0, inferido: 0 },
+    humano: { total: 0, explicito: 0, inferido: 0 },
+    naoClassificado: 0,
+    transbordoFinalizado: 0,
+  },
+  // Taxas
+  taxas: {
+    resolucaoIA: '0%',
+    resolucaoHumano: '0%',
+    transbordo: '0%',
+    eficienciaIA: '0%',
+  },
+  // Transbordo
+  transbordo: {
+    total: 0,
+    emAndamento: 0,
+    iniciadasPorIA: 0,
+    taxa: '0%',
+  },
+  // Retrocompatibilidade
   atendimentosIA: 0,
   atendimentosHumano: 0,
   atendimentosClassificados: 0,

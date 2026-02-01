@@ -16,34 +16,48 @@ interface MetricsRequest {
   agentId?: number;
 }
 
-interface ClassificationResult {
-  type: 'ai' | 'human' | 'unclassified';
-  method: 'explicit' | 'inferred' | 'bot_native' | 'fallback' | 'none';
-  handoff: boolean;
+// ============================================================================
+// CAMADA 1: ATENDIMENTO EM TEMPO REAL
+// Quem ESTÁ atendendo agora? (baseado no assignee atual)
+// ============================================================================
+function classifyCurrentHandler(conv: any): 'ai' | 'human' | 'none' {
+  const hasBotAssignee = conv.meta?.assignee?.type === 'AgentBot' || !!conv.agent_bot_id;
+  const aiResponded = conv.custom_attributes?.ai_responded === true || 
+                      conv.additional_attributes?.ai_responded === true;
+  const hasHumanAssignee = !!(conv.meta?.assignee?.id || conv.assignee_id) && !hasBotAssignee;
+  
+  if (hasBotAssignee) return 'ai';
+  if (hasHumanAssignee) return 'human';
+  if (aiResponded && !hasHumanAssignee) return 'ai';
+  return 'none';
 }
 
-// Nova função de classificação com modelo híbrido
-function classifyConversation(conv: any): ClassificationResult {
+// ============================================================================
+// CAMADA 2: RESOLUÇÃO (HISTÓRICO)
+// Quem RESOLVEU o problema? (baseado em resolved_by explícito do n8n)
+// ============================================================================
+interface ResolverResult {
+  type: 'ai' | 'human' | 'unclassified';
+  method: 'explicit' | 'bot_native' | 'inferred' | 'fallback' | 'none';
+}
+
+function classifyResolver(conv: any): ResolverResult {
+  // Só classificamos conversas resolvidas na Camada 2
+  if (conv.status !== 'resolved') {
+    return { type: 'unclassified', method: 'none' };
+  }
+  
   const custom = conv.custom_attributes || {};
   const additional = conv.additional_attributes || {};
   
   // PRIORIDADE 1: Campo explícito resolved_by (gravado pelo n8n)
   const resolvedBy = custom.resolved_by || additional.resolved_by;
-  const handoffToHuman = custom.handoff_to_human === true || additional.handoff_to_human === true;
   
   if (resolvedBy === 'ai') {
-    return { 
-      type: 'ai', 
-      method: 'explicit', 
-      handoff: handoffToHuman
-    };
+    return { type: 'ai', method: 'explicit' };
   }
   if (resolvedBy === 'human') {
-    return { 
-      type: 'human', 
-      method: 'explicit', 
-      handoff: handoffToHuman
-    };
+    return { type: 'human', method: 'explicit' };
   }
   
   // PRIORIDADE 2: Bot nativo do Chatwoot
@@ -51,39 +65,28 @@ function classifyConversation(conv: any): ClassificationResult {
   const hasAgentBotId = !!conv.agent_bot_id;
   
   if (hasBotAssignee || hasAgentBotId) {
-    return { type: 'ai', method: 'bot_native', handoff: false };
+    return { type: 'ai', method: 'bot_native' };
   }
   
-  // PRIORIDADE 3: Marcadores existentes (ai_responded) + Inferência
+  // PRIORIDADE 3: Inferência baseada em ai_responded + assignee
   const aiResponded = custom.ai_responded === true || additional.ai_responded === true;
   const hasHumanAssignee = !!(conv.meta?.assignee?.id || conv.assignee_id) && !hasBotAssignee;
-  const isResolved = conv.status === 'resolved';
   
   if (aiResponded) {
-    // IA respondeu mas não temos resolved_by explícito
-    // Se há assignee humano e foi resolvido, humano encerrou (transbordo)
-    if (hasHumanAssignee && isResolved) {
-      return { type: 'human', method: 'inferred', handoff: true };
+    // IA respondeu mas temos assignee humano = humano encerrou (transbordo)
+    if (hasHumanAssignee) {
+      return { type: 'human', method: 'inferred' };
     }
-    // Se foi resolvido sem assignee humano, IA encerrou
-    if (isResolved) {
-      return { type: 'ai', method: 'inferred', handoff: false };
-    }
-    // Ainda aberta, iniciada por IA
-    return { type: 'ai', method: 'inferred', handoff: false };
+    // IA respondeu sem assignee humano = IA resolveu
+    return { type: 'ai', method: 'inferred' };
   }
   
-  // PRIORIDADE 4: Fallback - Assignee humano resolveu
-  if (hasHumanAssignee && isResolved) {
-    return { type: 'human', method: 'fallback', handoff: false };
-  }
-  
-  // Conversas abertas com assignee humano
+  // PRIORIDADE 4: Fallback - Assignee humano encerrou
   if (hasHumanAssignee) {
-    return { type: 'human', method: 'fallback', handoff: false };
+    return { type: 'human', method: 'fallback' };
   }
   
-  return { type: 'unclassified', method: 'none', handoff: false };
+  return { type: 'unclassified', method: 'none' };
 }
 
 async function fetchWithRetry(url: string, options: RequestInit, retries = 2): Promise<Response> {
@@ -286,24 +289,33 @@ serve(async (req) => {
       afterAgentFilter: finalConversations.length,
     });
 
-    // Calculate metrics from conversations
+    // ========================================================================
+    // CONTADORES
+    // ========================================================================
     let openCount = 0;
     let resolvedCount = 0;
     let pendingCount = 0;
     let unattendedCount = 0;
 
-    // Contadores de classificação
-    const resolucoes = {
-      ia: { total: 0, explicito: 0, inferido: 0 },
+    // CAMADA 1: Atendimento em tempo real (conversas abertas)
+    const atendimento = {
+      total: 0,
+      ia: 0,
+      humano: 0,
+      semAssignee: 0,
+      transbordoEmAndamento: 0,
+    };
+
+    // CAMADA 2: Resolução (conversas resolvidas)
+    const resolucao = {
+      total: 0,
+      ia: { total: 0, explicito: 0, botNativo: 0, inferido: 0 },
       humano: { total: 0, explicito: 0, inferido: 0 },
       naoClassificado: 0,
+      transbordoFinalizado: 0,
     };
-    
-    // Transbordo tracking
-    let transbordoCount = 0;
-    let iniciadasPorIA = 0;
 
-    // Classification method audit
+    // Classificação audit
     const classificacao = {
       metodologiaExplicita: 0,
       metodologiaInferida: 0,
@@ -362,45 +374,75 @@ serve(async (req) => {
         unattendedCount++;
       }
 
-      // NOVA LÓGICA: Classificação híbrida
-      const classification = classifyConversation(conv);
-      
-      // Contabilizar por tipo
-      if (classification.type === 'ai') {
-        resolucoes.ia.total++;
-        if (classification.method === 'explicit') {
-          resolucoes.ia.explicito++;
-          classificacao.metodologiaExplicita++;
-        } else if (classification.method === 'bot_native') {
-          classificacao.metodologiaBotNativo++;
+      const custom = conv.custom_attributes || {};
+      const additional = conv.additional_attributes || {};
+      const aiResponded = custom.ai_responded === true || additional.ai_responded === true;
+      const handoffMarked = custom.handoff_to_human === true || additional.handoff_to_human === true;
+      const hasBotAssignee = conv.meta?.assignee?.type === 'AgentBot' || !!conv.agent_bot_id;
+      const hasHumanAssignee = !!(conv.meta?.assignee?.id || conv.assignee_id) && !hasBotAssignee;
+
+      // ======================================================================
+      // CAMADA 1: Atendimento (todas as conversas abertas)
+      // ======================================================================
+      if (conv.status === 'open') {
+        atendimento.total++;
+        const handler = classifyCurrentHandler(conv);
+        
+        if (handler === 'ai') {
+          atendimento.ia++;
+        } else if (handler === 'human') {
+          atendimento.humano++;
         } else {
-          resolucoes.ia.inferido++;
-          classificacao.metodologiaInferida++;
+          atendimento.semAssignee++;
         }
-        iniciadasPorIA++;
-      } else if (classification.type === 'human') {
-        resolucoes.humano.total++;
-        if (classification.method === 'explicit') {
-          resolucoes.humano.explicito++;
-          classificacao.metodologiaExplicita++;
-        } else if (classification.method === 'fallback') {
-          classificacao.metodologiaFallback++;
+        
+        // Detectar transbordo em andamento: IA respondeu + agora tem humano
+        if ((aiResponded || handoffMarked) && hasHumanAssignee) {
+          atendimento.transbordoEmAndamento++;
+        }
+      }
+
+      // ======================================================================
+      // CAMADA 2: Resolução (apenas conversas resolvidas)
+      // ======================================================================
+      if (conv.status === 'resolved') {
+        resolucao.total++;
+        const resolver = classifyResolver(conv);
+        
+        if (resolver.type === 'ai') {
+          resolucao.ia.total++;
+          if (resolver.method === 'explicit') {
+            resolucao.ia.explicito++;
+            classificacao.metodologiaExplicita++;
+          } else if (resolver.method === 'bot_native') {
+            resolucao.ia.botNativo++;
+            classificacao.metodologiaBotNativo++;
+          } else if (resolver.method === 'inferred') {
+            resolucao.ia.inferido++;
+            classificacao.metodologiaInferida++;
+          }
+        } else if (resolver.type === 'human') {
+          resolucao.humano.total++;
+          if (resolver.method === 'explicit') {
+            resolucao.humano.explicito++;
+            classificacao.metodologiaExplicita++;
+          } else if (resolver.method === 'inferred') {
+            resolucao.humano.inferido++;
+            classificacao.metodologiaInferida++;
+          } else if (resolver.method === 'fallback') {
+            classificacao.metodologiaFallback++;
+          }
         } else {
-          resolucoes.humano.inferido++;
-          classificacao.metodologiaInferida++;
+          resolucao.naoClassificado++;
         }
-      } else {
-        resolucoes.naoClassificado++;
+        
+        // Transbordo finalizado: IA iniciou (ou marcou handoff) + humano fechou
+        if ((aiResponded || handoffMarked) && resolver.type === 'human') {
+          resolucao.transbordoFinalizado++;
+        }
       }
-      
-      // Transbordo: conversas que tiveram handoff
-      if (classification.handoff) {
-        transbordoCount++;
-      }
-      
+
       // Track agent stats (human agents only)
-      const hasHumanAssignee = !!(conv.meta?.assignee?.id || conv.assignee_id) && 
-                               conv.meta?.assignee?.type !== 'AgentBot';
       if (hasHumanAssignee) {
         const agentIdVal = conv.meta?.assignee?.id || conv.assignee_id;
         if (agentStats[agentIdVal]) {
@@ -452,40 +494,43 @@ serve(async (req) => {
       }
     }
 
-    // Debug log para classificação
+    // Debug log
     console.log('[Chatwoot Metrics] Classification results:', {
-      resolucoes,
-      transbordoCount,
-      iniciadasPorIA,
+      atendimento,
+      resolucao,
       classificacao,
-      openConversations: openCount,
-      backlog,
     });
 
-    // Log sample conversations for debugging
-    if (finalConversations.length > 0) {
-      const samplesToLog = finalConversations.slice(0, 3);
-      samplesToLog.forEach((conv: any, idx: number) => {
-        const classification = classifyConversation(conv);
-        console.log(`[Chatwoot Metrics] Conv ${conv.id}:`, {
-          status: conv.status,
-          classification: classification.type,
-          method: classification.method,
-          handoff: classification.handoff,
-          custom_attributes: conv.custom_attributes || {},
-        });
-      });
-    }
-
-    // Calculate percentages (usando totais classificados)
-    const totalClassificado = resolucoes.ia.total + resolucoes.humano.total;
-    const percentualIA = totalClassificado > 0 ? Math.round((resolucoes.ia.total / totalClassificado) * 100) : 0;
-    const percentualHumano = totalClassificado > 0 ? 100 - percentualIA : 0;
+    // ========================================================================
+    // TAXAS CALCULADAS
+    // ========================================================================
+    const totalResolvidosClassificados = resolucao.ia.total + resolucao.humano.total;
     
-    // Taxa de transbordo real (% de conversas iniciadas por IA que tiveram handoff)
-    const taxaTransbordoReal = iniciadasPorIA > 0 
-      ? Math.round((transbordoCount / iniciadasPorIA) * 100) 
+    // Taxa de resolução IA (% das resolvidas classificadas)
+    const taxaResolucaoIA = totalResolvidosClassificados > 0 
+      ? Math.round((resolucao.ia.total / totalResolvidosClassificados) * 100) 
       : 0;
+    const taxaResolucaoHumano = totalResolvidosClassificados > 0 
+      ? 100 - taxaResolucaoIA 
+      : 0;
+    
+    // Taxa de transbordo (% das iniciadas por IA que terminaram com humano)
+    const iniciadasPorIACount = resolucao.ia.total + resolucao.transbordoFinalizado;
+    const taxaTransbordo = iniciadasPorIACount > 0
+      ? Math.round((resolucao.transbordoFinalizado / iniciadasPorIACount) * 100)
+      : 0;
+    
+    // Eficiência da IA (% de conversas que IA resolveu sozinha do total resolvido)
+    const eficienciaIA = resolucao.total > 0
+      ? Math.round((resolucao.ia.total / resolucao.total) * 100)
+      : 0;
+
+    const taxas = {
+      resolucaoIA: `${taxaResolucaoIA}%`,
+      resolucaoHumano: `${taxaResolucaoHumano}%`,
+      transbordo: `${taxaTransbordo}%`,
+      eficienciaIA: `${eficienciaIA}%`,
+    };
 
     // Format time helper
     const formatTime = (ms: number): string => {
@@ -558,38 +603,41 @@ serve(async (req) => {
     const response = {
       success: true,
       data: {
-        // KPIs
+        // KPIs básicos
         totalLeads: finalConversations.length,
         conversasAtivas: openCount,
         conversasResolvidas: resolvedCount,
         conversasPendentes: pendingCount,
         conversasSemResposta: unattendedCount,
 
-        // NOVA ESTRUTURA: Resoluções detalhadas
-        resolucoes,
+        // CAMADA 1: Atendimento em tempo real
+        atendimento,
         
-        // Contagens absolutas (retrocompatibilidade)
-        atendimentosIA: resolucoes.ia.total,
-        atendimentosHumano: resolucoes.humano.total,
-        atendimentosClassificados: totalClassificado,
+        // CAMADA 2: Resolução (histórico)
+        resolucao,
         
-        // IA vs Human percentages
-        percentualIA,
-        percentualHumano,
+        // Taxas calculadas
+        taxas,
         
-        // Transbordo
+        // Retrocompatibilidade (campos antigos)
+        atendimentosIA: resolucao.ia.total,
+        atendimentosHumano: resolucao.humano.total,
+        atendimentosClassificados: totalResolvidosClassificados,
+        percentualIA: taxaResolucaoIA,
+        percentualHumano: taxaResolucaoHumano,
+        taxaTransbordo: taxas.transbordo,
+        
+        // Transbordo detalhado
         transbordo: {
-          total: transbordoCount,
-          iniciadasPorIA,
-          taxa: `${taxaTransbordoReal}%`,
+          total: resolucao.transbordoFinalizado,
+          emAndamento: atendimento.transbordoEmAndamento,
+          iniciadasPorIA: iniciadasPorIACount,
+          taxa: taxas.transbordo,
         },
         
         // Time metrics
         tempoMedioPrimeiraResposta: formatTime(avgFirstResponseMs),
         tempoMedioResolucao: '0s', // Would need message-level data
-        
-        // Legacy transbordo rate (mantido para compatibilidade)
-        taxaTransbordo: `${taxaTransbordoReal}%`,
         
         // Channel breakdown
         conversasPorCanal,
@@ -613,7 +661,8 @@ serve(async (req) => {
         _debug: {
           totalConversationsRaw: allConversations.length,
           totalConversationsFiltered: finalConversations.length,
-          resolucoes,
+          atendimento,
+          resolucao,
           classificacao,
           inboxesCount: inboxes.length,
           agentsCount: agents.length,
@@ -625,8 +674,9 @@ serve(async (req) => {
     console.log('[Chatwoot Metrics] Response ready:', {
       totalLeads: response.data.totalLeads,
       conversasAtivas: response.data.conversasAtivas,
-      resolucoes: response.data.resolucoes,
-      transbordo: response.data.transbordo,
+      atendimento: response.data.atendimento,
+      resolucao: response.data.resolucao,
+      taxas: response.data.taxas,
       agentes: response.data.agentes.length,
     });
 
