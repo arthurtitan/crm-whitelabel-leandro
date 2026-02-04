@@ -126,6 +126,10 @@ export default function SuperAdminAccountsPage() {
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [connectionResult, setConnectionResult] = useState<ChatwootConnectionResult | null>(null);
 
+  // Edit modal connection state
+  const [editConnectionStatus, setEditConnectionStatus] = useState<ConnectionStatus>('idle');
+  const [editConnectionError, setEditConnectionError] = useState<string | null>(null);
+
   // Wizard state
   const [wizardStep, setWizardStep] = useState<WizardStep>('form');
   const [selectedAgentIds, setSelectedAgentIds] = useState<number[]>([]);
@@ -412,6 +416,39 @@ export default function SuperAdminAccountsPage() {
       toast.error('Erro ao alterar status: ' + error.message);
     }
   };
+
+  const handleEditTestConnection = async () => {
+    if (!editingAccount) return;
+    
+    setEditConnectionStatus('loading');
+    setEditConnectionError(null);
+    
+    try {
+      const result = await accountsCloudService.testChatwootConnection(
+        editingAccount.chatwoot_base_url || '',
+        editingAccount.chatwoot_account_id || '',
+        editingAccount.chatwoot_api_key || ''
+      );
+      
+      if (result.success) {
+        setEditConnectionStatus('success');
+        toast.success(result.message);
+      } else {
+        setEditConnectionStatus('error');
+        setEditConnectionError(result.message);
+        toast.error(result.message);
+      }
+    } catch (e: any) {
+      setEditConnectionStatus('error');
+      setEditConnectionError(e?.message || 'Erro inesperado');
+      toast.error(e?.message || 'Erro ao testar conexão');
+    }
+  };
+
+  const canTestEditConnection = editingAccount &&
+    (editingAccount.chatwoot_base_url || '').trim() !== '' &&
+    (editingAccount.chatwoot_account_id || '').trim() !== '' &&
+    (editingAccount.chatwoot_api_key || '').trim() !== '';
 
   const canTestConnection = formData.chatwootEnabled && 
     formData.chatwootBaseUrl.trim() !== '' &&
@@ -859,14 +896,20 @@ export default function SuperAdminAccountsPage() {
       </Card>
 
       {/* Edit Dialog */}
-      <Dialog open={!!editingAccount} onOpenChange={(open) => !open && setEditingAccount(null)}>
-        <DialogContent>
-          <DialogHeader>
+      <Dialog open={!!editingAccount} onOpenChange={(open) => {
+        if (!open) {
+          setEditingAccount(null);
+          setEditConnectionStatus('idle');
+          setEditConnectionError(null);
+        }
+      }}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>Editar Conta</DialogTitle>
             <DialogDescription>Atualize as informações da conta</DialogDescription>
           </DialogHeader>
           {editingAccount && (
-            <div className="space-y-4 py-4">
+            <div className="space-y-4 py-4 overflow-y-auto flex-1 px-1">
               <div className="space-y-2">
                 <Label htmlFor="edit-nome">Nome</Label>
                 <Input
@@ -890,27 +933,100 @@ export default function SuperAdminAccountsPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-chatwoot-url">URL Chatwoot</Label>
-                <Input
-                  id="edit-chatwoot-url"
-                  value={editingAccount.chatwoot_base_url || ''}
-                  onChange={(e) => setEditingAccount({ ...editingAccount, chatwoot_base_url: e.target.value })}
-                  placeholder="https://app.chatwoot.com"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-chatwoot-id">Account ID Chatwoot</Label>
-                <Input
-                  id="edit-chatwoot-id"
-                  value={editingAccount.chatwoot_account_id || ''}
-                  onChange={(e) => setEditingAccount({ ...editingAccount, chatwoot_account_id: e.target.value })}
-                />
+
+              {/* Chatwoot Integration Section */}
+              <div className="space-y-4 rounded-lg border p-4">
+                <h4 className="text-sm font-medium">Integração Chatwoot</h4>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="edit-chatwoot-url">URL da Instância</Label>
+                  <Input
+                    id="edit-chatwoot-url"
+                    value={editingAccount.chatwoot_base_url || ''}
+                    onChange={(e) => setEditingAccount({ ...editingAccount, chatwoot_base_url: e.target.value })}
+                    placeholder="https://app.chatwoot.com"
+                  />
+                  <p className="text-xs text-muted-foreground">URL do Chatwoot Cloud ou self-hosted</p>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="edit-chatwoot-id">Account ID</Label>
+                  <Input
+                    id="edit-chatwoot-id"
+                    value={editingAccount.chatwoot_account_id || ''}
+                    onChange={(e) => setEditingAccount({ ...editingAccount, chatwoot_account_id: e.target.value })}
+                    placeholder="Ex: 1"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="edit-chatwoot-api-key">API Key</Label>
+                  <Input
+                    id="edit-chatwoot-api-key"
+                    type="password"
+                    value={editingAccount.chatwoot_api_key || ''}
+                    onChange={(e) => setEditingAccount({ ...editingAccount, chatwoot_api_key: e.target.value })}
+                    placeholder="Cole sua API Key aqui"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Encontre em Configurações → Conta → Token de Acesso
+                  </p>
+                </div>
+                
+                {/* Test Connection Button */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleEditTestConnection}
+                  disabled={!canTestEditConnection || editConnectionStatus === 'loading'}
+                  className="w-full"
+                >
+                  {editConnectionStatus === 'loading' ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Testando...
+                    </>
+                  ) : editConnectionStatus === 'success' ? (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 mr-2 text-green-500" />
+                      Conexão verificada!
+                    </>
+                  ) : editConnectionStatus === 'error' ? (
+                    <>
+                      <XCircle className="w-4 h-4 mr-2 text-red-500" />
+                      Testar novamente
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Testar Conexão
+                    </>
+                  )}
+                </Button>
+                
+                {/* Connection Status Feedback */}
+                {editConnectionStatus === 'success' && (
+                  <p className="text-sm text-green-600 flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4" />
+                    Conexão estabelecida com sucesso!
+                  </p>
+                )}
+                {editConnectionStatus === 'error' && editConnectionError && (
+                  <p className="text-sm text-red-600 flex items-center gap-2">
+                    <XCircle className="w-4 h-4" />
+                    {editConnectionError}
+                  </p>
+                )}
               </div>
             </div>
           )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingAccount(null)}>
+          <DialogFooter className="flex-shrink-0">
+            <Button variant="outline" onClick={() => {
+              setEditingAccount(null);
+              setEditConnectionStatus('idle');
+              setEditConnectionError(null);
+            }}>
               Cancelar
             </Button>
             <Button onClick={handleUpdate} disabled={isSaving}>
