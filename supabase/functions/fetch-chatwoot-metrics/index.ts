@@ -18,26 +18,21 @@ interface MetricsRequest {
 
 // ============================================================================
 // CAMADA 1: ATENDIMENTO EM TEMPO REAL
-// Quem ESTÁ atendendo agora? (baseado no assignee atual)
+// Quem ESTÁ atendendo agora? (baseado em ai_responded e assignee)
 // ============================================================================
 function classifyCurrentHandler(conv: any): 'ai' | 'human' | 'none' {
-  const hasBotAssignee = conv.meta?.assignee?.type === 'AgentBot' || !!conv.agent_bot_id;
-  const hasHumanAssignee = !!(conv.meta?.assignee?.id || conv.assignee_id) && !hasBotAssignee;
-
-  // 1) Bot nativo sempre conta como IA
-  if (hasBotAssignee) return 'ai';
-
-  // 2) ASSIGNEE MANDA: se há humano atribuído, é atendimento humano
-  //    (mesmo que ai_responded exista - o humano "assumiu" a conversa)
-  if (hasHumanAssignee) return 'human';
-
-  // 3) Se não há assignee humano mas a IA respondeu, conta como IA
   const custom = conv.custom_attributes || {};
   const additional = conv.additional_attributes || {};
   const aiResponded = custom.ai_responded === true || additional.ai_responded === true;
-  
+  const hasHumanAssignee = !!(conv.meta?.assignee?.id || conv.assignee_id);
+
+  // PRIORIDADE 1: ai_responded = true → IA atendendo
   if (aiResponded) return 'ai';
 
+  // PRIORIDADE 2: Assignee humano (sem ai_responded) → Humano atendendo
+  if (hasHumanAssignee) return 'human';
+
+  // PRIORIDADE 3: Nenhum dos anteriores → Aguardando
   return 'none';
 }
 
