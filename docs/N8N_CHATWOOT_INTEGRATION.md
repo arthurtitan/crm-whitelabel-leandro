@@ -238,7 +238,7 @@ POST /assignments
 
 ---
 
-## Passo 5: Marcar resolved_by Antes de Resolver
+## Passo 5: Marcar resolved_by Antes de Resolver (Apenas IA)
 
 ### Quando IA Resolve
 
@@ -254,19 +254,13 @@ POST /custom_attributes
 
 ### Quando Humano Resolve
 
-Configure um webhook para `conversation_status_changed` que detecte:
-- Status mudou para `resolved`
-- `handoff_to_human` era `true` ou há assignee humano
-
-Então setar:
-```json
-POST /custom_attributes
-{
-  "custom_attributes": {
-    "resolved_by": "human"
-  }
-}
-```
+> ⚠️ **NÃO é necessário configurar no n8n!**
+> 
+> O CRM detecta automaticamente quando um humano resolve a conversa através da lógica:
+> - Se `handoff_to_human: true` E status mudou para `resolved` → foi humano
+> - Se não há `resolved_by: "ai"` marcado → assume resolução humana
+> 
+> Isso evita complexidade desnecessária no n8n.
 
 ---
 
@@ -277,8 +271,9 @@ POST /custom_attributes
 | **1. IA Responde** | Após resposta OpenAI | Marcar `ai_responded: true` |
 | **2. Transbordo** | IA detecta necessidade | Marcar `handoff_to_human: true` + atribuir agente |
 | **3. IA Resolve** | Antes de resolver | Marcar `resolved_by: "ai"` |
-| **4. Humano Resolve** | Webhook: resolved + humano | Marcar `resolved_by: "human"` |
-| **5. Reset Ciclo** | Webhook: resolved → open | Limpar todos os atributos |
+| **4. Reset Ciclo** | Webhook: resolved → open | Limpar todos os atributos |
+
+> 💡 **Nota:** O fluxo "Humano Resolve" foi removido pois o CRM já detecta isso automaticamente.
 
 ---
 
