@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -599,6 +600,84 @@ serve(async (req) => {
         totalConversas: total,
       }));
 
+    // ========================================================================
+    // RESOLUTION LOGS: Inferir resoluções humanas + consultar histórico
+    // ========================================================================
+    let historicoResolucoes = { totalIA: 0, totalHumano: 0, percentualIA: 0, percentualHumano: 0 };
+    
+    try {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      const supabase = createClient(supabaseUrl, supabaseKey);
+
+      // Buscar account_id pelo accountId do Chatwoot
+      const { data: accountData } = await supabase
+        .from('accounts')
+        .select('id')
+        .eq('chatwoot_account_id', normalizedAccountId)
+        .maybeSingle();
+
+      if (accountData?.id) {
+        const dbAccountId = accountData.id;
+
+        // Inferir resoluções humanas para conversas resolvidas sem resolved_by: "ai"
+        const resolvedConversations = finalConversations.filter((c: any) => c.status === 'resolved');
+        
+        for (const conv of resolvedConversations) {
+          const custom = conv.custom_attributes || {};
+          const additional = conv.additional_attributes || {};
+          const resolvedByAttr = custom.resolved_by || additional.resolved_by;
+          
+          // Se não tem resolved_by: "ai", inferir como humano
+          if (resolvedByAttr !== 'ai') {
+            const resolvedAt = conv.last_activity_at 
+              ? new Date(conv.last_activity_at * 1000).toISOString()
+              : new Date().toISOString();
+
+            await supabase
+              .from('resolution_logs')
+              .insert({
+                account_id: dbAccountId,
+                conversation_id: conv.id,
+                resolved_by: 'human',
+                resolution_type: 'inferred',
+                agent_id: conv.meta?.assignee?.id || conv.assignee_id || null,
+                resolved_at: resolvedAt,
+              })
+              .then(({ error }) => {
+                // Ignore duplicate (23505) - already logged
+                if (error && error.code !== '23505') {
+                  console.error('[Resolution Log] Insert error:', error.message);
+                }
+              });
+          }
+        }
+
+        // Consultar totais históricos filtrados por período
+        const { data: totals } = await supabase
+          .from('resolution_logs')
+          .select('resolved_by')
+          .eq('account_id', dbAccountId)
+          .gte('resolved_at', dateFrom)
+          .lte('resolved_at', dateTo);
+
+        if (totals && totals.length > 0) {
+          const aiCount = totals.filter(r => r.resolved_by === 'ai').length;
+          const humanCount = totals.filter(r => r.resolved_by === 'human').length;
+          const total = aiCount + humanCount;
+          
+          historicoResolucoes = {
+            totalIA: aiCount,
+            totalHumano: humanCount,
+            percentualIA: total > 0 ? Math.round((aiCount / total) * 100) : 0,
+            percentualHumano: total > 0 ? Math.round((humanCount / total) * 100) : 0,
+          };
+        }
+      }
+    } catch (dbErr) {
+      console.error('[Resolution Logs] DB error (non-fatal):', dbErr);
+    }
+
     const response = {
       success: true,
       data: {
@@ -633,9 +712,12 @@ serve(async (req) => {
           taxa: taxas.transbordo,
         },
         
+        // Histórico de resoluções (do banco de dados)
+        historicoResolucoes,
+        
         // Time metrics
         tempoMedioPrimeiraResposta: formatTime(avgFirstResponseMs),
-        tempoMedioResolucao: '0s', // Would need message-level data
+        tempoMedioResolucao: '0s',
         
         // Channel breakdown
         conversasPorCanal,
@@ -662,6 +744,7 @@ serve(async (req) => {
           atendimento,
           resolucao,
           classificacao,
+          historicoResolucoes,
           inboxesCount: inboxes.length,
           agentsCount: agents.length,
           dateRange: { from: dateFrom, to: dateTo },
