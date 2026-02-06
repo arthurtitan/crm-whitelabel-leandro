@@ -242,7 +242,9 @@ POST /assignments
 
 ### Quando IA Resolve
 
-Antes de mudar status para `resolved`:
+Antes de mudar status para `resolved`, executar **dois passos**:
+
+**5.1 Marcar custom_attribute:**
 ```json
 POST /custom_attributes
 {
@@ -252,15 +254,80 @@ POST /custom_attributes
 }
 ```
 
+**5.2 Registrar no banco de dados (resolution_logs):**
+```
+POST https://ptcagwncwtuvcuqlwdzj.supabase.co/functions/v1/log-resolution
+
+Headers:
+  Content-Type: application/json
+
+Body:
+{
+  "account_id": "UUID_DA_CONTA",
+  "conversation_id": {{ $json.conversation.id }},
+  "resolved_by": "ai",
+  "resolution_type": "explicit"
+}
+```
+
+> 💡 O `account_id` é o UUID da conta no CRM (tabela `accounts`), não o ID numérico do Chatwoot.
+> A edge function usa `ON CONFLICT DO NOTHING` para idempotência — chamadas duplicadas são ignoradas.
+
 ### Quando Humano Resolve
 
 > ⚠️ **NÃO é necessário configurar no n8n!**
 > 
-> O CRM detecta automaticamente quando um humano resolve a conversa através da lógica:
-> - Se `handoff_to_human: true` E status mudou para `resolved` → foi humano
-> - Se não há `resolved_by: "ai"` marcado → assume resolução humana
+> O CRM registra automaticamente resoluções humanas no banco de dados:
+> - Quando o dashboard carrega, a edge function `fetch-chatwoot-metrics` detecta conversas resolvidas sem `resolved_by: "ai"`
+> - Insere automaticamente na tabela `resolution_logs` com `resolved_by: "human"` e `resolution_type: "inferred"`
+> - Duplicatas são ignoradas pelo índice único
 > 
-> Isso evita complexidade desnecessária no n8n.
+> Isso elimina qualquer necessidade de fluxo n8n para resolução humana.
+
+---
+
+## Passo 6: Tabela resolution_logs (Métricas Históricas)
+
+A tabela `resolution_logs` armazena cada evento de resolução como uma linha independente, permitindo consultas históricas precisas.
+
+### Estrutura
+
+| Coluna | Tipo | Descrição |
+|--------|------|-----------|
+| `account_id` | uuid | Conta dona da métrica |
+| `conversation_id` | integer | ID da conversa no Chatwoot |
+| `resolved_by` | text | "ai" ou "human" |
+| `resolution_type` | text | "explicit" (via n8n) ou "inferred" (auto-detectado) |
+| `agent_id` | integer | ID do agente (se aplicável) |
+| `resolved_at` | timestamptz | Quando foi resolvido |
+
+### Fluxo de Dados
+
+```
+IA resolve conversa:
+  n8n → POST /custom_attributes { resolved_by: "ai" }
+  n8n → POST /log-resolution { resolved_by: "ai" }
+  n8n → POST /toggle_status (resolved)
+
+Humano resolve conversa:
+  Humano clica "Resolver" no Chatwoot
+  Dashboard abre → fetch-chatwoot-metrics detecta e insere automaticamente
+  → INSERT resolution_logs { resolved_by: "human", resolution_type: "inferred" }
+```
+
+### Consulta de Métricas
+
+O dashboard retorna no campo `historicoResolucoes`:
+```json
+{
+  "historicoResolucoes": {
+    "totalIA": 10,
+    "totalHumano": 10,
+    "percentualIA": 50,
+    "percentualHumano": 50
+  }
+}
+```
 
 ---
 
@@ -270,10 +337,10 @@ POST /custom_attributes
 |-------|---------|------|
 | **1. IA Responde** | Após resposta OpenAI | Marcar `ai_responded: true` |
 | **2. Transbordo** | IA detecta necessidade | Marcar `handoff_to_human: true` + atribuir agente |
-| **3. IA Resolve** | Antes de resolver | Marcar `resolved_by: "ai"` |
+| **3. IA Resolve** | Antes de resolver | Marcar `resolved_by: "ai"` + POST `/log-resolution` |
 | **4. Reset Ciclo** | Webhook: resolved → open | Limpar todos os atributos |
 
-> 💡 **Nota:** O fluxo "Humano Resolve" foi removido pois o CRM já detecta isso automaticamente.
+> 💡 **Nota:** Resoluções humanas são registradas automaticamente pelo CRM, sem necessidade de fluxo n8n.
 
 ---
 

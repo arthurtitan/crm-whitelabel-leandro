@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.delete-lead]
 verify_jwt = false
+
+[functions.log-resolution]
+verify_jwt = false

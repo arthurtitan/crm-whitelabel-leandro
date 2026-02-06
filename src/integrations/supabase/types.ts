@@ -481,6 +481,47 @@ export type Database = {
           },
         ]
       }
+      resolution_logs: {
+        Row: {
+          account_id: string
+          agent_id: number | null
+          conversation_id: number
+          created_at: string
+          id: string
+          resolution_type: string
+          resolved_at: string
+          resolved_by: string
+        }
+        Insert: {
+          account_id: string
+          agent_id?: number | null
+          conversation_id: number
+          created_at?: string
+          id?: string
+          resolution_type?: string
+          resolved_at?: string
+          resolved_by: string
+        }
+        Update: {
+          account_id?: string
+          agent_id?: number | null
+          conversation_id?: number
+          created_at?: string
+          id?: string
+          resolution_type?: string
+          resolved_at?: string
+          resolved_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "resolution_logs_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sale_items: {
         Row: {
           id: string
