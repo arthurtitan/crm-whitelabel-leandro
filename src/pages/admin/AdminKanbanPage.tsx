@@ -476,7 +476,7 @@ export default function AdminKanbanPage() {
   }
 
   return (
-    <div className="page-container h-[calc(100vh-8rem)]">
+    <div className="page-container h-[calc(100vh-8rem)] overflow-hidden">
       {/* Header */}
       <div className="page-header">
         <div className="min-w-0 flex items-center gap-3">
