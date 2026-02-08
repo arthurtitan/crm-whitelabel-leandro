@@ -26,3 +26,9 @@ verify_jwt = false
 
 [functions.sync-chatwoot-labels]
 verify_jwt = false
+
+[functions.update-chatwoot-contact-labels]
+verify_jwt = false
+
+[functions.sync-chatwoot-contacts]
+verify_jwt = false

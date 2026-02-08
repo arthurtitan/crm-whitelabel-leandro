@@ -406,11 +406,19 @@ export const tagsCloudService = {
       throw new Error(insertError.message);
     }
 
-    // Sync to Chatwoot (non-blocking)
+    // Sync to Chatwoot (non-blocking but with full error visibility)
     console.log('[applyStageTag] Syncing to Chatwoot:', { accountId: tag.account_id, contactId, tagId, oldStageTagId });
-    this.updateContactLabelsInChatwoot(tag.account_id, contactId, tagId, oldStageTagId).catch(err => {
-      console.error('Failed to sync contact labels to Chatwoot:', err);
-    });
+    this.updateContactLabelsInChatwoot(tag.account_id, contactId, tagId, oldStageTagId)
+      .then(result => {
+        if (!result.success) {
+          console.error('[applyStageTag] Chatwoot sync returned failure:', result);
+        } else {
+          console.log('[applyStageTag] Chatwoot sync succeeded:', result);
+        }
+      })
+      .catch(err => {
+        console.error('[applyStageTag] Chatwoot sync threw error:', err?.message || err, err);
+      });
   },
 
   /**

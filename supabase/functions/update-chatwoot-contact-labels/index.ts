@@ -136,6 +136,9 @@ serve(async (req) => {
     let currentLabels: string[] = labelsData.payload || [];
     console.log('[Update Contact Labels] Current labels:', currentLabels);
 
+    // Helper: normalize label for comparison (treat hyphens and underscores as equivalent)
+    const normalizeLabel = (s: string) => s.toLowerCase().replace(/[-_\s]+/g, '_').replace(/[^a-z0-9_]/g, '');
+
     // Get all stage tags for this account to know which labels to remove
     const { data: allStageTags } = await supabaseAdmin
       .from('tags')
@@ -144,25 +147,27 @@ serve(async (req) => {
       .eq('type', 'stage')
       .eq('ativo', true);
 
-    const stageTagNames = new Set(allStageTags?.map(t => t.name.toLowerCase()) || []);
-    const stageTagSlugs = new Set(allStageTags?.map(t => t.slug.toLowerCase()) || []);
+    // Build a set of normalized stage identifiers for matching
+    const normalizedStageSet = new Set<string>();
+    for (const t of (allStageTags || [])) {
+      normalizedStageSet.add(normalizeLabel(t.name));
+      normalizedStageSet.add(normalizeLabel(t.slug));
+    }
+    console.log('[Update Contact Labels] Normalized stage set:', Array.from(normalizedStageSet));
 
     // Remove all stage-related labels from current labels
     const filteredLabels = currentLabels.filter(label => {
-      const lowerLabel = label.toLowerCase();
-      const normalizedLabel = lowerLabel.replace(/[^a-z0-9]/g, '');
-      
-      // Check if this label matches any stage tag
-      const isStageLabel = stageTagNames.has(lowerLabel) || 
-                          stageTagSlugs.has(lowerLabel) ||
-                          stageTagSlugs.has(normalizedLabel);
-      
+      const normalized = normalizeLabel(label);
+      const isStageLabel = normalizedStageSet.has(normalized);
+      if (isStageLabel) {
+        console.log('[Update Contact Labels] Removing stage label:', label, '(normalized:', normalized, ')');
+      }
       return !isStageLabel;
     });
 
-    // Add the new stage label
-    // Use the slug format for consistency with Chatwoot
-    const newLabelName = newTag.name.toLowerCase().replace(/\s+/g, '_');
+    // Add the new stage label using slug with underscores (Chatwoot format)
+    const newLabelName = newTag.slug.toLowerCase().replace(/-/g, '_');
+    console.log('[Update Contact Labels] New label from slug:', newTag.slug, '->', newLabelName);
     filteredLabels.push(newLabelName);
 
     console.log('[Update Contact Labels] New labels to set:', filteredLabels);
