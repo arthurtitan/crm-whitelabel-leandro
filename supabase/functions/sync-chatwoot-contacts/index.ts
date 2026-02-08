@@ -171,13 +171,24 @@ serve(async (req) => {
       t
     ]) || []);
     
-    // Helper to find tag by label (tries multiple matching strategies)
+    // Build additional lookup maps with hyphen/underscore normalization
+    const tagsBySlugUnderscore = new Map(existingTags?.map(t => [t.slug.toLowerCase().replace(/-/g, '_'), t]) || []);
+    const tagsBySlugHyphen = new Map(existingTags?.map(t => [t.slug.toLowerCase().replace(/_/g, '-'), t]) || []);
+    const tagsByNameUnderscore = new Map(existingTags?.map(t => [t.name.toLowerCase().replace(/\s+/g, '_'), t]) || []);
+
+    // Helper to find tag by label (tries multiple matching strategies including hyphen/underscore equivalence)
     const findTagByLabel = (labelSlug: string) => {
       const normalizedLabel = labelSlug.toLowerCase();
       const strippedLabel = normalizedLabel.replace(/[^a-z0-9]/g, '');
+      const withUnderscore = normalizedLabel.replace(/-/g, '_');
+      const withHyphen = normalizedLabel.replace(/_/g, '-');
       
       if (tagsBySlug.has(normalizedLabel)) return tagsBySlug.get(normalizedLabel);
+      if (tagsBySlug.has(withHyphen)) return tagsBySlug.get(withHyphen);
+      if (tagsBySlugUnderscore.has(withUnderscore)) return tagsBySlugUnderscore.get(withUnderscore);
+      if (tagsBySlugHyphen.has(withHyphen)) return tagsBySlugHyphen.get(withHyphen);
       if (tagsByName.has(normalizedLabel)) return tagsByName.get(normalizedLabel);
+      if (tagsByNameUnderscore.has(withUnderscore)) return tagsByNameUnderscore.get(withUnderscore);
       if (tagsByNormalizedName.has(strippedLabel)) return tagsByNormalizedName.get(strippedLabel);
       if (tagsBySlug.has(strippedLabel)) return tagsBySlug.get(strippedLabel);
       
