@@ -20,3 +20,9 @@ verify_jwt = false
 
 [functions.log-resolution]
 verify_jwt = false
+
+[functions.push-all-labels-to-chatwoot]
+verify_jwt = false
+
+[functions.sync-chatwoot-labels]
+verify_jwt = false
