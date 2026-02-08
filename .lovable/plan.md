@@ -1,149 +1,110 @@
 
+# Sincronizacao Unilateral: CRM Kanban -> Chatwoot
 
-# Plano: Tabela `resolution_logs` + Edge Function `log-resolution`
+## Resumo da Mudanca
 
-## Contexto
-
-- **IA resolve:** o n8n seta `resolved_by: "ai"` ANTES de encerrar. Neste momento, o n8n tambem chamara `log-resolution` com `resolved_by: "ai"`.
-- **Humano resolve:** nao existe fluxo no n8n para marcar `resolved_by: "human"`. O humano simplesmente clica "Resolver" no Chatwoot. O CRM (edge function) infere que foi humano pela ausencia de `resolved_by: "ai"`.
-
-## Estrategia de Logging
-
-Dois caminhos para registrar na tabela `resolution_logs`:
-
-| Cenario | Quem registra | Como |
-|---------|--------------|------|
-| IA resolve | n8n (Fluxo 3) | POST para `log-resolution` com `resolved_by: "ai"` no mesmo momento que seta o custom attribute |
-| Humano resolve | Edge function `fetch-chatwoot-metrics` | Ao processar conversas resolvidas SEM `resolved_by: "ai"`, grava automaticamente como `resolved_by: "human"` se ainda nao existir log para aquela conversa+timestamp |
-
-Isso elimina a necessidade de qualquer fluxo n8n adicional para o cenario humano.
+Tornar a criacao de labels/etapas **unilateral**: o CRM e a unica fonte de verdade para a estrutura do funil. Toda etapa criada no Kanban sera automaticamente criada como label no Chatwoot. Labels criadas diretamente no Chatwoot **nao** serao importadas para o CRM. Ao trocar de conta Chatwoot, todas as etapas existentes serao recriadas na nova conta.
 
 ---
 
-## Alteracoes Necessarias
+## O que muda para o usuario
 
-### 1. Migracao de Banco de Dados
+1. O botao "Importar Labels" sera **removido** da pagina Kanban
+2. Ao criar uma etapa no Kanban, ela aparecera automaticamente como label no Chatwoot (isso ja funciona)
+3. Ao trocar as credenciais do Chatwoot na conta, todas as etapas existentes no CRM serao **automaticamente recriadas** no novo Chatwoot
+4. O movimento de leads entre etapas continua bilateral (mover no Kanban atualiza Chatwoot e vice-versa via sync)
 
-Criar tabela `resolution_logs`:
+---
 
-```sql
-CREATE TABLE public.resolution_logs (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  account_id uuid NOT NULL REFERENCES public.accounts(id) ON DELETE CASCADE,
-  conversation_id integer NOT NULL,
-  resolved_by text NOT NULL CHECK (resolved_by IN ('ai', 'human')),
-  resolution_type text NOT NULL DEFAULT 'explicit',
-  agent_id integer,
-  resolved_at timestamptz NOT NULL DEFAULT now(),
-  created_at timestamptz NOT NULL DEFAULT now()
-);
+## Alteracoes Tecnicas
 
-CREATE INDEX idx_resolution_logs_account_date
-  ON public.resolution_logs(account_id, resolved_at);
+### 1. Nova Edge Function: `push-all-labels-to-chatwoot`
 
-CREATE UNIQUE INDEX idx_resolution_logs_no_duplicate
-  ON public.resolution_logs(account_id, conversation_id, resolved_at);
+Cria uma edge function que recebe `account_id` e:
+- Busca todas as tags ativas (`type = 'stage'`) da conta
+- Para cada tag, cria a label correspondente no Chatwoot via API
+- Se a label ja existir (mesmo slug), vincula o ID
+- Atualiza o `chatwoot_label_id` de cada tag no banco
+- Retorna resumo: `{ pushed: N, linked: N, errors: [] }`
 
-ALTER TABLE public.resolution_logs ENABLE ROW LEVEL SECURITY;
+Arquivo: `supabase/functions/push-all-labels-to-chatwoot/index.ts`
 
-CREATE POLICY "Members can view resolution logs"
-  ON public.resolution_logs FOR SELECT
-  USING (is_account_member(account_id));
+### 2. Modificar `sync-chatwoot-labels` (limpeza)
 
-CREATE POLICY "Super admin can manage resolution logs"
-  ON public.resolution_logs FOR ALL
-  USING (is_super_admin());
-```
+- Remover a action `import` e manter apenas `list` (usada internamente pelo sync de contatos para mapear labels)
+- Ou simplesmente manter como esta para nao quebrar dependencias, mas o frontend nao chamara mais a action `import`
 
-### 2. Nova Edge Function: `log-resolution`
+### 3. Modificar `tags.cloud.service.ts`
 
-Endpoint chamado pelo n8n quando a IA resolve:
+- **Remover**: metodo `importChatwootLabels` e `fetchChatwootLabels` (nao serao mais utilizados)
+- **Adicionar**: metodo `pushAllLabelsToChatwoot(accountId)` que chama a nova edge function
+- **Modificar**: metodo `createStageTag` -- limpar o `chatwoot_label_id` antigo (se houver) antes de chamar o push, garantindo que a label sera recriada na conta atual
 
-- **Metodo:** POST
-- **Body:** `{ account_id, conversation_id, resolved_by: "ai", resolution_type?, agent_id? }`
-- **Autenticacao:** `verify_jwt = false` (sera chamado pelo n8n)
-- **Logica:** INSERT na tabela com `ON CONFLICT DO NOTHING` para idempotencia
-- **Validacao:** Checa que `resolved_by` e "ai" ou "human", campos obrigatorios presentes
+### 4. Remover `ImportChatwootLabelsDialog.tsx`
 
-### 3. Atualizar `fetch-chatwoot-metrics`
+Componente inteiro sera removido, pois nao havera mais importacao de labels.
 
-Ao processar conversas resolvidas, para cada conversa onde o humano encerrou (inferido pela ausencia de `resolved_by: "ai"`):
+### 5. Modificar `AdminKanbanPage.tsx`
 
-- Verificar se ja existe log na tabela para aquele `conversation_id` com `resolved_at` proximo
-- Se nao existir, inserir automaticamente com `resolved_by: "human"` e `resolution_type: "inferred"`
-- Adicionar consulta agregada a `resolution_logs` para retornar totais historicos no response
+- Remover o botao "Importar Labels" e o estado `showImportDialog`
+- Remover o import e uso do `ImportChatwootLabelsDialog`
+- **Adicionar** botao "Enviar Etapas ao Chatwoot" (ou integrar ao botao Sincronizar existente) que chama `pushAllLabelsToChatwoot`
+- Este botao so aparece quando Chatwoot esta configurado
 
-Novos campos no response:
+### 6. Logica de troca de conta Chatwoot
 
-```json
-{
-  "data": {
-    "historicoResolucoes": {
-      "totalIA": 45,
-      "totalHumano": 55,
-      "percentualIA": 45,
-      "percentualHumano": 55,
-      "porTipo": {
-        "explicit": 40,
-        "handoff": 25,
-        "manual_intervention": 15,
-        "direct_human": 15,
-        "inferred": 5
-      }
-    }
-  }
-}
-```
+Quando o usuario salva novas credenciais do Chatwoot na configuracao da conta:
+- Resetar todos os `chatwoot_label_id` das tags para `null` (as labels antigas pertencem a outra conta)
+- Chamar automaticamente `pushAllLabelsToChatwoot` para recriar todas as etapas no novo Chatwoot
 
-### 4. Atualizar `supabase/config.toml`
+Isso sera feito na edge function `push-all-labels-to-chatwoot` com um parametro opcional `reset_ids: true` que limpa os IDs antigos antes de criar.
 
-Adicionar configuracao para a nova function:
+### 7. Atualizar `CreateStageDialog.tsx`
 
-```toml
-[functions.log-resolution]
-verify_jwt = false
-```
+Nenhuma alteracao necessaria -- ja chama `pushLabelToChatwoot` apos criar a tag. O fluxo existente esta correto.
 
-### 5. Atualizar `docs/N8N_CHATWOOT_INTEGRATION.md`
+---
 
-- Adicionar documentacao do endpoint `log-resolution`
-- Atualizar Fluxo 3 (IA Resolve) para incluir o POST ao `log-resolution`
-- Explicar que resolucoes humanas sao registradas automaticamente pelo CRM
-
-### 6. Instrucao para o n8n (Fluxo 3 - IA Resolve)
-
-Adicionar um no HTTP Request APOS setar `resolved_by: "ai"`:
+## Fluxo Resultante
 
 ```text
-POST https://ptcagwncwtuvcuqlwdzj.supabase.co/functions/v1/log-resolution
+Criar Etapa no Kanban
+  |
+  v
+Salva tag no banco (Supabase)
+  |
+  v
+Push label para Chatwoot (edge function push-chatwoot-label)
+  |
+  v
+Atualiza chatwoot_label_id na tag
 
-Body:
-{
-  "account_id": "UUID_DA_CONTA",
-  "conversation_id": {{ $json.conversation.id }},
-  "resolved_by": "ai",
-  "resolution_type": "explicit"
-}
+
+Trocar Conta Chatwoot
+  |
+  v
+Reset todos chatwoot_label_id para null
+  |
+  v
+Push ALL tags para novo Chatwoot (edge function push-all-labels-to-chatwoot)
+  |
+  v
+Atualiza chatwoot_label_id com novos IDs
+
+
+Mover lead no Kanban <---> Label aplicada no Chatwoot
+  (bilateral, sem alteracao)
 ```
 
 ---
 
-## Resumo do Fluxo
+## Arquivos Afetados
 
-```text
-IA resolve conversa:
-  n8n → POST /custom_attributes { resolved_by: "ai" }
-  n8n → POST /log-resolution { resolved_by: "ai" }  ← NOVO
-  n8n → POST /toggle_status (resolved)
-
-Humano resolve conversa:
-  Humano clica "Resolver" no Chatwoot (nenhum fluxo n8n)
-  Dashboard abre → fetch-chatwoot-metrics detecta conversa resolvida sem "ai"
-  → INSERT automatico na resolution_logs com resolved_by: "human"
-
-Consulta historica:
-  SELECT resolved_by, COUNT(*) FROM resolution_logs
-  WHERE account_id = X GROUP BY resolved_by
-  → ai: 10, human: 10 = 50% / 50%
-```
-
+| Arquivo | Acao |
+|---------|------|
+| `supabase/functions/push-all-labels-to-chatwoot/index.ts` | Criar (nova edge function) |
+| `supabase/config.toml` | Adicionar config da nova function |
+| `src/services/tags.cloud.service.ts` | Remover imports, adicionar pushAll |
+| `src/components/kanban/ImportChatwootLabelsDialog.tsx` | Remover |
+| `src/components/kanban/index.ts` | Remover export do ImportChatwootLabelsDialog |
+| `src/pages/admin/AdminKanbanPage.tsx` | Remover importacao, adicionar botao push |
