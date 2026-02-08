@@ -106,23 +106,22 @@ export function LeadCard({ lead, stage, isDragging, isNew, onClick, onDragStart,
       )}
       style={{ borderLeftColor: stage.color, borderLeftWidth: 3 }}
     >
-      <div className="flex items-start gap-3">
-        <div className="flex-shrink-0 mt-0.5">
-          <GripVertical className="w-4 h-4 text-muted-foreground/50" />
+      <div className="flex items-start gap-2">
+        <div className="flex-shrink-0 mt-1">
+          <GripVertical className="w-4 h-4 text-muted-foreground/40" />
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <Avatar className="h-6 w-6">
-              <AvatarFallback className="text-xs bg-primary/10 text-primary">
-                {getInitials(lead.nome)}
-              </AvatarFallback>
-            </Avatar>
-            <span className="font-medium text-sm truncate">{lead.nome || 'Sem nome'}</span>
-
+        <Avatar className="h-7 w-7 flex-shrink-0">
+          <AvatarFallback className="text-[10px] font-semibold bg-primary/10 text-primary">
+            {getInitials(lead.nome)}
+          </AvatarFallback>
+        </Avatar>
+        <div className="flex-1 min-w-0 overflow-hidden">
+          <div className="flex items-center gap-1.5">
+            <span className="font-medium text-sm truncate block">{lead.nome || 'Sem nome'}</span>
             {saleIndicator && (
               <div
                 className={cn(
-                  'flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium text-white',
+                  'flex items-center gap-0.5 px-1 py-0.5 rounded text-[10px] font-medium text-white flex-shrink-0',
                   saleIndicator.color
                 )}
                 title={`Venda: ${saleIndicator.label}`}
@@ -134,15 +133,15 @@ export function LeadCard({ lead, stage, isDragging, isNew, onClick, onDragStart,
           </div>
 
           {lead.telefone && (
-            <p className="text-xs text-muted-foreground flex items-center gap-1 mb-1">
-              <Phone className="w-3 h-3" />
-              {lead.telefone}
+            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+              <Phone className="w-3 h-3 flex-shrink-0" />
+              <span className="truncate">{lead.telefone}</span>
             </p>
           )}
 
-          <div className="flex items-center justify-between mt-2">
+          <div className="flex items-center justify-between mt-1.5 gap-2">
             {getOriginBadge(lead.origem)}
-            <span className="text-xs text-muted-foreground flex items-center gap-1">
+            <span className="text-[11px] text-muted-foreground flex items-center gap-1 flex-shrink-0">
               <Clock className="w-3 h-3" />
               {format(new Date(lead.updated_at), 'dd/MM', { locale: ptBR })}
             </span>
