@@ -318,6 +318,15 @@
     @apply bg-muted-foreground/30 rounded-full hover:bg-muted-foreground/50;
   }
 
+  /* Hide kanban column scrollbars */
+  .kanban-column [data-radix-scroll-area-viewport]::-webkit-scrollbar {
+    display: none;
+  }
+  .kanban-column [data-radix-scroll-area-viewport] {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
   /* Animation utilities */
   .animate-fade-in {
     animation: fadeIn 0.3s ease-out forwards;
