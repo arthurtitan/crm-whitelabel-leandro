@@ -456,20 +456,26 @@ export const tagsCloudService = {
   },
 
   /**
-   * Fetch Chatwoot labels for an account (without importing)
+   * Push all CRM stage tags to Chatwoot as labels
    */
-  async fetchChatwootLabels(accountId: string): Promise<ChatwootLabel[]> {
+  async pushAllLabelsToChatwoot(accountId: string, resetIds = false): Promise<{
+    success: boolean;
+    pushed: number;
+    linked: number;
+    errors: string[];
+    details: Array<{ name: string; action: string; reason?: string }>;
+  }> {
     const { data: session } = await supabase.auth.getSession();
     if (!session.session) {
       throw new Error('Não autenticado');
     }
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
 
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-chatwoot-labels`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/push-all-labels-to-chatwoot`,
         {
           method: 'POST',
           headers: {
@@ -478,94 +484,38 @@ export const tagsCloudService = {
           },
           body: JSON.stringify({
             account_id: accountId,
-            action: 'list',
+            reset_ids: resetIds,
           }),
           signal: controller.signal,
         }
       );
 
       clearTimeout(timeoutId);
-
-      const result = await response.json();
-
-      if (!response.ok || result.error) {
-        throw new Error(result.error || `Erro HTTP ${response.status}`);
-      }
-
-      return result.labels || [];
-    } catch (err: any) {
-      clearTimeout(timeoutId);
-      if (err.name === 'AbortError') {
-        throw new Error('Timeout ao buscar labels do Chatwoot');
-      }
-      throw err;
-    }
-  },
-
-  /**
-   * Import Chatwoot labels as stage tags
-   */
-  async importChatwootLabels(accountId: string, selectedLabelIds?: number[]): Promise<ImportLabelsResult> {
-    const { data: session } = await supabase.auth.getSession();
-    if (!session.session) {
-      throw new Error('Não autenticado');
-    }
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
-
-    try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-chatwoot-labels`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.session.access_token}`,
-          },
-          body: JSON.stringify({
-            account_id: accountId,
-            action: 'import',
-            selected_label_ids: Array.isArray(selectedLabelIds) && selectedLabelIds.length > 0 ? selectedLabelIds : undefined,
-          }),
-          signal: controller.signal,
-        }
-      );
-
-      clearTimeout(timeoutId);
-
       const result = await response.json();
 
       if (!response.ok) {
         return {
           success: false,
-          imported: 0,
-          updated: 0,
-          skipped: 0,
-          labels: [],
-          error: result.error || `Erro HTTP ${response.status}`,
+          pushed: 0,
+          linked: 0,
+          errors: [result.error || `Erro HTTP ${response.status}`],
+          details: [],
         };
       }
 
-      return {
-        success: true,
-        imported: result.imported || 0,
-        updated: result.updated || 0,
-        skipped: result.skipped || 0,
-        labels: result.labels || [],
-      };
+      return result;
     } catch (err: any) {
       clearTimeout(timeoutId);
       return {
         success: false,
-        imported: 0,
-        updated: 0,
-        skipped: 0,
-        labels: [],
-        error: err.name === 'AbortError' ? 'Timeout ao importar labels' : (err.message || 'Erro desconhecido'),
+        pushed: 0,
+        linked: 0,
+        errors: [err.name === 'AbortError' ? 'Timeout ao enviar etapas' : (err.message || 'Erro desconhecido')],
+        details: [],
       };
     }
   },
+
 
   /**
    * Get the default funnel for an account

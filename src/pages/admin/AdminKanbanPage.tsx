@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect, useCallback, useRef, type DragEvent } fro
 import { useAuth } from '@/contexts/AuthContext';
 import { useFinance } from '@/contexts/FinanceContext';
 import { CreateSaleDialog } from '@/components/finance/CreateSaleDialog';
-import { LeadCard, CreateStageDialog, ImportChatwootLabelsDialog, SyncIndicator, CreateLeadDialog } from '@/components/kanban';
+import { LeadCard, CreateStageDialog, SyncIndicator, CreateLeadDialog } from '@/components/kanban';
 import { Contact } from '@/types/crm';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -47,9 +47,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Trash2,
-  Download,
   RefreshCw,
   ExternalLink,
+  Upload,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -79,8 +79,8 @@ export default function AdminKanbanPage() {
   const [dragOverStage, setDragOverStage] = useState<string | null>(null);
   const [saleContactId, setSaleContactId] = useState<string | null>(null);
   const [deleteConfirmStage, setDeleteConfirmStage] = useState<CloudTag | null>(null);
-  const [showImportDialog, setShowImportDialog] = useState(false);
   const [isSyncingChatwoot, setIsSyncingChatwoot] = useState(false);
+  const [isPushingLabels, setIsPushingLabels] = useState(false);
 
   const isFirstTagsLoad = useRef(true);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
@@ -386,8 +386,29 @@ export default function AdminKanbanPage() {
     window.open(url, '_blank');
   };
 
-  const handleImportComplete = () => {
-    fetchTagsData(false);
+  const handlePushLabelsToChatwoot = async () => {
+    if (!accountId || isPushingLabels) return;
+    
+    setIsPushingLabels(true);
+    try {
+      const result = await tagsCloudService.pushAllLabelsToChatwoot(accountId);
+      
+      if (result.success) {
+        const total = result.pushed + result.linked;
+        if (result.pushed > 0) {
+          toast.success(`Etapas enviadas ao Chatwoot: ${result.pushed} criada(s), ${result.linked} vinculada(s).`);
+        } else {
+          toast.info(`Todas as ${result.linked} etapa(s) já existem no Chatwoot.`);
+        }
+        fetchTagsData(false);
+      } else {
+        toast.error(result.errors[0] || 'Erro ao enviar etapas');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Erro ao enviar etapas ao Chatwoot');
+    } finally {
+      setIsPushingLabels(false);
+    }
   };
 
   const handleSyncChatwoot = async () => {
@@ -491,11 +512,16 @@ export default function AdminKanbanPage() {
                 variant="outline"
                 size="sm"
                 className="gap-2 min-h-[40px] sm:min-h-0"
-                onClick={() => setShowImportDialog(true)}
+                onClick={handlePushLabelsToChatwoot}
+                disabled={isPushingLabels}
               >
-                <Download className="w-4 h-4" />
-                <span className="hidden xs:inline">Importar Labels</span>
-                <span className="xs:hidden">Labels</span>
+                {isPushingLabels ? (
+                  <Upload className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Upload className="w-4 h-4" />
+                )}
+                <span className="hidden xs:inline">Enviar Etapas</span>
+                <span className="xs:hidden">Push</span>
               </Button>
             </>
           )}
@@ -543,18 +569,10 @@ export default function AdminKanbanPage() {
           <div className="text-center space-y-2">
             <h2 className="text-xl font-semibold">Nenhuma etapa criada</h2>
             <p className="text-muted-foreground">
-              {hasChatwootConfig
-                ? 'Importe labels do Chatwoot ou crie etapas manualmente.'
-                : 'Crie sua primeira etapa para começar a usar o Kanban.'}
+              Crie sua primeira etapa para começar a usar o Kanban.
             </p>
           </div>
           <div className="flex gap-2">
-            {hasChatwootConfig && (
-              <Button variant="outline" onClick={() => setShowImportDialog(true)}>
-                <Download className="w-4 h-4 mr-2" />
-                Importar do Chatwoot
-              </Button>
-            )}
             <CreateStageDialog
               trigger={
                 <Button>
@@ -760,15 +778,8 @@ export default function AdminKanbanPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Import Chatwoot Labels Dialog */}
-      {accountId && (
-        <ImportChatwootLabelsDialog
-          accountId={accountId}
-          open={showImportDialog}
-          onOpenChange={setShowImportDialog}
-          onImportComplete={handleImportComplete}
-        />
-      )}
+
+
 
       {saleContactId && (
         <CreateSaleDialog preSelectedContactId={saleContactId} onClose={() => setSaleContactId(null)} />
