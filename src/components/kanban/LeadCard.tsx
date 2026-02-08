@@ -116,8 +116,8 @@ export function LeadCard({ lead, stage, isDragging, isNew, onClick, onDragStart,
           </AvatarFallback>
         </Avatar>
         <div className="flex-1 min-w-0 overflow-hidden">
-          <div className="flex items-center gap-1.5">
-            <span className="font-medium text-sm truncate block">{lead.nome || 'Sem nome'}</span>
+          <div className="flex items-start gap-1.5 flex-wrap">
+            <span className="font-medium text-sm leading-snug break-words">{lead.nome || 'Sem nome'}</span>
             {saleIndicator && (
               <div
                 className={cn(
