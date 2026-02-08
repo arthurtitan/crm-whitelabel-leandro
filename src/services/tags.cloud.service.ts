@@ -430,35 +430,32 @@ export const tagsCloudService = {
     newStageTagId: string,
     oldStageTagId?: string
   ): Promise<{ success: boolean }> {
-    const { data: session } = await supabase.auth.getSession();
-    if (!session.session) {
-      console.warn('Not authenticated, skipping Chatwoot contact label sync');
-      return { success: false };
-    }
-
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/update-chatwoot-contact-labels`,
+      console.log('[Tags Service] Calling update-chatwoot-contact-labels edge function:', {
+        accountId, contactId, newStageTagId, oldStageTagId
+      });
+
+      const { data, error } = await supabase.functions.invoke(
+        'update-chatwoot-contact-labels',
         {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.session.access_token}`,
-          },
-          body: JSON.stringify({
+          body: {
             account_id: accountId,
             contact_id: contactId,
             new_stage_tag_id: newStageTagId,
             old_stage_tag_id: oldStageTagId,
-          }),
+          },
         }
       );
 
-      const result = await response.json();
-      console.log('[Tags Service] Chatwoot contact labels sync result:', result);
-      return result;
+      if (error) {
+        console.error('[Tags Service] Edge function error:', error);
+        return { success: false };
+      }
+
+      console.log('[Tags Service] Chatwoot contact labels sync result:', data);
+      return data || { success: false };
     } catch (err) {
-      console.error('Error updating contact labels in Chatwoot:', err);
+      console.error('[Tags Service] Error updating contact labels in Chatwoot:', err);
       return { success: false };
     }
   },
