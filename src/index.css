@@ -443,11 +443,11 @@
 
   /* Kanban Responsive */
   .kanban-column {
-    @apply w-[80vw] xs:w-[75vw] sm:w-72 md:w-80 flex-shrink-0;
+    @apply w-[85vw] xs:w-[75vw] sm:w-80 md:w-[340px] lg:w-[360px] flex-shrink-0;
   }
 
   .kanban-container {
-    @apply flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory sm:snap-none;
+    @apply flex gap-3 overflow-x-auto pb-4 snap-x snap-mandatory sm:snap-none;
   }
 
   .kanban-column-snap {
