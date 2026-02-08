@@ -41,6 +41,8 @@ interface SyncResult {
   lead_tags_applied: number;
   lead_tags_removed: number;
   stages_created: number;
+  labels_pushed: number;
+  labels_corrected: number;
   errors: string[];
 }
 
@@ -244,6 +246,8 @@ serve(async (req) => {
       lead_tags_applied: 0,
       lead_tags_removed: 0,
       stages_created: 0,
+      labels_pushed: 0,
+      labels_corrected: 0,
       errors: [],
     };
 
@@ -605,6 +609,108 @@ serve(async (req) => {
       }
     }
 
+    // ============== PHASE: CRM -> Chatwoot Label Sync ==============
+    // For each contact with a stage tag in CRM and a chatwoot_conversation_id,
+    // ensure the Chatwoot conversation has the correct stage label
+    console.log('[Sync Contacts] Starting CRM -> Chatwoot label push...');
+
+    // Get all stage lead_tags for this account
+    const stageTagIds = (existingTags || []).map(t => t.id);
+    const { data: allLeadTags } = stageTagIds.length > 0
+      ? await supabaseAdmin
+          .from('lead_tags')
+          .select('contact_id, tag_id')
+          .in('tag_id', stageTagIds)
+      : { data: [] };
+
+    // Get all contacts with chatwoot_conversation_id for this account
+    const { data: contactsWithConv } = await supabaseAdmin
+      .from('contacts')
+      .select('id, chatwoot_conversation_id')
+      .eq('account_id', account_id)
+      .not('chatwoot_conversation_id', 'is', null);
+
+    const convMap = new Map((contactsWithConv || []).map(c => [c.id, c.chatwoot_conversation_id as number]));
+
+    // Build a map: contact_id -> { conversation_id, tag }
+    const contactTagMap = new Map<string, { conversationId: number; tag: any }>();
+    for (const lt of (allLeadTags || [])) {
+      const conversationId = convMap.get(lt.contact_id);
+      if (!conversationId) continue;
+      const tag = existingTags?.find(t => t.id === lt.tag_id);
+      if (!tag) continue;
+      contactTagMap.set(lt.contact_id, { conversationId, tag });
+    }
+
+    console.log('[Sync Contacts] Contacts with stage tags to push:', contactTagMap.size);
+
+    // Build set of all known stage label names (normalized to underscore for Chatwoot)
+    const allStageLabelNames = new Set(
+      (existingTags || []).map(t => t.slug.toLowerCase().replace(/-/g, '_'))
+    );
+
+    for (const [contactId, { conversationId, tag }] of contactTagMap) {
+      try {
+        // The label name in Chatwoot should use underscores
+        const expectedLabel = tag.slug.toLowerCase().replace(/-/g, '_');
+
+        // Fetch current labels on this conversation
+        const convUrl = `${baseUrl}/api/v1/accounts/${chatwoot_account_id}/conversations/${conversationId}`;
+        const convResponse = await fetch(convUrl, {
+          headers: { 'api_access_token': chatwoot_api_key, 'Content-Type': 'application/json' },
+        });
+
+        if (!convResponse.ok) {
+          console.warn('[CRM->CW] Failed to fetch conversation', conversationId, convResponse.status);
+          continue;
+        }
+
+        const convData = await convResponse.json();
+        const currentLabels: string[] = convData.labels || [];
+
+        // Normalize current labels for comparison
+        const normalizedCurrent = currentLabels.map(l => l.toLowerCase().replace(/-/g, '_'));
+
+        // Check if the expected label is already present
+        if (normalizedCurrent.includes(expectedLabel)) {
+          continue;
+        }
+
+        // Build new labels: remove all other stage labels, add expected one
+        const nonStageLabels = currentLabels.filter(l => {
+          const norm = l.toLowerCase().replace(/-/g, '_');
+          return !allStageLabelNames.has(norm);
+        });
+        const newLabels = [...nonStageLabels, expectedLabel];
+
+        console.log('[CRM->CW] Correcting labels for conversation', conversationId,
+          '| current:', currentLabels, '| new:', newLabels);
+
+        // Update labels via Chatwoot API
+        const updateUrl = `${baseUrl}/api/v1/accounts/${chatwoot_account_id}/conversations/${conversationId}/labels`;
+        const updateResponse = await fetch(updateUrl, {
+          method: 'POST',
+          headers: { 'api_access_token': chatwoot_api_key, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ labels: newLabels }),
+        });
+
+        if (updateResponse.ok) {
+          result.labels_corrected++;
+          console.log('[CRM->CW] Labels corrected for conversation', conversationId);
+        } else {
+          const errText = await updateResponse.text();
+          console.error('[CRM->CW] Failed to update labels:', updateResponse.status, errText);
+          result.errors.push(`Failed to push labels for conv ${conversationId}: ${updateResponse.status}`);
+        }
+
+        result.labels_pushed++;
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+        result.errors.push(`Error pushing labels for contact ${contactId}: ${errorMsg}`);
+      }
+    }
+
+    console.log('[Sync Contacts] CRM -> Chatwoot push complete. Pushed:', result.labels_pushed, 'Corrected:', result.labels_corrected);
     console.log('[Sync Contacts] Result:', JSON.stringify(result));
 
     return new Response(
