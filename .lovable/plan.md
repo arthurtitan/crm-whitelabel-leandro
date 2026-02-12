@@ -1,144 +1,111 @@
 
 
-## Implementação: Remover Inferência de Resolução Humana e Adicionar Webhook para Detecção
+## Sync Simplificado de Resoluções Humanas
 
-### Contexto
-Atualmente, a Edge Function `fetch-chatwoot-metrics` executa uma lógica de inferência que tenta inserir resoluções humanas na tabela `resolution_logs` toda vez que o dashboard é carregado. Isso é problemático porque:
-1. Depende do dashboard ser aberto para registrar resoluções humanas
-2. Gera múltiplas tentativas de insert por conversa
-3. Não captura resoluções em tempo real
+### Principio
 
-A nova arquitetura usa um webhook do Chatwoot (`conversation_status_changed`) para detectar resoluções imediatamente quando ocorrem e registrá-las explicitamente via n8n.
+A logica de classificacao para persistencia no banco sera **binaria e simples**:
 
-### Mudanças Técnicas
+- Conversa resolvida COM `custom_attributes.resolved_by = "ai"` --> IA resolveu. O n8n ja logou via `log-resolution`. **SKIP**.
+- Conversa resolvida SEM esse atributo (ou com qualquer outro valor) --> Humano resolveu. **INSERT no banco**.
 
-#### 1. **`supabase/functions/fetch-chatwoot-metrics/index.ts`** (Remover linhas 623-654)
+Isso elimina toda a complexidade de inferencia (bot nativo, transbordo, fallback) para fins de persistencia. O `classifyResolver` atual continua existindo para exibicao no dashboard (Camada 2 visual), mas o INSERT no banco segue a regra binaria.
 
-**O que remover:**
-- Bloco de inferência de resoluções humanas (linhas 623-654)
-- Loop `for (const conv of resolvedConversations)` que tenta inserir na `resolution_logs`
+### Garantias de Integridade
 
-**O que manter:**
-- A consulta histórica (linhas 656-676) que LE os dados já gravados
-- Função `classifyResolver()` continua necessária para a Camada 2 (Resolução) em tempo real
+**Conversas diferentes ao mesmo tempo:**
+O unique constraint em `resolution_logs` inclui `conversation_id`. Conversa 21 (IA) e conversa 45 (humano) sao registros completamente independentes -- nunca colidem.
 
-**Motivo:** As resoluções humanas serão gravadas explicitamente pelo webhook n8n em tempo real. O dashboard só precisa LER os dados históricos, não tentar inferir e gravar.
+**Mesmo conversation_id, ciclos diferentes:**
+Cada ciclo de resolucao gera um `resolved_at` diferente (baseado no `last_activity_at` do Chatwoot). O constraint `(account_id, conversation_id, resolved_at)` permite multiplos registros para a mesma conversa em momentos diferentes.
 
-#### 2. **`docs/N8N_CHATWOOT_INTEGRATION.md`** (Adicionar nova seção)
+**Reset de ciclo (n8n limpa atributos):**
+Quando a conversa e reaberta, o n8n limpa `resolved_by`, `ai_responded`, etc. A sync so processa conversas com `status = "resolved"`, entao conversas abertas sao ignoradas. Quando resolvida novamente, o novo timestamp garante um registro unico.
 
-**Adicionar antes da seção "Quando Humano Resolve":**
-- Novo fluxo n8n: "Detecção Automática de Resolução Humana via Webhook"
-- Configuração completa do webhook no Chatwoot
-- Nodes do n8n detalhados (IF, HTTP Request)
-- JSON payload de exemplo
+### Mudancas Tecnicas
 
-**Atualizar seção "Quando Humano Resolve":**
-- Remover nota sobre inferência no dashboard
-- Adicionar explicação: "O webhook detecta e registra automaticamente em tempo real"
+#### 1. `supabase/functions/fetch-chatwoot-metrics/index.ts` (linhas 603-647)
 
-### Fluxo Resultante (n8n)
+Substituir a secao "RESOLUTION LOGS" atual por:
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│ Webhook Chatwoot: conversation_status_changed               │
-│ (Detecta quando conversa muda para "resolved")              │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│ IF: Status mudou para "resolved"?                           │
-│ (Valida que o evento é uma resolução)                       │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│ IF: resolved_by !== "ai"?                                   │
-│ (Verifica se IA não resolveu - se tem, ignora)             │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│ HTTP Request: POST /log-resolution                          │
-│ {                                                            │
-│   "chatwoot_account_id": 3,                                 │
-│   "conversation_id": 456,                                   │
-│   "resolved_by": "human",                                   │
-│   "resolution_type": "explicit",                            │
-│   "agent_id": 10                                            │
-│ }                                                            │
-└─────────────────────────────────────────────────────────────┘
+```text
+Para cada conversa com status = "resolved":
+  1. Ler custom_attributes.resolved_by
+  2. Se resolved_by === "ai" --> SKIP (n8n ja logou)
+  3. Se resolved_by !== "ai" (null, undefined, "human", qualquer coisa):
+     a. Calcular resolved_at = last_activity_at da conversa (Unix -> ISO)
+     b. Tentar INSERT em resolution_logs:
+        - account_id: UUID do CRM
+        - conversation_id: ID da conversa
+        - resolved_by: "human"
+        - resolution_type: "inferred"
+        - resolved_at: timestamp do Chatwoot
+     c. Se unique constraint viola (23505) --> Duplicata, skip silencioso
+  4. Apos todos os inserts, consultar resolution_logs para o periodo
+  5. Retornar totais atualizados
 ```
 
-### Configuração do Webhook no Chatwoot
-
-```
-Name: Human Resolution Detection
-URL: https://SEU-N8N.com/webhook/chatwoot-human-resolution
-Events: ✓ conversation_status_changed
-```
-
-### Nodes do n8n Detalhados
-
-**Node 1: Webhook Trigger**
-- Type: Webhook
-- HTTP Method: POST
-- Path: `chatwoot-human-resolution`
-- Response Mode: On Received
-
-**Node 2: IF (Status → Resolved)**
-- Type: IF
-- Condition: `{{ $json.conversation.status }}` Equal `resolved`
-
-**Node 3: IF (NOT resolved_by: "ai")**
-- Type: IF
-- Condition: `{{ $json.conversation.custom_attributes.resolved_by }}` Not Equal `ai`
-
-**Node 4: HTTP Request (Log Resolution)**
-```
-Method: POST
-URL: https://ptcagwncwtuvcuqlwdzj.supabase.co/functions/v1/log-resolution
-
-Headers:
-- Content-Type: application/json
-
-Body (JSON):
-{
-  "chatwoot_account_id": {{ $json.account.id }},
-  "conversation_id": {{ $json.conversation.id }},
-  "resolved_by": "human",
-  "resolution_type": "explicit",
-  "agent_id": {{ $json.conversation.meta.assignee.id || null }}
-}
+**Logica simplificada (pseudocodigo):**
+```text
+for each resolvedConversation:
+    if conv.custom_attributes.resolved_by === "ai":
+        continue  // n8n already logged this
+    
+    resolved_at = new Date(conv.last_activity_at * 1000).toISOString()
+    
+    INSERT INTO resolution_logs (
+        account_id, conversation_id, resolved_by, 
+        resolution_type, resolved_at
+    ) VALUES (
+        dbAccountId, conv.id, 'human', 'inferred', resolved_at
+    )
+    ON CONFLICT DO NOTHING  // unique constraint handles dedup
 ```
 
-### Ordem de Implementação
+#### 2. Nenhuma outra mudanca necessaria
 
-1. **Remover linhas 623-654 do `fetch-chatwoot-metrics.ts`** (inferência de humano)
-   - Mantém consulta histórica intacta
-   - Teste: Dashboard continua exibindo histórico corretamente
+- Schema `resolution_logs`: sem alteracao
+- Edge Function `log-resolution`: sem alteracao
+- Frontend/Dashboard: sem alteracao
+- Fluxo n8n de IA: sem alteracao
+- RLS policies: sem alteracao
 
-2. **Adicionar seção de webhook na documentação**
-   - Instrução de configuração no Chatwoot
-   - Nodes n8n completos para importação
-   - Exemplos de payload
+### Cenarios Validados
 
-3. **Testar fluxo completo**
-   - Resolver conversa como humano no Chatwoot
-   - Webhook dispara → n8n registra na resolution_logs
-   - Próximo carregamento do dashboard reflete a resolução
+| Cenario | Resultado |
+|---------|-----------|
+| IA resolve conversa 21 | n8n loga `ai`. Sync ve `resolved_by: ai`, SKIP |
+| Humano resolve conversa 45 | Sync ve sem `resolved_by: ai`, INSERT `human` |
+| Ambas ao mesmo tempo | `conversation_id` diferente, dois registros independentes |
+| Conversa 21 reaberta, atributos limpos | Status = "open", sync ignora |
+| Conversa 21 re-resolvida por humano | Novo `last_activity_at`, novo registro `human` |
+| Conversa 21 re-resolvida por IA | n8n loga novo `ai` com novo timestamp |
+| Sync roda 2x seguidas | ON CONFLICT DO NOTHING, zero duplicatas |
+| 10 conversas humanas + 5 IA simultaneas | 10 inserts human + 5 skips = 15 registros corretos |
 
-### Cenários Cobertos
+### Fluxo Completo
 
-| Cenário | Antes | Depois |
-|---------|-------|--------|
-| Humano resolve no Chatwoot | Dashboard precisa carregar para inferir | Webhook registra em tempo real |
-| Múltiplos humanos resolvem | Múltiplas tentativas de insert no dashboard | Cada webhook é uma inserção única (idempotência via constraint) |
-| IA resolve | n8n POST /log-resolution explicit | Sem mudança |
-| Conversa reabre | Log persistido, novo ciclo limpo | Sem mudança |
+```text
+Dashboard carrega
+       |
+fetch-chatwoot-metrics busca conversas do Chatwoot
+       |
+Para cada conversa resolvida:
+  resolved_by === "ai"?
+       |
+  SIM --> SKIP (n8n ja logou)
+  NAO --> INSERT human em resolution_logs (ON CONFLICT IGNORE)
+       |
+Consulta resolution_logs do periodo
+       |
+Retorna metricas com historico atualizado
+```
 
-### Zero Alterações em
-- Schema `resolution_logs`
-- RLS policies
-- Edge function `log-resolution`
-- Fluxo n8n de resolução da IA
+### Ordem de Implementacao
+
+1. Modificar a secao RESOLUTION LOGS (linhas 603-647) do `fetch-chatwoot-metrics`
+2. Adicionar loop de INSERT para conversas humanas com ON CONFLICT DO NOTHING
+3. Manter a consulta de totais existente (linhas 625-643)
+4. Deploy da Edge Function
+5. Testar: resolver 1 conversa como humano, carregar dashboard, verificar `resolution_logs`
 
