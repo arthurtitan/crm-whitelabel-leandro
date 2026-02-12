@@ -24,16 +24,22 @@ interface MetricsRequest {
 function classifyCurrentHandler(conv: any): 'ai' | 'human' | 'none' {
   const custom = conv.custom_attributes || {};
   const additional = conv.additional_attributes || {};
+  
+  // PRIORIDADE 1: ai_responded = true → IA atendendo (explícito)
   const aiResponded = custom.ai_responded === true || additional.ai_responded === true;
-  const hasHumanAssignee = !!(conv.meta?.assignee?.id || conv.assignee_id);
-
-  // PRIORIDADE 1: ai_responded = true → IA atendendo
   if (aiResponded) return 'ai';
 
-  // PRIORIDADE 2: Assignee humano (sem ai_responded) → Humano atendendo
-  if (hasHumanAssignee) return 'human';
+  // PRIORIDADE 2: human_active = true → Humano atendendo (explícito)
+  const humanActive = custom.human_active === true || additional.human_active === true;
+  if (humanActive) return 'human';
 
-  // PRIORIDADE 3: Nenhum dos anteriores → Aguardando
+  // PRIORIDADE 3: human_intervened = true → Humano interveio manualmente
+  const humanIntervened = custom.human_intervened === true || additional.human_intervened === true;
+  if (humanIntervened) return 'human';
+
+  // PRIORIDADE 4: Apenas com assignee humano (sem flags operacionais) → Aguardando
+  // Evita classificar erroneamente como humano quando flags foram resetados
+  // ou quando a IA responde via conta de agente humano
   return 'none';
 }
 
@@ -261,37 +267,49 @@ serve(async (req) => {
       inboxes: inboxes.length,
     });
 
-    // Filter conversations by date range (using last_activity_at OR created_at for better coverage)
-    const conversations = allConversations.filter((conv: any) => {
-      // Use last_activity_at if available, otherwise fall back to created_at
+    // ========================================================================
+    // CAMADA 1: Atendimento ao Vivo - APENAS CONVERSAS ABERTAS (SEM FILTRO DE DATA)
+    // Deve exibir o estado REAL do que está acontecendo AGORA
+    // ========================================================================
+    const liveConversations = allConversations.filter((conv: any) => conv.status === 'open');
+
+    // Apply inbox filter to live data (sem filtro de data nem agente)
+    const filteredLiveConversations = inboxId 
+      ? liveConversations.filter((c: any) => c.inbox_id === inboxId)
+      : liveConversations;
+
+    // ========================================================================
+    // CAMADA 2: Resolução & Histórico - FILTRADO POR DATA
+    // Conversas que foram criadas ou tiveram atividade no período solicitado
+    // ========================================================================
+    const historyConversations = allConversations.filter((conv: any) => {
       const activityDate = conv.last_activity_at 
-        ? new Date(conv.last_activity_at * 1000) // Unix timestamp in seconds
+        ? new Date(conv.last_activity_at * 1000)
         : new Date(conv.created_at);
       const createdAt = new Date(conv.created_at);
       
-      // Include if created in range OR had activity in range
       const createdInRange = createdAt >= dateFromParsed && createdAt <= dateToParsed;
       const activeInRange = activityDate >= dateFromParsed && activityDate <= dateToParsed;
       
       return createdInRange || activeInRange;
     });
 
-    // Apply inbox filter if provided
-    const filteredConversations = inboxId 
-      ? conversations.filter((c: any) => c.inbox_id === inboxId)
-      : conversations;
+    // Apply filters to historical data
+    const filteredHistoryConversations = inboxId 
+      ? historyConversations.filter((c: any) => c.inbox_id === inboxId)
+      : historyConversations;
 
-    // Apply agent filter if provided
     const finalConversations = agentId
-      ? filteredConversations.filter((c: any) => 
+      ? filteredHistoryConversations.filter((c: any) => 
           c.meta?.assignee?.id === agentId || c.assignee_id === agentId
         )
-      : filteredConversations;
+      : filteredHistoryConversations;
 
     console.log('[Chatwoot Metrics] Filtered conversations:', {
-      afterDateFilter: conversations.length,
-      afterInboxFilter: filteredConversations.length,
-      afterAgentFilter: finalConversations.length,
+      liveOpen: liveConversations.length,
+      liveFiltered: filteredLiveConversations.length,
+      historyDateFilter: historyConversations.length,
+      historyFinal: finalConversations.length,
     });
 
     // ========================================================================
@@ -360,6 +378,35 @@ serve(async (req) => {
     const now = Date.now();
     const backlog = { ate15min: 0, de15a60min: 0, acima60min: 0 };
 
+    // ============================================================
+    // PROCESSO 1: ATENDIMENTO AO VIVO (dados reais, sem filtro de data)
+    // Usa filteredLiveConversations (apenas status === 'open')
+    // ============================================================
+    for (const conv of filteredLiveConversations) {
+      atendimento.total++;
+      const handler = classifyCurrentHandler(conv);
+      
+      const custom = conv.custom_attributes || {};
+      const additional = conv.additional_attributes || {};
+      console.log(`[Atendimento] Conv #${conv.id} | handler=${handler} | ` +
+        `assignee=${conv.meta?.assignee?.name || 'none'} | ` +
+        `ai_responded=${custom.ai_responded} | ` +
+        `human_active=${custom.human_active} | ` +
+        `human_intervened=${custom.human_intervened}`);
+
+      if (handler === 'ai') {
+        atendimento.ia++;
+      } else if (handler === 'human') {
+        atendimento.humano++;
+      } else {
+        atendimento.semAssignee++;
+      }
+    }
+
+    // ============================================================
+    // PROCESSO 2: HISTÓRICO & RESOLUÇÕES (filtrado por data)
+    // Usa finalConversations (filtrado por data + inbox + agente)
+    // ============================================================
     for (const conv of finalConversations) {
       // Count by status
       switch (conv.status) {
@@ -385,23 +432,6 @@ serve(async (req) => {
       const handoffMarked = custom.handoff_to_human === true || additional.handoff_to_human === true;
       const hasBotAssignee = conv.meta?.assignee?.type === 'AgentBot' || !!conv.agent_bot_id;
       const hasHumanAssignee = !!(conv.meta?.assignee?.id || conv.assignee_id) && !hasBotAssignee;
-
-      // ======================================================================
-      // CAMADA 1: Atendimento (todas as conversas abertas)
-      // ======================================================================
-      if (conv.status === 'open') {
-        atendimento.total++;
-        const handler = classifyCurrentHandler(conv);
-        
-        if (handler === 'ai') {
-          atendimento.ia++;
-        } else if (handler === 'human') {
-          atendimento.humano++;
-        } else {
-          atendimento.semAssignee++;
-        }
-        // Transbordo só é contabilizado em conversas RESOLVIDAS (Camada 2)
-      }
 
       // ======================================================================
       // CAMADA 2: Resolução — REMOVIDA do loop de Chatwoot
