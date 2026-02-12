@@ -24,22 +24,16 @@ interface MetricsRequest {
 function classifyCurrentHandler(conv: any): 'ai' | 'human' | 'none' {
   const custom = conv.custom_attributes || {};
   const additional = conv.additional_attributes || {};
-  
-  // PRIORIDADE 1: ai_responded = true → IA atendendo (explícito)
   const aiResponded = custom.ai_responded === true || additional.ai_responded === true;
+  const hasHumanAssignee = !!(conv.meta?.assignee?.id || conv.assignee_id);
+
+  // PRIORIDADE 1: ai_responded = true → IA atendendo
   if (aiResponded) return 'ai';
 
-  // PRIORIDADE 2: human_active = true → Humano atendendo (explícito)
-  const humanActive = custom.human_active === true || additional.human_active === true;
-  if (humanActive) return 'human';
+  // PRIORIDADE 2: Assignee humano sem ai_responded → Humano atendendo
+  if (hasHumanAssignee) return 'human';
 
-  // PRIORIDADE 3: human_intervened = true → Humano interveio manualmente
-  const humanIntervened = custom.human_intervened === true || additional.human_intervened === true;
-  if (humanIntervened) return 'human';
-
-  // PRIORIDADE 4: Apenas com assignee humano (sem flags operacionais) → Aguardando
-  // Evita classificar erroneamente como humano quando flags foram resetados
-  // ou quando a IA responde via conta de agente humano
+  // PRIORIDADE 3: Sem assignee → Aguardando
   return 'none';
 }
 
