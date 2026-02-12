@@ -565,11 +565,14 @@ serve(async (req) => {
       const supabase = createClient(supabaseUrl, supabaseKey);
 
       // Buscar account_id pelo accountId do Chatwoot
-      const { data: accountData } = await supabase
+      const { data: accounts } = await supabase
         .from('accounts')
         .select('id')
         .eq('chatwoot_account_id', normalizedAccountId)
-        .maybeSingle();
+        .order('created_at', { ascending: true })
+        .limit(1);
+
+      const accountData = accounts?.[0] || null;
 
       if (accountData?.id) {
         const dbAccountId = accountData.id;
