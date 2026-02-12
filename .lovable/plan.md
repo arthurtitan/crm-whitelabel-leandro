@@ -1,51 +1,58 @@
 
-## Análise Atual: Gráfico de Pico de Atendimento por Hora
+## Refatoração da Edge Function log-resolution
 
-### Estado Verificado ✓
-1. **Componente**: `HourlyPeakChart.tsx` - Implementado com `AreaChart` (wave format) ✓
-2. **Dados Reais do Chatwoot**: A propriedade `picoPorHora` vem da Edge Function `fetch-chatwoot-metrics` ✓
-3. **Fluxo de Dados**:
-   - AdminDashboard.tsx → useChatwootMetrics hook
-   - Hook chama fetch-chatwoot-metrics Edge Function
-   - Edge Function retorna `picoPorHora` com agregação real de conversas por hora
-   - HourlyPeakChart consome `displayedData.picoPorHora`
+### Mudanças Necessárias
 
-### Dados Confirmados (Network Request)
-Última resposta do Chatwoot mostrou:
-```json
-{
-  "picoPorHora": [
-    {"hora": 7, "totalConversas": 0},
-    {"hora": 8, "totalConversas": 0},
-    ...
-    {"hora": 11, "totalConversas": 4},  // Pico em 11h
-    {"hora": 12, "totalConversas": 0},
-    ...
-  ]
+**1. Arquivo: `supabase/functions/log-resolution/index.ts`**
+
+Trocar a entrada de `account_id` (UUID que n8n não tem) para `chatwoot_account_id` (numero que n8n já tem do Chatwoot):
+
+- **Linha 16**: Trocar `const { account_id, ...` para `const { chatwoot_account_id, ...`
+- **Linha 19**: Trocar validação de `account_id` para `chatwoot_account_id`
+- **Linha 21**: Atualizar mensagem de erro
+- **Após linha 35**: Adicionar lookup na tabela `accounts`:
+  ```
+  SELECT id FROM accounts WHERE chatwoot_account_id = '3'
+  ```
+- **Linha 41**: Usar o UUID encontrado no `account_id` do INSERT
+- **Linha 54**: Atualizar log de erro
+
+**2. Arquivo: `docs/N8N_CHATWOOT_INTEGRATION.md`**
+
+Atualizar exemplos de payload na linha 266:
+- Trocar `"account_id": "UUID_DA_CONTA"` para `"chatwoot_account_id": 3`
+- Adicionar nota explicando que o lookup é automático
+
+### Fluxo Resultante
+
+```
+n8n POST {
+  "chatwoot_account_id": 3,
+  "conversation_id": 456,
+  "resolved_by": "ai"
 }
+        ↓
+Edge Function lookup: SELECT id FROM accounts WHERE chatwoot_account_id = '3'
+        ↓
+Encontra: id = "uuid-clinica-x"
+        ↓
+INSERT resolution_logs { account_id: "uuid-clinica-x", ... }
+        ↓
+Histórico permanece vinculado ao UUID da clínica
 ```
 
-### Observações Técnicas
-1. **Intervalo de Horas**: Atualmente limitado a 7h-21h (horário comercial)
-2. **Formato do Gráfico**: Já está em wave (AreaChart com linearGradient)
-3. **Dados**: Vêm de conversas reais do Chatwoot, não de eventos genéricos
-4. **Tooltip**: Mostra hora e quantidade de conversas
-5. **Responsividade**: Altura adaptável (200px mobile / 250px desktop)
+### Cenários Cobertos
 
-### Possíveis Melhorias Sugeridas (Não Críticas)
+| Ação | Resultado |
+|------|-----------|
+| Super Admin muda chatwoot_account_id de 3 → 5 | Histórico antigo intacto, novos logs usam nova ID |
+| n8n envia ID inexistente | Erro 404: "Conta não encontrada no CRM" |
+| Conversa reabre no Chatwoot | Não importa - log já foi gravado |
+| Filtro por período no dashboard | Continua funcionando via resolved_at + account_id UUID |
 
-**Opção A - Expandir Horário**
-- Incluir todas as 24 horas em vez de 7h-21h
-- Ajustar `interval` no XAxis para melhor legibilidade
-
-**Opção B - Realçar Pico Máximo**
-- Destacar a hora com maior volume de conversas
-- Adicionar visual indicator no gráfico
-
-**Opção C - Contexto no Tooltip**
-- Mostrar percentual do total de conversas do dia
-- Adicionar comparação com dia anterior (se dados existirem)
-
-### Conclusão
-✅ O gráfico está **funcionando corretamente** com dados reais do Chatwoot. O `picoPorHora` que você vê no gráfico é a agregação real de conversas da API do Chatwoot, agrupadas por hora. Nenhuma mudança é necessária a menos que você queira expandir o horário ou adicionar visualizações extras.
-
+### Zero Alterações em
+- Schema da tabela `resolution_logs`
+- Tabela `accounts` (campo já existe)
+- RLS policies
+- Índices e constraints
+- Edge function `fetch-chatwoot-metrics`
