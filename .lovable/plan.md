@@ -1,5 +1,6 @@
 
 
+
 ## Fluxo n8n Unificado: Reset + Captura de Resolucao Humana
 
 ### Por que o Reset e obrigatorio
@@ -101,4 +102,3 @@ Nenhuma. O `fetch-chatwoot-metrics` com o sync passivo que ja implementamos cont
 - **1 webhook, 2 ramificacoes** — captura resolucao humana + reset na reabertura
 - **Zero mudancas no codigo** — tudo ja esta implementado no backend
 - **Sync passivo como backup** — garante integridade mesmo se o n8n falhar
-
