@@ -601,7 +601,8 @@ serve(async (req) => {
       }));
 
     // ========================================================================
-    // RESOLUTION LOGS: Inferir resoluções humanas + consultar histórico
+    // RESOLUTION LOGS: Sync binário de resoluções humanas + consultar histórico
+    // Regra: resolved_by === "ai" → SKIP (n8n já logou). Qualquer outro caso → INSERT human.
     // ========================================================================
     let historicoResolucoes = { totalIA: 0, totalHumano: 0, percentualIA: 0, percentualHumano: 0 };
     
@@ -620,8 +621,70 @@ serve(async (req) => {
       if (accountData?.id) {
         const dbAccountId = accountData.id;
 
-        // Consultar totais históricos filtrados por período
-        // (resoluções humanas agora são registradas em tempo real via webhook n8n)
+        // ====================================================================
+        // SYNC: Inserir resoluções humanas que ainda não estão no banco
+        // Lógica binária: resolved_by === "ai" → skip, caso contrário → human
+        // ====================================================================
+        const resolvedConversations = finalConversations.filter(
+          (c: any) => c.status === 'resolved'
+        );
+
+        let syncedCount = 0;
+        let skippedAI = 0;
+        let duplicatesSkipped = 0;
+
+        for (const conv of resolvedConversations) {
+          const custom = conv.custom_attributes || {};
+          const additional = conv.additional_attributes || {};
+          const resolvedByAttr = custom.resolved_by || additional.resolved_by;
+
+          // Se IA resolveu (atributo explícito), SKIP — n8n já logou via log-resolution
+          if (resolvedByAttr === 'ai') {
+            skippedAI++;
+            continue;
+          }
+
+          // Qualquer outro caso (null, undefined, "human", etc.) → resolução humana
+          // Usar last_activity_at do Chatwoot como resolved_at (timestamp real da resolução)
+          const lastActivityAt = conv.last_activity_at;
+          if (!lastActivityAt) continue;
+
+          const resolvedAt = typeof lastActivityAt === 'number'
+            ? new Date(lastActivityAt * 1000).toISOString()
+            : new Date(lastActivityAt).toISOString();
+
+          const { error: insertError } = await supabase
+            .from('resolution_logs')
+            .insert({
+              account_id: dbAccountId,
+              conversation_id: conv.id,
+              resolved_by: 'human',
+              resolution_type: 'inferred',
+              resolved_at: resolvedAt,
+            });
+
+          if (insertError) {
+            // Código 23505 = unique constraint violation → duplicata, skip silencioso
+            if (insertError.code === '23505') {
+              duplicatesSkipped++;
+            } else {
+              console.error('[Resolution Sync] Insert error for conv', conv.id, ':', insertError.message);
+            }
+          } else {
+            syncedCount++;
+          }
+        }
+
+        console.log('[Resolution Sync] Results:', {
+          totalResolved: resolvedConversations.length,
+          skippedAI,
+          syncedHuman: syncedCount,
+          duplicatesSkipped,
+        });
+
+        // ====================================================================
+        // CONSULTA: Totais históricos filtrados por período
+        // ====================================================================
         const { data: totals } = await supabase
           .from('resolution_logs')
           .select('resolved_by')
