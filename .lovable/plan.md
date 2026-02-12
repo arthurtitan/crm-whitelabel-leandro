@@ -1,111 +1,104 @@
 
 
-## Sync Simplificado de Resoluções Humanas
+## Fluxo n8n Unificado: Reset + Captura de Resolucao Humana
 
-### Principio
+### Por que o Reset e obrigatorio
 
-A logica de classificacao para persistencia no banco sera **binaria e simples**:
+Custom attributes no Chatwoot sao **persistentes**. Eles NAO resetam quando a conversa e reaberta. Se a IA setou `resolved_by: "ai"` no ciclo 1, esse valor continua na conversa quando o cliente retorna. Sem o reset, o ciclo seguinte herda dados do ciclo anterior, corrompendo as metricas.
 
-- Conversa resolvida COM `custom_attributes.resolved_by = "ai"` --> IA resolveu. O n8n ja logou via `log-resolution`. **SKIP**.
-- Conversa resolvida SEM esse atributo (ou com qualquer outro valor) --> Humano resolveu. **INSERT no banco**.
+### Fluxo n8n necessario (webhook unico)
 
-Isso elimina toda a complexidade de inferencia (bot nativo, transbordo, fallback) para fins de persistencia. O `classifyResolver` atual continua existindo para exibicao no dashboard (Camada 2 visual), mas o INSERT no banco segue a regra binaria.
-
-### Garantias de Integridade
-
-**Conversas diferentes ao mesmo tempo:**
-O unique constraint em `resolution_logs` inclui `conversation_id`. Conversa 21 (IA) e conversa 45 (humano) sao registros completamente independentes -- nunca colidem.
-
-**Mesmo conversation_id, ciclos diferentes:**
-Cada ciclo de resolucao gera um `resolved_at` diferente (baseado no `last_activity_at` do Chatwoot). O constraint `(account_id, conversation_id, resolved_at)` permite multiplos registros para a mesma conversa em momentos diferentes.
-
-**Reset de ciclo (n8n limpa atributos):**
-Quando a conversa e reaberta, o n8n limpa `resolved_by`, `ai_responded`, etc. A sync so processa conversas com `status = "resolved"`, entao conversas abertas sao ignoradas. Quando resolvida novamente, o novo timestamp garante um registro unico.
-
-### Mudancas Tecnicas
-
-#### 1. `supabase/functions/fetch-chatwoot-metrics/index.ts` (linhas 603-647)
-
-Substituir a secao "RESOLUTION LOGS" atual por:
+Um unico webhook de `conversation_status_changed` com duas ramificacoes:
 
 ```text
-Para cada conversa com status = "resolved":
-  1. Ler custom_attributes.resolved_by
-  2. Se resolved_by === "ai" --> SKIP (n8n ja logou)
-  3. Se resolved_by !== "ai" (null, undefined, "human", qualquer coisa):
-     a. Calcular resolved_at = last_activity_at da conversa (Unix -> ISO)
-     b. Tentar INSERT em resolution_logs:
-        - account_id: UUID do CRM
-        - conversation_id: ID da conversa
-        - resolved_by: "human"
-        - resolution_type: "inferred"
-        - resolved_at: timestamp do Chatwoot
-     c. Se unique constraint viola (23505) --> Duplicata, skip silencioso
-  4. Apos todos os inserts, consultar resolution_logs para o periodo
-  5. Retornar totais atualizados
+Webhook: conversation_status_changed
+    |
+    +---> Conversa mudou para "resolved"?
+    |         |
+    |         SIM --> resolved_by !== "ai"?
+    |                    |
+    |                    SIM --> POST log-resolution (resolved_by: "human")
+    |                    NAO --> SKIP (n8n ja logou via fluxo de IA)
+    |
+    +---> Conversa mudou para "open" (reaberta)?
+              |
+              SIM --> POST custom_attributes:
+                        resolved_by: null
+                        ai_responded: null
+                        handoff_to_human: null
+                        human_active: null
+                        human_intervened: null
 ```
 
-**Logica simplificada (pseudocodigo):**
+### Configuracao dos nos n8n
+
+**No 1: Webhook Trigger**
+- Path: `chatwoot-status-change`
+- Method: POST
+
+**No 2: Switch (por tipo de evento)**
+
+Ramificacao A — Status mudou para "resolved":
+- Condicao: `body.status === "resolved"` OU verificar `changed_attributes`
+
+Ramificacao B — Status mudou de "resolved" para "open":
+- Condicao: `body.status === "open"` E `changed_attributes[0].previous_value === "resolved"`
+
+**No 3A (Ramificacao A): IF resolved_by !== "ai"**
+- Condicao: `body.custom_attributes.resolved_by` nao e igual a `"ai"`
+
+**No 4A: HTTP Request — Log Resolution**
 ```text
-for each resolvedConversation:
-    if conv.custom_attributes.resolved_by === "ai":
-        continue  // n8n already logged this
-    
-    resolved_at = new Date(conv.last_activity_at * 1000).toISOString()
-    
-    INSERT INTO resolution_logs (
-        account_id, conversation_id, resolved_by, 
-        resolution_type, resolved_at
-    ) VALUES (
-        dbAccountId, conv.id, 'human', 'inferred', resolved_at
-    )
-    ON CONFLICT DO NOTHING  // unique constraint handles dedup
+Method: POST
+URL: https://ptcagwncwtuvcuqlwdzj.supabase.co/functions/v1/log-resolution
+Headers: Content-Type: application/json
+Body:
+{
+  "chatwoot_account_id": {{ body.account.id }},
+  "conversation_id": {{ body.id }},
+  "resolved_by": "human",
+  "resolution_type": "explicit"
+}
 ```
 
-#### 2. Nenhuma outra mudanca necessaria
+**No 3B (Ramificacao B): HTTP Request — Reset Attributes**
+```text
+Method: POST
+URL: https://gleps-chatwoot.dqnaqh.easypanel.host/api/v1/accounts/{{ body.account.id }}/conversations/{{ body.id }}/custom_attributes
+Headers:
+  api_access_token: SUA_API_KEY
+  Content-Type: application/json
+Body:
+{
+  "custom_attributes": {
+    "resolved_by": null,
+    "ai_responded": null,
+    "handoff_to_human": null,
+    "human_active": null,
+    "human_intervened": null
+  }
+}
+```
 
-- Schema `resolution_logs`: sem alteracao
-- Edge Function `log-resolution`: sem alteracao
-- Frontend/Dashboard: sem alteracao
-- Fluxo n8n de IA: sem alteracao
-- RLS policies: sem alteracao
+### Mudancas no codigo do CRM
 
-### Cenarios Validados
+Nenhuma. O `fetch-chatwoot-metrics` com o sync passivo que ja implementamos continua como safety net. O `log-resolution` ja esta pronto. So precisa configurar o n8n.
+
+### Garantias
 
 | Cenario | Resultado |
 |---------|-----------|
-| IA resolve conversa 21 | n8n loga `ai`. Sync ve `resolved_by: ai`, SKIP |
-| Humano resolve conversa 45 | Sync ve sem `resolved_by: ai`, INSERT `human` |
-| Ambas ao mesmo tempo | `conversation_id` diferente, dois registros independentes |
-| Conversa 21 reaberta, atributos limpos | Status = "open", sync ignora |
-| Conversa 21 re-resolvida por humano | Novo `last_activity_at`, novo registro `human` |
-| Conversa 21 re-resolvida por IA | n8n loga novo `ai` com novo timestamp |
-| Sync roda 2x seguidas | ON CONFLICT DO NOTHING, zero duplicatas |
-| 10 conversas humanas + 5 IA simultaneas | 10 inserts human + 5 skips = 15 registros corretos |
+| IA resolve | n8n loga "ai" + seta resolved_by. Webhook ve "ai", SKIP |
+| Humano resolve | Webhook ve resolved_by !== "ai", loga "human" |
+| Cliente retorna (reabertura) | Reset limpa todos os atributos do ciclo anterior |
+| Re-resolvida por humano | Atributos limpos, webhook loga novo "human" |
+| Re-resolvida por IA | Atributos limpos, n8n seta "ai" + loga normalmente |
+| Sync passivo (dashboard) | Safety net, captura qualquer resolucao que o webhook perdeu |
 
-### Fluxo Completo
+### Resumo
 
-```text
-Dashboard carrega
-       |
-fetch-chatwoot-metrics busca conversas do Chatwoot
-       |
-Para cada conversa resolvida:
-  resolved_by === "ai"?
-       |
-  SIM --> SKIP (n8n ja logou)
-  NAO --> INSERT human em resolution_logs (ON CONFLICT IGNORE)
-       |
-Consulta resolution_logs do periodo
-       |
-Retorna metricas com historico atualizado
-```
-
-### Ordem de Implementacao
-
-1. Modificar a secao RESOLUTION LOGS (linhas 603-647) do `fetch-chatwoot-metrics`
-2. Adicionar loop de INSERT para conversas humanas com ON CONFLICT DO NOTHING
-3. Manter a consulta de totais existente (linhas 625-643)
-4. Deploy da Edge Function
-5. Testar: resolver 1 conversa como humano, carregar dashboard, verificar `resolution_logs`
+- **O fluxo de reset e OBRIGATORIO** — custom attributes persistem entre ciclos
+- **1 webhook, 2 ramificacoes** — captura resolucao humana + reset na reabertura
+- **Zero mudancas no codigo** — tudo ja esta implementado no backend
+- **Sync passivo como backup** — garante integridade mesmo se o n8n falhar
 
