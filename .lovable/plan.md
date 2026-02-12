@@ -1,93 +1,57 @@
 
 
-## Crítica: Métrica de Resolução Baseada em Estado Volátil do Chatwoot
+## Correção: Lookup de Account com `.maybeSingle()` Falhando
 
-### Diagnóstico
+### Problema
 
-O sistema tem **dois silos de dados conflitantes**:
+A linha 572 do `fetch-chatwoot-metrics` usa `.maybeSingle()` para buscar o `account_id` (UUID) a partir do `chatwoot_account_id`. Porém, existem **5 contas** com `chatwoot_account_id = "1"` no banco:
 
-1. **`resolution_logs` (Persistente)**: Tabela no banco que registra imutavelmente cada ciclo resolvido
-   - Contém dados corretos: `resolved_by: "ai"` ou `resolved_by: "human"`
-   - Nunca é apagada ou modificada
-   
-2. **Conversas `resolved` no Chatwoot (Volátil)**: Estados de conversas que MUDAM
-   - Quando cliente reabre → volta para `status: "open"`
-   - Métrica desaparece do dashboard mesmo que o histórico exista no banco
+- Gleps Teste (`5f2e617d-...`) -- a conta correta
+- Clínica Integração Teste
+- tezte, teste5, teste6
 
-### Fluxo Problemático Identificado
+Quando `.maybeSingle()` encontra mais de 1 resultado, retorna `null`. Isso faz com que `accountData?.id` seja `undefined`, e **toda a lógica de resolution_logs seja pulada** (linha 574: `if (accountData?.id)`).
+
+Os 8 registros de resolução por IA **existem no banco** e estão corretos, mas nunca são lidos pelo dashboard.
+
+### Evidencia
 
 ```
-1. IA resolve conversa 21
-   → Insere em resolution_logs com resolved_by: "ai" ✓
-   → Chatwoot: status = "resolved", custom_attributes.resolved_by = "ai" ✓
-
-2. Cliente envia mensagem
-   → Chatwoot: status muda para "open"
-   → Conversa sai da lista de "resolved" do Chatwoot
-   → Dashboard carrega fetch-chatwoot-metrics
-   → Lê APENAS conversas status = "resolved"
-   → Conversa 21 NÃO aparece
-   → Métrica desaparece (IA: 0, Humano: 100%)
-
-3. Mas resolution_logs AINDA TEM o registro:
-   → SELECT COUNT(*) FROM resolution_logs WHERE resolved_by = "ai"
-   → Retorna 1 ✓ (Correto!)
+resolution_logs: 8 registros com account_id = 5f2e617d-... e resolved_by = "ai"
+accounts com chatwoot_account_id = "1": 5 registros (maybeSingle falha)
 ```
 
-### Causa Raiz
+### Solucao
 
-`fetch-chatwoot-metrics` calcula `resolucao` lendo **conversas do Chatwoot** em vez de **registros persistentes em `resolution_logs`**.
+Alterar **1 trecho** no arquivo `supabase/functions/fetch-chatwoot-metrics/index.ts` (linhas 568-572):
 
-O Edge Function já tem `historicoResolucoes` (linhas 607-702) que consulta o banco corretamente, mas o Dashboard não o usa — continua consumindo `resolucao` que vem de Chatwoot.
+**De:**
+```typescript
+const { data: accountData } = await supabase
+  .from('accounts')
+  .select('id')
+  .eq('chatwoot_account_id', normalizedAccountId)
+  .maybeSingle();
+```
 
-### Solução: Duas Camadas Integradas
+**Para:**
+```typescript
+const { data: accounts } = await supabase
+  .from('accounts')
+  .select('id')
+  .eq('chatwoot_account_id', normalizedAccountId)
+  .order('created_at', { ascending: true })
+  .limit(1);
 
-**Camada 1 — Atendimento em Tempo Real (Chatwoot)**
-- Quem **ESTÁ atendendo agora**? (conversas abertas)
-- Baseado em: `status = "open"` + `ai_responded` ou `assignee`
-- **Continua igual** (não muda)
+const accountData = accounts?.[0] || null;
+```
 
-**Camada 2 — Resolução (Histórico Persistente via `resolution_logs`)**
-- Quem **RESOLVEU** cada conversa?
-- Baseado em: `resolution_logs` do banco
-- **MUDA**: De "conversas resolvidas do Chatwoot" → "registros em resolution_logs"
-
-### Mudança Técnica
-
-**No arquivo `supabase/functions/fetch-chatwoot-metrics/index.ts`:**
-
-1. Substituir a lógica de `resolucao` (linhas 314-320, 408-443) para:
-   - Consultar diretamente `SELECT COUNT(*) FROM resolution_logs WHERE account_id = ? AND resolved_at BETWEEN ? AND ? GROUP BY resolved_by`
-   - Remover a lógica que lê conversas `status = "resolved"` do Chatwoot
-   - Manter apenas a lógica de **sincronização** de resoluções humanas (que insere em resolution_logs)
-
-2. Usar `historicoResolucoes` (que já calcula corretamente) como `resolucao`:
-   - `resolucao.ia.total` = `historicoResolucoes.totalIA`
-   - `resolucao.humano.total` = `historicoResolucoes.totalHumano`
-   - Remover métodos de cálculo que usam Chatwoot
-
-3. Manter toda a lógica de **Atendimento em Tempo Real** (que usa Chatwoot e conversas abertas)
-
-### Benefício
-
-- ✓ Métricas nunca desaparecem quando conversa é reaberta
-- ✓ Cada ciclo resolvido é contabilizado permanentemente
-- ✓ Suporta múltiplos ciclos da mesma conversa
-- ✓ Dashboard reflete a realidade (IA: 1, Humano: 0) mesmo após reabertura
-- ✓ Fonte de verdade única: `resolution_logs`
+Isso usa `.limit(1)` com `.order('created_at', ascending)` para sempre pegar a **primeira conta criada** (Gleps Teste), alinhando com o padrao que o `log-resolution` ja usa.
 
 ### Impacto
 
-- **Dashboard**: Gráfico de "Resolução (Quem Fechou)" passa a usar dados persistentes
-- **Fluxo n8n**: Sem mudanças necessárias (continua inserindo em resolution_logs)
-- **Edge Function**: Refactoring da seção de Resolução para usar `resolution_logs` como fonte
-- **Dados históricos**: Todos os registros em resolution_logs serão usados corretamente
-
-### Ordem de Implementação
-
-1. Refatorar `resolucao` para usar `resolution_logs` como fonte
-2. Remover lógica que conta conversas `status = "resolved"` do Chatwoot
-3. Manter sincronização de resoluções humanas (ON CONFLICT DO NOTHING)
-4. Testar: Resolver como IA, reabrir, verificar que métrica permanece
-5. Testar: Resolver como IA, reabrir, resolver como humano, verificar ambos os ciclos aparecem
+- Unica mudanca: 5 linhas substituidas por 7 linhas
+- Nenhuma outra alteracao necessaria
+- O dashboard vai finalmente ler os 8 registros de resolucao IA que ja existem
+- Resolucoes futuras (tanto IA quanto humanas) serao contabilizadas corretamente
 
