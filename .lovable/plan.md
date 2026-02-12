@@ -1,104 +1,93 @@
 
 
+## Crítica: Métrica de Resolução Baseada em Estado Volátil do Chatwoot
 
-## Fluxo n8n Unificado: Reset + Captura de Resolucao Humana
+### Diagnóstico
 
-### Por que o Reset e obrigatorio
+O sistema tem **dois silos de dados conflitantes**:
 
-Custom attributes no Chatwoot sao **persistentes**. Eles NAO resetam quando a conversa e reaberta. Se a IA setou `resolved_by: "ai"` no ciclo 1, esse valor continua na conversa quando o cliente retorna. Sem o reset, o ciclo seguinte herda dados do ciclo anterior, corrompendo as metricas.
+1. **`resolution_logs` (Persistente)**: Tabela no banco que registra imutavelmente cada ciclo resolvido
+   - Contém dados corretos: `resolved_by: "ai"` ou `resolved_by: "human"`
+   - Nunca é apagada ou modificada
+   
+2. **Conversas `resolved` no Chatwoot (Volátil)**: Estados de conversas que MUDAM
+   - Quando cliente reabre → volta para `status: "open"`
+   - Métrica desaparece do dashboard mesmo que o histórico exista no banco
 
-### Fluxo n8n necessario (webhook unico)
+### Fluxo Problemático Identificado
 
-Um unico webhook de `conversation_status_changed` com duas ramificacoes:
+```
+1. IA resolve conversa 21
+   → Insere em resolution_logs com resolved_by: "ai" ✓
+   → Chatwoot: status = "resolved", custom_attributes.resolved_by = "ai" ✓
 
-```text
-Webhook: conversation_status_changed
-    |
-    +---> Conversa mudou para "resolved"?
-    |         |
-    |         SIM --> resolved_by !== "ai"?
-    |                    |
-    |                    SIM --> POST log-resolution (resolved_by: "human")
-    |                    NAO --> SKIP (n8n ja logou via fluxo de IA)
-    |
-    +---> Conversa mudou para "open" (reaberta)?
-              |
-              SIM --> POST custom_attributes:
-                        resolved_by: null
-                        ai_responded: null
-                        handoff_to_human: null
-                        human_active: null
-                        human_intervened: null
+2. Cliente envia mensagem
+   → Chatwoot: status muda para "open"
+   → Conversa sai da lista de "resolved" do Chatwoot
+   → Dashboard carrega fetch-chatwoot-metrics
+   → Lê APENAS conversas status = "resolved"
+   → Conversa 21 NÃO aparece
+   → Métrica desaparece (IA: 0, Humano: 100%)
+
+3. Mas resolution_logs AINDA TEM o registro:
+   → SELECT COUNT(*) FROM resolution_logs WHERE resolved_by = "ai"
+   → Retorna 1 ✓ (Correto!)
 ```
 
-### Configuracao dos nos n8n
+### Causa Raiz
 
-**No 1: Webhook Trigger**
-- Path: `chatwoot-status-change`
-- Method: POST
+`fetch-chatwoot-metrics` calcula `resolucao` lendo **conversas do Chatwoot** em vez de **registros persistentes em `resolution_logs`**.
 
-**No 2: Switch (por tipo de evento)**
+O Edge Function já tem `historicoResolucoes` (linhas 607-702) que consulta o banco corretamente, mas o Dashboard não o usa — continua consumindo `resolucao` que vem de Chatwoot.
 
-Ramificacao A — Status mudou para "resolved":
-- Condicao: `body.status === "resolved"` OU verificar `changed_attributes`
+### Solução: Duas Camadas Integradas
 
-Ramificacao B — Status mudou de "resolved" para "open":
-- Condicao: `body.status === "open"` E `changed_attributes[0].previous_value === "resolved"`
+**Camada 1 — Atendimento em Tempo Real (Chatwoot)**
+- Quem **ESTÁ atendendo agora**? (conversas abertas)
+- Baseado em: `status = "open"` + `ai_responded` ou `assignee`
+- **Continua igual** (não muda)
 
-**No 3A (Ramificacao A): IF resolved_by !== "ai"**
-- Condicao: `body.custom_attributes.resolved_by` nao e igual a `"ai"`
+**Camada 2 — Resolução (Histórico Persistente via `resolution_logs`)**
+- Quem **RESOLVEU** cada conversa?
+- Baseado em: `resolution_logs` do banco
+- **MUDA**: De "conversas resolvidas do Chatwoot" → "registros em resolution_logs"
 
-**No 4A: HTTP Request — Log Resolution**
-```text
-Method: POST
-URL: https://ptcagwncwtuvcuqlwdzj.supabase.co/functions/v1/log-resolution
-Headers: Content-Type: application/json
-Body:
-{
-  "chatwoot_account_id": {{ body.account.id }},
-  "conversation_id": {{ body.id }},
-  "resolved_by": "human",
-  "resolution_type": "explicit"
-}
-```
+### Mudança Técnica
 
-**No 3B (Ramificacao B): HTTP Request — Reset Attributes**
-```text
-Method: POST
-URL: https://gleps-chatwoot.dqnaqh.easypanel.host/api/v1/accounts/{{ body.account.id }}/conversations/{{ body.id }}/custom_attributes
-Headers:
-  api_access_token: SUA_API_KEY
-  Content-Type: application/json
-Body:
-{
-  "custom_attributes": {
-    "resolved_by": null,
-    "ai_responded": null,
-    "handoff_to_human": null,
-    "human_active": null,
-    "human_intervened": null
-  }
-}
-```
+**No arquivo `supabase/functions/fetch-chatwoot-metrics/index.ts`:**
 
-### Mudancas no codigo do CRM
+1. Substituir a lógica de `resolucao` (linhas 314-320, 408-443) para:
+   - Consultar diretamente `SELECT COUNT(*) FROM resolution_logs WHERE account_id = ? AND resolved_at BETWEEN ? AND ? GROUP BY resolved_by`
+   - Remover a lógica que lê conversas `status = "resolved"` do Chatwoot
+   - Manter apenas a lógica de **sincronização** de resoluções humanas (que insere em resolution_logs)
 
-Nenhuma. O `fetch-chatwoot-metrics` com o sync passivo que ja implementamos continua como safety net. O `log-resolution` ja esta pronto. So precisa configurar o n8n.
+2. Usar `historicoResolucoes` (que já calcula corretamente) como `resolucao`:
+   - `resolucao.ia.total` = `historicoResolucoes.totalIA`
+   - `resolucao.humano.total` = `historicoResolucoes.totalHumano`
+   - Remover métodos de cálculo que usam Chatwoot
 
-### Garantias
+3. Manter toda a lógica de **Atendimento em Tempo Real** (que usa Chatwoot e conversas abertas)
 
-| Cenario | Resultado |
-|---------|-----------|
-| IA resolve | n8n loga "ai" + seta resolved_by. Webhook ve "ai", SKIP |
-| Humano resolve | Webhook ve resolved_by !== "ai", loga "human" |
-| Cliente retorna (reabertura) | Reset limpa todos os atributos do ciclo anterior |
-| Re-resolvida por humano | Atributos limpos, webhook loga novo "human" |
-| Re-resolvida por IA | Atributos limpos, n8n seta "ai" + loga normalmente |
-| Sync passivo (dashboard) | Safety net, captura qualquer resolucao que o webhook perdeu |
+### Benefício
 
-### Resumo
+- ✓ Métricas nunca desaparecem quando conversa é reaberta
+- ✓ Cada ciclo resolvido é contabilizado permanentemente
+- ✓ Suporta múltiplos ciclos da mesma conversa
+- ✓ Dashboard reflete a realidade (IA: 1, Humano: 0) mesmo após reabertura
+- ✓ Fonte de verdade única: `resolution_logs`
 
-- **O fluxo de reset e OBRIGATORIO** — custom attributes persistem entre ciclos
-- **1 webhook, 2 ramificacoes** — captura resolucao humana + reset na reabertura
-- **Zero mudancas no codigo** — tudo ja esta implementado no backend
-- **Sync passivo como backup** — garante integridade mesmo se o n8n falhar
+### Impacto
+
+- **Dashboard**: Gráfico de "Resolução (Quem Fechou)" passa a usar dados persistentes
+- **Fluxo n8n**: Sem mudanças necessárias (continua inserindo em resolution_logs)
+- **Edge Function**: Refactoring da seção de Resolução para usar `resolution_logs` como fonte
+- **Dados históricos**: Todos os registros em resolution_logs serão usados corretamente
+
+### Ordem de Implementação
+
+1. Refatorar `resolucao` para usar `resolution_logs` como fonte
+2. Remover lógica que conta conversas `status = "resolved"` do Chatwoot
+3. Manter sincronização de resoluções humanas (ON CONFLICT DO NOTHING)
+4. Testar: Resolver como IA, reabrir, verificar que métrica permanece
+5. Testar: Resolver como IA, reabrir, resolver como humano, verificar ambos os ciclos aparecem
+
