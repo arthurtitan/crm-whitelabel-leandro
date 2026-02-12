@@ -13,12 +13,12 @@ serve(async (req) => {
   }
 
   try {
-    const { account_id, conversation_id, resolved_by, resolution_type, agent_id } = await req.json();
+    const { chatwoot_account_id, conversation_id, resolved_by, resolution_type, agent_id } = await req.json();
 
     // Validação
-    if (!account_id || !conversation_id || !resolved_by) {
+    if (!chatwoot_account_id || !conversation_id || !resolved_by) {
       return new Response(
-        JSON.stringify({ success: false, error: 'Campos obrigatórios: account_id, conversation_id, resolved_by' }),
+        JSON.stringify({ success: false, error: 'Campos obrigatórios: chatwoot_account_id, conversation_id, resolved_by' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -34,11 +34,32 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // Lookup: chatwoot_account_id → UUID do CRM
+    const { data: accounts, error: accountError } = await supabase
+      .from('accounts')
+      .select('id')
+      .eq('chatwoot_account_id', String(chatwoot_account_id))
+      .limit(1);
+
+    const account = accounts?.[0] || null;
+
+    if (accountError) {
+      throw accountError;
+    }
+
+    if (!account) {
+      console.error('[log-resolution] Conta não encontrada para chatwoot_account_id:', chatwoot_account_id);
+      return new Response(
+        JSON.stringify({ success: false, error: `Conta com chatwoot_account_id=${chatwoot_account_id} não encontrada no CRM` }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // INSERT com ON CONFLICT DO NOTHING para idempotência
     const { data, error } = await supabase
       .from('resolution_logs')
       .insert({
-        account_id,
+        account_id: account.id,
         conversation_id: Number(conversation_id),
         resolved_by,
         resolution_type: resolution_type || 'explicit',
@@ -60,7 +81,7 @@ serve(async (req) => {
       throw error;
     }
 
-    console.log('[log-resolution] Logged:', { id: data?.id, conversation_id, resolved_by });
+    console.log('[log-resolution] Logged:', { id: data?.id, conversation_id, resolved_by, account_id: account.id });
 
     return new Response(
       JSON.stringify({ success: true, data }),
