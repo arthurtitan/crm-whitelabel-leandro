@@ -263,15 +263,16 @@ Headers:
 
 Body:
 {
-  "account_id": "UUID_DA_CONTA",
+  "chatwoot_account_id": {{ $json.account.id }},
   "conversation_id": {{ $json.conversation.id }},
   "resolved_by": "ai",
   "resolution_type": "explicit"
 }
+
 ```
 
-> 💡 O `account_id` é o UUID da conta no CRM (tabela `accounts`), não o ID numérico do Chatwoot.
-> A edge function usa `ON CONFLICT DO NOTHING` para idempotência — chamadas duplicadas são ignoradas.
+> 💡 O `chatwoot_account_id` é o ID numérico da conta no Chatwoot (ex: 3). A edge function faz o lookup automático para o UUID interno do CRM.
+> Chamadas duplicadas são ignoradas (idempotência via índice único).
 
 ### Quando Humano Resolve
 
