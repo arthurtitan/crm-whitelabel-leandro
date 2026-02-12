@@ -310,8 +310,9 @@ serve(async (req) => {
       semAssignee: 0,
     };
 
-    // CAMADA 2: Resolução (conversas resolvidas)
-    const resolucao = {
+    // CAMADA 2: Resolução — será preenchida via resolution_logs (banco de dados)
+    // Inicializada como zero, populada após consulta ao DB
+    let resolucao = {
       total: 0,
       ia: { total: 0, explicito: 0, botNativo: 0, inferido: 0 },
       humano: { total: 0, explicito: 0, inferido: 0 },
@@ -403,44 +404,10 @@ serve(async (req) => {
       }
 
       // ======================================================================
-      // CAMADA 2: Resolução (apenas conversas resolvidas)
+      // CAMADA 2: Resolução — REMOVIDA do loop de Chatwoot
+      // Agora calculada via resolution_logs (banco de dados persistente)
+      // Isso garante que métricas não desapareçam quando conversa é reaberta
       // ======================================================================
-      if (conv.status === 'resolved') {
-        resolucao.total++;
-        const resolver = classifyResolver(conv);
-        
-        if (resolver.type === 'ai') {
-          resolucao.ia.total++;
-          if (resolver.method === 'explicit') {
-            resolucao.ia.explicito++;
-            classificacao.metodologiaExplicita++;
-          } else if (resolver.method === 'bot_native') {
-            resolucao.ia.botNativo++;
-            classificacao.metodologiaBotNativo++;
-          } else if (resolver.method === 'inferred') {
-            resolucao.ia.inferido++;
-            classificacao.metodologiaInferida++;
-          }
-        } else if (resolver.type === 'human') {
-          resolucao.humano.total++;
-          if (resolver.method === 'explicit') {
-            resolucao.humano.explicito++;
-            classificacao.metodologiaExplicita++;
-          } else if (resolver.method === 'inferred') {
-            resolucao.humano.inferido++;
-            classificacao.metodologiaInferida++;
-          } else if (resolver.method === 'fallback') {
-            classificacao.metodologiaFallback++;
-          }
-        } else {
-          resolucao.naoClassificado++;
-        }
-        
-        // Transbordo finalizado: IA iniciou (ou marcou handoff) + humano fechou
-        if ((aiResponded || handoffMarked) && resolver.type === 'human') {
-          resolucao.transbordoFinalizado++;
-        }
-      }
 
       // Track agent stats (human agents only)
       if (hasHumanAssignee) {
@@ -502,34 +469,20 @@ serve(async (req) => {
     });
 
     // ========================================================================
-    // TAXAS CALCULADAS
+    // TAXAS CALCULADAS — serão recalculadas após consulta ao resolution_logs
+    // Placeholder inicializado com zeros, populado após DB query
     // ========================================================================
-    const totalResolvidosClassificados = resolucao.ia.total + resolucao.humano.total;
-    
-    // Taxa de resolução IA (% das resolvidas classificadas)
-    const taxaResolucaoIA = totalResolvidosClassificados > 0 
-      ? Math.round((resolucao.ia.total / totalResolvidosClassificados) * 100) 
-      : 0;
-    const taxaResolucaoHumano = totalResolvidosClassificados > 0 
-      ? 100 - taxaResolucaoIA 
-      : 0;
-    
-    // Taxa de transbordo (% das iniciadas por IA que terminaram com humano)
-    const iniciadasPorIACount = resolucao.ia.total + resolucao.transbordoFinalizado;
-    const taxaTransbordo = iniciadasPorIACount > 0
-      ? Math.round((resolucao.transbordoFinalizado / iniciadasPorIACount) * 100)
-      : 0;
-    
-    // Eficiência da IA (% de conversas que IA resolveu sozinha do total resolvido)
-    const eficienciaIA = resolucao.total > 0
-      ? Math.round((resolucao.ia.total / resolucao.total) * 100)
-      : 0;
-
-    const taxas = {
-      resolucaoIA: `${taxaResolucaoIA}%`,
-      resolucaoHumano: `${taxaResolucaoHumano}%`,
-      transbordo: `${taxaTransbordo}%`,
-      eficienciaIA: `${eficienciaIA}%`,
+    let totalResolvidosClassificados = 0;
+    let taxaResolucaoIA = 0;
+    let taxaResolucaoHumano = 0;
+    let iniciadasPorIACount = 0;
+    let taxaTransbordo = 0;
+    let eficienciaIA = 0;
+    let taxas = {
+      resolucaoIA: '0%',
+      resolucaoHumano: '0%',
+      transbordo: '0%',
+      eficienciaIA: '0%',
     };
 
     // Format time helper
@@ -708,6 +661,46 @@ serve(async (req) => {
     } catch (dbErr) {
       console.error('[Resolution Logs] DB error (non-fatal):', dbErr);
     }
+
+    // ========================================================================
+    // CAMADA 2: Popula resolucao a partir de resolution_logs (fonte persistente)
+    // Isso garante que métricas NÃO desapareçam quando conversa é reaberta
+    // ========================================================================
+    resolucao = {
+      total: historicoResolucoes.totalIA + historicoResolucoes.totalHumano,
+      ia: { total: historicoResolucoes.totalIA, explicito: historicoResolucoes.totalIA, botNativo: 0, inferido: 0 },
+      humano: { total: historicoResolucoes.totalHumano, explicito: historicoResolucoes.totalHumano, inferido: 0 },
+      naoClassificado: 0,
+      transbordoFinalizado: 0,
+    };
+
+    // Recalcular taxas com dados persistentes do resolution_logs
+    totalResolvidosClassificados = resolucao.ia.total + resolucao.humano.total;
+    taxaResolucaoIA = totalResolvidosClassificados > 0 
+      ? Math.round((resolucao.ia.total / totalResolvidosClassificados) * 100) 
+      : 0;
+    taxaResolucaoHumano = totalResolvidosClassificados > 0 
+      ? 100 - taxaResolucaoIA 
+      : 0;
+    iniciadasPorIACount = resolucao.ia.total + resolucao.transbordoFinalizado;
+    taxaTransbordo = iniciadasPorIACount > 0
+      ? Math.round((resolucao.transbordoFinalizado / iniciadasPorIACount) * 100)
+      : 0;
+    eficienciaIA = resolucao.total > 0
+      ? Math.round((resolucao.ia.total / resolucao.total) * 100)
+      : 0;
+    taxas = {
+      resolucaoIA: `${taxaResolucaoIA}%`,
+      resolucaoHumano: `${taxaResolucaoHumano}%`,
+      transbordo: `${taxaTransbordo}%`,
+      eficienciaIA: `${eficienciaIA}%`,
+    };
+
+    console.log('[Chatwoot Metrics] Resolution from DB (persistent):', {
+      resolucao,
+      taxas,
+      historicoResolucoes,
+    });
 
     const response = {
       success: true,
