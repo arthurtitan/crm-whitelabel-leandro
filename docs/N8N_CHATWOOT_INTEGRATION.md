@@ -274,16 +274,77 @@ Body:
 > 💡 O `chatwoot_account_id` é o ID numérico da conta no Chatwoot (ex: 3). A edge function faz o lookup automático para o UUID interno do CRM.
 > Chamadas duplicadas são ignoradas (idempotência via índice único).
 
-### Quando Humano Resolve
+### Quando Humano Resolve (Detecção Automática via Webhook)
 
-> ⚠️ **NÃO é necessário configurar no n8n!**
-> 
-> O CRM registra automaticamente resoluções humanas no banco de dados:
-> - Quando o dashboard carrega, a edge function `fetch-chatwoot-metrics` detecta conversas resolvidas sem `resolved_by: "ai"`
-> - Insere automaticamente na tabela `resolution_logs` com `resolved_by: "human"` e `resolution_type: "inferred"`
-> - Duplicatas são ignoradas pelo índice único
-> 
-> Isso elimina qualquer necessidade de fluxo n8n para resolução humana.
+O sistema detecta resoluções humanas **em tempo real** através de um webhook do Chatwoot que dispara um fluxo n8n dedicado. Isso substitui a antiga inferência no dashboard, garantindo registro imediato e sem depender da abertura da interface.
+
+#### Configurar Webhook no Chatwoot
+
+1. Acesse **Settings → Integrations → Webhooks**
+2. Clique em **Add New Webhook**
+
+```
+Name: Human Resolution Detection
+URL: https://SEU-N8N.com/webhook/chatwoot-human-resolution
+Events: ☑ conversation_status_changed
+```
+
+#### Fluxo n8n: Detecção de Resolução Humana
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│ Webhook Trigger │───►│ IF: Status =    │───►│ IF: resolved_by │───►│ POST            │
+│                 │    │ "resolved"      │    │ !== "ai"        │    │ /log-resolution │
+└─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
+```
+
+**Nó 1: Webhook Trigger**
+- Tipo: Webhook
+- HTTP Method: `POST`
+- Path: `chatwoot-human-resolution`
+- Response Mode: `On Received`
+
+**Nó 2: IF (Status → Resolved)**
+- Tipo: IF
+- Condição: `{{ $json.conversation.status }}` Equal `resolved`
+
+**Nó 3: IF (NOT resolved_by: "ai")**
+- Tipo: IF
+- Condição: `{{ $json.conversation.custom_attributes.resolved_by }}` Not Equal `ai`
+
+> 💡 Se a IA resolveu, ela já terá marcado `resolved_by: "ai"` **antes** de alterar o status. Portanto, quando o webhook dispara e `resolved_by` não é `"ai"`, sabemos que foi um humano.
+
+**Nó 4: HTTP Request (Log Resolution)**
+
+```
+Method: POST
+URL: https://ptcagwncwtuvcuqlwdzj.supabase.co/functions/v1/log-resolution
+
+Headers:
+  Content-Type: application/json
+
+Body (JSON):
+{
+  "chatwoot_account_id": {{ $json.account.id }},
+  "conversation_id": {{ $json.conversation.id }},
+  "resolved_by": "human",
+  "resolution_type": "explicit",
+  "agent_id": {{ $json.conversation.meta.assignee.id || null }}
+}
+```
+
+> 💡 O `chatwoot_account_id` é o ID numérico da conta no Chatwoot. A edge function faz o lookup automático para o UUID interno do CRM.
+> Chamadas duplicadas são ignoradas (idempotência via índice único).
+
+#### Por que não há interferência com o fluxo da IA?
+
+A sequência de operações da IA garante a não-interferência:
+
+1. IA marca `resolved_by: "ai"` via POST `/custom_attributes`
+2. IA chama POST `/log-resolution` (registro explícito)
+3. IA muda status para `resolved` via POST `/toggle_status`
+
+Quando o webhook dispara no passo 3, o atributo `resolved_by: "ai"` **já existe**, e o Nó 3 do fluxo humano o ignora.
 
 ---
 
@@ -339,9 +400,10 @@ O dashboard retorna no campo `historicoResolucoes`:
 | **1. IA Responde** | Após resposta OpenAI | Marcar `ai_responded: true` |
 | **2. Transbordo** | IA detecta necessidade | Marcar `handoff_to_human: true` + atribuir agente |
 | **3. IA Resolve** | Antes de resolver | Marcar `resolved_by: "ai"` + POST `/log-resolution` |
-| **4. Reset Ciclo** | Webhook: resolved → open | Limpar todos os atributos |
+| **4. Humano Resolve** | Webhook: status → resolved | Se `resolved_by` ≠ "ai", POST `/log-resolution` com "human" |
+| **5. Reset Ciclo** | Webhook: resolved → open | Limpar todos os atributos |
 
-> 💡 **Nota:** Resoluções humanas são registradas automaticamente pelo CRM, sem necessidade de fluxo n8n.
+> 💡 **Nota:** Tanto resoluções de IA quanto humanas são registradas explicitamente via n8n em tempo real.
 
 ---
 
