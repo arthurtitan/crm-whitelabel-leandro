@@ -620,40 +620,8 @@ serve(async (req) => {
       if (accountData?.id) {
         const dbAccountId = accountData.id;
 
-        // Inferir resoluções humanas para conversas resolvidas sem resolved_by: "ai"
-        const resolvedConversations = finalConversations.filter((c: any) => c.status === 'resolved');
-        
-        for (const conv of resolvedConversations) {
-          const custom = conv.custom_attributes || {};
-          const additional = conv.additional_attributes || {};
-          const resolvedByAttr = custom.resolved_by || additional.resolved_by;
-          
-          // Se não tem resolved_by: "ai", inferir como humano
-          if (resolvedByAttr !== 'ai') {
-            const resolvedAt = conv.last_activity_at 
-              ? new Date(conv.last_activity_at * 1000).toISOString()
-              : new Date().toISOString();
-
-            await supabase
-              .from('resolution_logs')
-              .insert({
-                account_id: dbAccountId,
-                conversation_id: conv.id,
-                resolved_by: 'human',
-                resolution_type: 'inferred',
-                agent_id: conv.meta?.assignee?.id || conv.assignee_id || null,
-                resolved_at: resolvedAt,
-              })
-              .then(({ error }) => {
-                // Ignore duplicate (23505) - already logged
-                if (error && error.code !== '23505') {
-                  console.error('[Resolution Log] Insert error:', error.message);
-                }
-              });
-          }
-        }
-
         // Consultar totais históricos filtrados por período
+        // (resoluções humanas agora são registradas em tempo real via webhook n8n)
         const { data: totals } = await supabase
           .from('resolution_logs')
           .select('resolved_by')
