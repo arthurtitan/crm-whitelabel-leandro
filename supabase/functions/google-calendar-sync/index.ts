@@ -128,8 +128,13 @@ serve(async (req) => {
 
     if (!eventsResponse.ok) {
       const errorText = await eventsResponse.text();
-      console.error("Google Calendar API error:", errorText);
-      throw new Error("Erro ao buscar eventos do Google");
+      console.error("Google Calendar API error:", eventsResponse.status, errorText);
+      
+      // If 401, token might be invalid even after refresh
+      if (eventsResponse.status === 401) {
+        throw new Error("Token do Google expirado ou inválido. Por favor, reconecte o Google Calendar.");
+      }
+      throw new Error(`Erro ao buscar eventos do Google (${eventsResponse.status}): ${errorText.substring(0, 200)}`);
     }
 
     const googleEvents = await eventsResponse.json();
