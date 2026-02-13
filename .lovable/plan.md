@@ -1,69 +1,71 @@
 
 
-# Substituir Dados Mockados do SuperAdminDashboard por KPIs Reais
+# Consolidar Conta Principal e Corrigir Exibicao de Dados
 
-## Objetivo
-Remover todos os dados fictícios do painel Super Admin e buscar KPIs reais diretamente do banco de dados (contas, usuarios, vendas, contatos). Os graficos de servidor (CPU, RAM, Disco, Rede) serao removidos ja que nao ha API de infraestrutura disponivel.
+## Diagnostico
 
-## O que muda
+Apos investigacao completa do banco de dados, identifiquei os seguintes problemas:
 
-### 1. Criar edge function `super-admin-kpis`
-Uma nova backend function que busca os KPIs reais:
-- Total de contas e contas ativas/pausadas
-- Total de usuarios e usuarios ativos
-- Total de contatos
-- Total de vendas pagas e receita total
-- Vendas recentes (ultimos 30 dias) para o grafico
+### 1. Duplicacao massiva de contas
+Existem **16 contas** no sistema, sendo 14 contas de teste/lixo. Apenas 2 sao relevantes:
 
-A funcao valida que o usuario autenticado tem role `super_admin` antes de retornar dados.
+- **Gleps Teste** (5f2e617d) - Conta principal com admin@gleps.com.br, conectada a `atendimento.gleps.com.br`
+  - 9 resolucoes por IA (explicitas, via n8n)
+  - 5 resolucoes humanas (inferidas)
+  - 3 tags, 1 funil
+  
+- **ContaTesteAgente** (66203ae2) - Conta secundaria do Arthur (glepsai@gmail.com)
+  - 21 contatos, 13 tags, 4 eventos de calendario, 1 funil
+  - Apenas 2 resolucoes humanas duplicadas (nenhuma IA)
+  - Conectada a outra URL do Chatwoot
 
-### 2. Refatorar `SuperAdminDashboard.tsx`
-- Remover imports de `mockData` (getSuperAdminKPIs, getServerResources, mockServerConsumptionHistory, mockWeeklyConsumption)
-- Adicionar `useEffect` + `useState` para buscar dados da edge function
-- Manter os 4 KPI cards (Total Contas, Total Usuarios, Ativas, Pausadas)
-- Remover os 4 cards de servidor (CPU, RAM, Disco, Rede)
-- Remover os 4 graficos de consumo de servidor (CPU/RAM 24h, Rede 24h, Semanal, Disco)
-- Remover o card de recomendacoes de escalabilidade
-- Adicionar novos cards uteis com dados reais: Total de Contatos, Total de Vendas Pagas, Receita Total
-- Adicionar estado de loading com skeletons
+### 2. Resolucoes de IA nao aparecem para o Arthur
+O Arthur esta logado na conta `66203ae2` que **nao tem nenhuma resolucao de IA** nos resolution_logs. Todas as 9 resolucoes de IA estao registradas na conta `5f2e617d`. Por isso o dashboard mostra tudo zerado para IA.
 
-### 3. Configuracao
-- Adicionar em `supabase/config.toml`: `verify_jwt = false` para a nova funcao
-- Validacao de super_admin feita dentro da funcao via service role key
+### 3. Dados uteis divididos entre duas contas
+Os contatos e tags do Arthur estao na conta errada, enquanto os resolution_logs reais estao na conta principal.
+
+---
+
+## Plano de Acao
+
+### Etapa 1: Migrar dados uteis para a conta principal
+Mover os dados do Arthur (conta `66203ae2`) para a conta principal (`5f2e617d`):
+- Reatribuir o perfil do Arthur para a conta principal
+- Migrar os 21 contatos
+- Migrar as 13 tags (que nao conflitem)
+- Migrar os 4 eventos de calendario
+- Migrar o funil
+
+### Etapa 2: Limpar resolution_logs duplicados
+Remover os 2 resolution_logs duplicados da conta `66203ae2` (sao copias das mesmas conversas 26 e 31 que ja existem na conta principal).
+
+### Etapa 3: Deletar as 15 contas de teste
+Remover todas as contas exceto a `5f2e617d` (Gleps Teste), incluindo:
+- Primeiro deletar dados dependentes (resolution_logs, contacts, tags, funnels, etc.)
+- Depois deletar as contas
+
+### Etapa 4: Resultado esperado
+Apos a limpeza, o Dashboard de Atendimento exibira corretamente:
+- **9 resolucoes por IA** (56%)
+- **5 resolucoes humanas** (31%) 
+- **Taxa de transbordo** calculada corretamente
+- Todos os contatos, tags e eventos consolidados na conta unica
 
 ---
 
 ## Detalhes Tecnicos
 
-### Edge Function: `supabase/functions/super-admin-kpis/index.ts`
+### Operacoes no banco de dados (via insert tool)
+1. `UPDATE profiles SET account_id = '5f2e617d-...' WHERE id = '82d84bd9-...'` (Arthur)
+2. `UPDATE contacts SET account_id = '5f2e617d-...' WHERE account_id = '66203ae2-...'`
+3. `UPDATE tags SET account_id = '5f2e617d-...' WHERE account_id = '66203ae2-...'`
+4. `UPDATE calendar_events SET account_id = '5f2e617d-...' WHERE account_id = '66203ae2-...'`
+5. `UPDATE funnels SET account_id = '5f2e617d-...' WHERE account_id = '66203ae2-...'`
+6. `DELETE FROM resolution_logs WHERE account_id != '5f2e617d-...'`
+7. Deletar dados orfaos de todas as 15 contas de teste
+8. `DELETE FROM accounts WHERE id != '5f2e617d-...'`
 
-```text
-Endpoint: POST /super-admin-kpis
-Auth: Bearer token do usuario logado
-Validacao: Verifica user_roles para confirmar super_admin
-
-Retorno:
-{
-  totalAccounts: number,
-  activeAccounts: number,
-  pausedAccounts: number,
-  totalUsers: number,
-  activeUsers: number,
-  totalContacts: number,
-  totalPaidSales: number,
-  totalRevenue: number
-}
-```
-
-### SuperAdminDashboard.tsx
-- Usa `supabase.functions.invoke('super-admin-kpis')` para buscar dados
-- KPI cards: 7 cards com dados reais (Contas, Usuarios, Contatos, Vendas, Receita)
-- Loading state com `Skeleton` components
-- Tratamento de erro com `toast`
-
-### Itens removidos
-- Cards de CPU, RAM, Disco, Rede
-- Graficos de consumo 24h e semanal
-- Card de recomendacoes de escalabilidade
-- Todas as referencias a `mockServerConsumptionHistory`, `mockWeeklyConsumption`, `getServerResources`
+### Nenhuma alteracao de codigo necessaria
+A edge function `fetch-chatwoot-metrics` e o frontend ja estao corretos. O problema era exclusivamente de dados: o Arthur via dados de uma conta que nao tinha os resolution_logs de IA. Ao consolidar tudo na conta principal, os dados ja aparecerao corretamente.
 
