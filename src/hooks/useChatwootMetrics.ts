@@ -137,6 +137,7 @@ const DEFAULT_POLLING_INTERVAL = 30000; // 30 seconds
 
 async function fetchChatwootMetrics(
   account: {
+    id?: string;
     chatwoot_base_url?: string | null;
     chatwoot_account_id?: string | null;
     chatwoot_api_key?: string | null;
@@ -172,6 +173,7 @@ async function fetchChatwootMetrics(
       baseUrl: account.chatwoot_base_url,
       accountId: account.chatwoot_account_id,
       apiKey: account.chatwoot_api_key,
+      dbAccountId: account.id,
       dateFrom: dateFrom.toISOString(),
       dateTo: dateTo.toISOString(),
       inboxId,

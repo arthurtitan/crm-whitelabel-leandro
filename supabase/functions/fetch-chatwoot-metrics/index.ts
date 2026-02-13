@@ -11,6 +11,7 @@ interface MetricsRequest {
   baseUrl: string;
   accountId: string;
   apiKey: string;
+  dbAccountId?: string;
   dateFrom: string;
   dateTo: string;
   inboxId?: number;
@@ -203,7 +204,7 @@ serve(async (req) => {
 
   try {
     const body: MetricsRequest = await req.json();
-    const { baseUrl, accountId, apiKey, dateFrom, dateTo, inboxId, agentId } = body;
+    const { baseUrl, accountId, apiKey, dbAccountId, dateFrom, dateTo, inboxId, agentId } = body;
 
     console.log('[Chatwoot Metrics] Starting fetch...', { 
       baseUrl, 
@@ -588,15 +589,22 @@ serve(async (req) => {
       const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
       const supabase = createClient(supabaseUrl, supabaseKey);
 
-      // Buscar account_id pelo accountId do Chatwoot
-      const { data: accounts } = await supabase
-        .from('accounts')
-        .select('id')
-        .eq('chatwoot_account_id', normalizedAccountId)
-        .order('created_at', { ascending: true })
-        .limit(1);
-
-      const accountData = accounts?.[0] || null;
+      // Usar dbAccountId passado pelo frontend, ou fallback para lookup por chatwoot_account_id
+      let accountData: { id: string } | null = null;
+      
+      if (dbAccountId) {
+        accountData = { id: dbAccountId };
+        console.log('[Resolution Sync] Using provided dbAccountId:', dbAccountId);
+      } else {
+        const { data: accounts } = await supabase
+          .from('accounts')
+          .select('id')
+          .eq('chatwoot_account_id', normalizedAccountId)
+          .order('created_at', { ascending: true })
+          .limit(1);
+        accountData = accounts?.[0] || null;
+        console.log('[Resolution Sync] Fallback lookup, found:', accountData?.id);
+      }
 
       if (accountData?.id) {
         const dbAccountId = accountData.id;
