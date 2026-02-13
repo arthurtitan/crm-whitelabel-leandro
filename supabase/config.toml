@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.sync-chatwoot-contacts]
 verify_jwt = false
+
+[functions.super-admin-kpis]
+verify_jwt = false
