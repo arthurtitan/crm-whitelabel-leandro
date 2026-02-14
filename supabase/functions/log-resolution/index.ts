@@ -13,7 +13,7 @@ serve(async (req) => {
   }
 
   try {
-    const { chatwoot_account_id, conversation_id, resolved_by, resolution_type, agent_id } = await req.json();
+    const { chatwoot_account_id, conversation_id, resolved_by, resolution_type, agent_id, ai_participated } = await req.json();
 
     // Validação
     if (!chatwoot_account_id || !conversation_id || !resolved_by) {
@@ -64,6 +64,7 @@ serve(async (req) => {
         resolved_by,
         resolution_type: resolution_type || 'explicit',
         agent_id: agent_id ? Number(agent_id) : null,
+        ai_participated: ai_participated === true,
         resolved_at: new Date().toISOString(),
       })
       .select()

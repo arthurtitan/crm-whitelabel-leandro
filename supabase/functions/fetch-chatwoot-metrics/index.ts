@@ -582,7 +582,7 @@ serve(async (req) => {
     // RESOLUTION LOGS: Sync binário de resoluções humanas + consultar histórico
     // Regra: resolved_by === "ai" → SKIP (n8n já logou). Qualquer outro caso → INSERT human.
     // ========================================================================
-    let historicoResolucoes = { totalIA: 0, totalHumano: 0, percentualIA: 0, percentualHumano: 0 };
+    let historicoResolucoes = { totalIA: 0, totalHumano: 0, transbordoCount: 0, percentualIA: 0, percentualHumano: 0 };
     
     try {
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -641,6 +641,9 @@ serve(async (req) => {
             ? new Date(lastActivityAt * 1000).toISOString()
             : new Date(lastActivityAt).toISOString();
 
+          // Check if AI participated before human resolved
+          const aiResponded = custom.ai_responded === true || additional.ai_responded === true;
+
           const { error: insertError } = await supabase
             .from('resolution_logs')
             .insert({
@@ -648,6 +651,7 @@ serve(async (req) => {
               conversation_id: conv.id,
               resolved_by: 'human',
               resolution_type: 'inferred',
+              ai_participated: aiResponded,
               resolved_at: resolvedAt,
             });
 
@@ -675,7 +679,7 @@ serve(async (req) => {
         // ====================================================================
         const { data: totals } = await supabase
           .from('resolution_logs')
-          .select('resolved_by')
+          .select('resolved_by, ai_participated')
           .eq('account_id', dbAccountId)
           .gte('resolved_at', dateFrom)
           .lte('resolved_at', dateTo);
@@ -683,11 +687,15 @@ serve(async (req) => {
         if (totals && totals.length > 0) {
           const aiCount = totals.filter(r => r.resolved_by === 'ai').length;
           const humanCount = totals.filter(r => r.resolved_by === 'human').length;
+          const transbordoCount = totals.filter(
+            r => r.resolved_by === 'human' && r.ai_participated === true
+          ).length;
           const total = aiCount + humanCount;
           
           historicoResolucoes = {
             totalIA: aiCount,
             totalHumano: humanCount,
+            transbordoCount,
             percentualIA: total > 0 ? Math.round((aiCount / total) * 100) : 0,
             percentualHumano: total > 0 ? Math.round((humanCount / total) * 100) : 0,
           };
@@ -706,7 +714,7 @@ serve(async (req) => {
       ia: { total: historicoResolucoes.totalIA, explicito: historicoResolucoes.totalIA, botNativo: 0, inferido: 0 },
       humano: { total: historicoResolucoes.totalHumano, explicito: historicoResolucoes.totalHumano, inferido: 0 },
       naoClassificado: 0,
-      transbordoFinalizado: 0,
+      transbordoFinalizado: historicoResolucoes.transbordoCount,
     };
 
     // Recalcular taxas com dados persistentes do resolution_logs
