@@ -485,6 +485,7 @@ export type Database = {
         Row: {
           account_id: string
           agent_id: number | null
+          ai_participated: boolean | null
           conversation_id: number
           created_at: string
           id: string
@@ -495,6 +496,7 @@ export type Database = {
         Insert: {
           account_id: string
           agent_id?: number | null
+          ai_participated?: boolean | null
           conversation_id: number
           created_at?: string
           id?: string
@@ -505,6 +507,7 @@ export type Database = {
         Update: {
           account_id?: string
           agent_id?: number | null
+          ai_participated?: boolean | null
           conversation_id?: number
           created_at?: string
           id?: string
