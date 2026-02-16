@@ -1,68 +1,82 @@
 
 
-## Correcao Definitiva: Transbordo = Toda Resolucao Humana
+## Renomear "Aguardando" para "Em Aberto" e Cadenciamento via n8n
 
-### Regra de Negocio (confirmada pelo usuario)
+### Problema Atual
 
-Como a IA **sempre** inicia o atendimento, toda resolucao humana implica que a IA participou. Portanto:
+A funcao `classifyCurrentHandler` retorna `'none'` para conversas que nao tem `ai_responded: true` NEM um assignee humano. Essas 19 conversas provavelmente ja receberam resposta da IA mas o atributo `ai_responded` nao foi setado (conversas antigas ou falha no fluxo n8n), ou o lead simplesmente parou de responder. O rotulo "Aguardando" passa a impressao errada de que ninguem atendeu.
 
-- **Transbordo** = qualquer `resolved_by: 'human'` (nao precisa verificar `ai_responded`)
-- **Cada ciclo e independente**: IA resolveu = +1 ciclo IA. Humano resolveu = +1 ciclo transbordo. Sem apagar historico.
+### Mudanca 1: Renomear no Frontend
 
-Isso elimina completamente a dependencia de atributos customizados (`ai_responded`, `handoff_to_human`) para o calculo de transbordo.
+**Arquivo:** `src/components/dashboard/AtendimentoRealtimeCard.tsx`
 
-### O que muda (3 linhas uteis)
+- Trocar o label de "Aguardando" para "Em Aberto"
+- Trocar o icone de `Clock` para `MessageCircle` ou `CircleDashed` (indica conversa aberta sem atividade recente)
+
+**Arquivo:** `src/types/chatwoot-metrics.ts`
+
+- Atualizar o comentario do campo `semAssignee` para refletir o novo significado
+
+### Mudanca 2: Logica mais inteligente na classificacao
 
 **Arquivo:** `supabase/functions/fetch-chatwoot-metrics/index.ts`
 
-1. **Linha 645**: Remover a verificacao de `ai_responded` e definir `ai_participated: true` para todas as resolucoes humanas:
+Atualmente a funcao `classifyCurrentHandler` so verifica `ai_responded` e `assignee`. Podemos manter a mesma logica mas renomear o conceito. O campo `semAssignee` passa a representar "Em Aberto" -- conversas abertas onde nao ha atividade classificada (nem IA confirmada, nem humano atribuido). Nenhuma mudanca de logica necessaria, apenas semantica.
 
-```typescript
-// ANTES (linha 644-645):
-// Check if AI participated before human resolved
-const aiResponded = custom.ai_responded === true || additional.ai_responded === true;
+### Fluxo n8n: Cadenciamento de Leads Inativos
 
-// DEPOIS:
-// IA sempre inicia o atendimento, toda resolução humana = transbordo
-const aiResponded = true;
+Este fluxo deve ser criado no n8n para fazer follow-up automatico em conversas onde o lead parou de responder:
+
+```text
+Trigger: Schedule (a cada 30 min ou 1h)
+  |
+  v
+HTTP Request: GET /api/v1/accounts/{id}/conversations?status=open
+  |
+  v
+Filtro: Conversas onde:
+  - last_activity_at > 2 horas atras (lead inativo)
+  - ai_responded = true (IA ja respondeu)
+  - handoff_to_human != true (nao foi transferido)
+  - human_active != true (humano nao assumiu)
+  |
+  v
+Loop: Para cada conversa inativa
+  |
+  v
+Verificar cadencia (custom_attribute 'followup_count'):
+  - followup_count = 0 ou null -> Enviar mensagem 1 (lembrete gentil)
+  - followup_count = 1 -> Enviar mensagem 2 (ultima tentativa)
+  - followup_count >= 2 -> Resolver conversa automaticamente
+  |
+  v
+Se enviar mensagem:
+  POST /api/v1/accounts/{id}/conversations/{conv_id}/messages
+  + PUT /custom_attributes { followup_count: N+1 }
+
+Se encerrar:
+  PUT /custom_attributes { resolved_by: 'ai' }
+  POST edge-function/log-resolution { resolved_by: 'ai' }
+  POST /toggle_status { status: 'resolved' }
 ```
 
-2. **`log-resolution/index.ts`**: Quando `resolved_by === 'human'`, forcar `ai_participated: true` independente do payload:
+**Atributos customizados necessarios no Chatwoot:**
+- `followup_count` (number): Contador de tentativas de follow-up
+- `last_followup_at` (string/date): Timestamp do ultimo follow-up
 
-```typescript
-// ANTES:
-ai_participated: ai_participated === true,
+**Parametros configuraveis:**
+- Tempo de inatividade antes do 1o follow-up (sugestao: 2h)
+- Tempo entre follow-ups (sugestao: 4h)
+- Maximo de follow-ups antes de encerrar (sugestao: 2)
 
-// DEPOIS:
-ai_participated: resolved_by === 'human' ? true : (ai_participated === true),
-```
-
-3. **Correcao retroativa** (query unica no banco): Atualizar todos os registros humanos antigos que estao com `ai_participated: false`:
-
-```sql
-UPDATE resolution_logs 
-SET ai_participated = true 
-WHERE resolved_by = 'human' AND ai_participated = false;
-```
-
-### Sobre a conversa #32 (gap do safety net)
-
-A conversa #32 continua nao sendo capturada porque o safety net so processa `status === 'resolved'` e ela foi reaberta. Porem, com a regra simplificada, da proxima vez que ela for resolvida (por humano ou IA), o ciclo sera registrado corretamente. Se quiser capturar tambem conversas reabertas que tiveram transbordo, pode-se adicionar um filtro secundario para conversas com `handoff_to_human: true` que nao estao em status resolved.
-
-### Resultado
-
-| Cenario | Antes | Depois |
-|---------|-------|--------|
-| Resolucao humana qualquer | Depende de ai_responded (falha) | ai_participated = true sempre |
-| Resolucao por IA | ai_participated = false | ai_participated = false (correto) |
-| Registros antigos | ai_participated = false | Corrigidos retroativamente |
-| Calculo transbordo | 0% (hardcoded/bug) | Todas resolucoes humanas contam |
-
-### Arquivos alterados
+### Resumo dos Arquivos Alterados
 
 | Arquivo | Mudanca |
 |---------|---------|
-| `supabase/functions/fetch-chatwoot-metrics/index.ts` | Linha 645: `ai_participated: true` para toda resolucao humana |
-| `supabase/functions/log-resolution/index.ts` | Forcar `ai_participated: true` quando `resolved_by === 'human'` |
-| `resolution_logs` (query retroativa) | UPDATE registros humanos antigos |
+| `src/components/dashboard/AtendimentoRealtimeCard.tsx` | Renomear "Aguardando" para "Em Aberto", trocar icone |
+| `src/types/chatwoot-metrics.ts` | Atualizar comentario do campo |
+
+### Fora do escopo (n8n - responsabilidade do usuario)
+
+O fluxo de cadenciamento descrito acima precisa ser implementado diretamente no n8n. A logica esta detalhada para facilitar a criacao.
 
