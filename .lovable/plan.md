@@ -1,118 +1,68 @@
 
 
-## Implementar Rastreamento Real de Transbordo
+## Correcao Definitiva: Transbordo = Toda Resolucao Humana
 
-### Problema Atual
-A taxa de transbordo esta sempre em **0%** porque o campo `transbordoFinalizado` esta hardcoded como `0` na linha 709 da Edge Function. O sistema nao consegue distinguir entre uma resolucao humana "pura" e uma onde a IA participou antes (transbordo).
+### Regra de Negocio (confirmada pelo usuario)
 
-### Solucao
+Como a IA **sempre** inicia o atendimento, toda resolucao humana implica que a IA participou. Portanto:
 
-Adicionar um campo `ai_participated` na tabela `resolution_logs` para registrar se a IA atuou antes da resolucao humana. Com isso, o calculo de transbordo sera:
+- **Transbordo** = qualquer `resolved_by: 'human'` (nao precisa verificar `ai_responded`)
+- **Cada ciclo e independente**: IA resolveu = +1 ciclo IA. Humano resolveu = +1 ciclo transbordo. Sem apagar historico.
 
-- **Transbordo** = resolucoees onde `resolved_by = 'human'` E `ai_participated = true`
-- **Taxa** = transbordo / (resolucoes IA + transbordo) x 100
+Isso elimina completamente a dependencia de atributos customizados (`ai_responded`, `handoff_to_human`) para o calculo de transbordo.
 
-### Fluxo de Dados
+### O que muda (3 linhas uteis)
 
-```text
-Conversa resolvida
-       |
-       v
-  resolved_by = "ai"?
-     /         \
-   SIM         NAO
-    |            |
-  n8n loga     Edge Function loga
-  ai + ai_participated=true    human + verifica ai_responded
-    |            |
-    v            v
-  resolution_logs      resolution_logs
-  resolved_by=ai       resolved_by=human
-  ai_participated=true ai_participated=true/false
-```
+**Arquivo:** `supabase/functions/fetch-chatwoot-metrics/index.ts`
 
----
-
-### Detalhes Tecnicos
-
-**1. Migracao de banco de dados**
-
-Adicionar coluna `ai_participated` na tabela `resolution_logs`:
-
-```sql
-ALTER TABLE resolution_logs 
-ADD COLUMN ai_participated boolean DEFAULT false;
-```
-
-**2. Atualizar Edge Function `log-resolution`**
-
-Aceitar o novo campo `ai_participated` no payload do n8n:
+1. **Linha 645**: Remover a verificacao de `ai_responded` e definir `ai_participated: true` para todas as resolucoes humanas:
 
 ```typescript
-const { chatwoot_account_id, conversation_id, resolved_by, 
-        resolution_type, agent_id, ai_participated } = await req.json();
-
-// No insert:
-ai_participated: ai_participated || false,
-```
-
-**3. Atualizar Edge Function `fetch-chatwoot-metrics`**
-
-Na sincronizacao passiva (Safety Net), verificar `ai_responded` da conversa ao inserir resolucoes humanas:
-
-```typescript
-// Ao inserir resolucao humana inferred:
+// ANTES (linha 644-645):
+// Check if AI participated before human resolved
 const aiResponded = custom.ai_responded === true || additional.ai_responded === true;
 
-.insert({
-  account_id: dbAccountId,
-  conversation_id: conv.id,
-  resolved_by: 'human',
-  resolution_type: 'inferred',
-  ai_participated: aiResponded,  // <-- NOVO
-  resolved_at: resolvedAt,
-})
+// DEPOIS:
+// IA sempre inicia o atendimento, toda resolução humana = transbordo
+const aiResponded = true;
 ```
 
-Na consulta de totais, calcular transbordo:
+2. **`log-resolution/index.ts`**: Quando `resolved_by === 'human'`, forcar `ai_participated: true` independente do payload:
 
 ```typescript
-const { data: totals } = await supabase
-  .from('resolution_logs')
-  .select('resolved_by, ai_participated')
-  .eq('account_id', dbAccountId)
-  .gte('resolved_at', dateFrom)
-  .lte('resolved_at', dateTo);
+// ANTES:
+ai_participated: ai_participated === true,
 
-const aiCount = totals.filter(r => r.resolved_by === 'ai').length;
-const humanCount = totals.filter(r => r.resolved_by === 'human').length;
-const transbordoCount = totals.filter(
-  r => r.resolved_by === 'human' && r.ai_participated === true
-).length;
+// DEPOIS:
+ai_participated: resolved_by === 'human' ? true : (ai_participated === true),
 ```
 
-Substituir o `transbordoFinalizado: 0` pelo valor real:
+3. **Correcao retroativa** (query unica no banco): Atualizar todos os registros humanos antigos que estao com `ai_participated: false`:
 
-```typescript
-resolucao = {
-  ...
-  transbordoFinalizado: transbordoCount,  // <-- era 0
-};
+```sql
+UPDATE resolution_logs 
+SET ai_participated = true 
+WHERE resolved_by = 'human' AND ai_participated = false;
 ```
 
-**4. Atualizar registros existentes (retroativo)**
+### Sobre a conversa #32 (gap do safety net)
 
-Para as resolucoes humanas ja registradas, inferir `ai_participated` verificando se a conversa correspondente possui `ai_responded: true` no Chatwoot. Isso pode ser feito uma unica vez na proxima execucao da Edge Function ou via query manual.
+A conversa #32 continua nao sendo capturada porque o safety net so processa `status === 'resolved'` e ela foi reaberta. Porem, com a regra simplificada, da proxima vez que ela for resolvida (por humano ou IA), o ciclo sera registrado corretamente. Se quiser capturar tambem conversas reabertas que tiveram transbordo, pode-se adicionar um filtro secundario para conversas com `handoff_to_human: true` que nao estao em status resolved.
 
-### Arquivos Alterados
+### Resultado
 
-| Arquivo | Alteracao |
-|---------|-----------|
-| `resolution_logs` (migracao) | Adicionar coluna `ai_participated` |
-| `supabase/functions/log-resolution/index.ts` | Aceitar `ai_participated` no payload |
-| `supabase/functions/fetch-chatwoot-metrics/index.ts` | Inserir `ai_participated` no sync + calcular transbordo real |
+| Cenario | Antes | Depois |
+|---------|-------|--------|
+| Resolucao humana qualquer | Depende de ai_responded (falha) | ai_participated = true sempre |
+| Resolucao por IA | ai_participated = false | ai_participated = false (correto) |
+| Registros antigos | ai_participated = false | Corrigidos retroativamente |
+| Calculo transbordo | 0% (hardcoded/bug) | Todas resolucoes humanas contam |
 
-### Contrato n8n Atualizado
+### Arquivos alterados
 
-O n8n deve passar `ai_participated: true` ao chamar `log-resolution` sempre que a conversa tiver o atributo `ai_responded: true`, independente de quem resolveu.
+| Arquivo | Mudanca |
+|---------|---------|
+| `supabase/functions/fetch-chatwoot-metrics/index.ts` | Linha 645: `ai_participated: true` para toda resolucao humana |
+| `supabase/functions/log-resolution/index.ts` | Forcar `ai_participated: true` quando `resolved_by === 'human'` |
+| `resolution_logs` (query retroativa) | UPDATE registros humanos antigos |
 
