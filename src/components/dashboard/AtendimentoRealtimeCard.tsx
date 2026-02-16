@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Bot, User, Clock, ArrowRightLeft } from 'lucide-react';
+import { Bot, User, Clock, MessageCircle } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
@@ -160,12 +160,12 @@ export function AtendimentoRealtimeCard({
               className="p-1.5 rounded-full mb-1"
               style={{ backgroundColor: `${CHART_MUTED}20` }}
             >
-              <Clock className="w-4 h-4" style={{ color: CHART_MUTED }} />
+              <MessageCircle className="w-4 h-4" style={{ color: CHART_MUTED }} />
             </div>
             <span className="text-lg font-bold" style={{ color: CHART_MUTED }}>
               {safeData.semAssignee}
             </span>
-            <span className="text-[10px] text-muted-foreground">Aguardando</span>
+            <span className="text-[10px] text-muted-foreground">Em Aberto</span>
           </div>
         </div>
 

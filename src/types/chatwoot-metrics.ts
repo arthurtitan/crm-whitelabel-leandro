@@ -41,7 +41,7 @@ export interface AtendimentoMetrics {
   total: number;              // Total de conversas abertas
   ia: number;                 // Sendo atendidas por IA agora
   humano: number;             // Sendo atendidas por humanos agora
-  semAssignee: number;        // Aguardando atribuição
+  semAssignee: number;        // Em Aberto — conversas sem IA confirmada nem humano atribuído
 }
 
 /**
