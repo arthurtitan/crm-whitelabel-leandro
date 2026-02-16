@@ -70,7 +70,7 @@ export function BacklogCard({ data, isLoading = false }: BacklogCardProps) {
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-medium text-muted-foreground">
-          Backlog de Atendimento
+          Backlog Humano
         </CardTitle>
       </CardHeader>
       <CardContent>

@@ -465,8 +465,8 @@ serve(async (req) => {
       const hour = createdAt.getHours();
       hourlyCount[hour]++;
 
-      // Backlog (open conversations waiting for response)
-      if (conv.status === 'open') {
+      // Backlog (only human-assigned open conversations)
+      if (conv.status === 'open' && hasHumanAssignee) {
         let waitingMs: number;
         
         if (conv.waiting_since) {
