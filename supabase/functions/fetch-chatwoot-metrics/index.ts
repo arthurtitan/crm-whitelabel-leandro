@@ -641,8 +641,8 @@ serve(async (req) => {
             ? new Date(lastActivityAt * 1000).toISOString()
             : new Date(lastActivityAt).toISOString();
 
-          // Check if AI participated before human resolved
-          const aiResponded = custom.ai_responded === true || additional.ai_responded === true;
+          // IA sempre inicia o atendimento, toda resolução humana = transbordo
+          const aiResponded = true;
 
           const { error: insertError } = await supabase
             .from('resolution_logs')

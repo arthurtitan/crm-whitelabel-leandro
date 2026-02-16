@@ -64,7 +64,7 @@ serve(async (req) => {
         resolved_by,
         resolution_type: resolution_type || 'explicit',
         agent_id: agent_id ? Number(agent_id) : null,
-        ai_participated: ai_participated === true,
+        ai_participated: resolved_by === 'human' ? true : (ai_participated === true),
         resolved_at: new Date().toISOString(),
       })
       .select()
