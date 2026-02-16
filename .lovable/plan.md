@@ -1,82 +1,43 @@
 
 
-## Renomear "Aguardando" para "Em Aberto" e Cadenciamento via n8n
+## Corrigir Backlog: contar apenas conversas em atendimento humano
 
-### Problema Atual
+### Problema atual
 
-A funcao `classifyCurrentHandler` retorna `'none'` para conversas que nao tem `ai_responded: true` NEM um assignee humano. Essas 19 conversas provavelmente ja receberam resposta da IA mas o atributo `ai_responded` nao foi setado (conversas antigas ou falha no fluxo n8n), ou o lead simplesmente parou de responder. O rotulo "Aguardando" passa a impressao errada de que ninguem atendeu.
+O backlog conta **todas** as conversas abertas, incluindo as que a IA esta atendendo normalmente. Isso infla o numero e nao reflete a fila real dos atendentes humanos.
 
-### Mudanca 1: Renomear no Frontend
+### Solucao
 
-**Arquivo:** `src/components/dashboard/AtendimentoRealtimeCard.tsx`
+Adicionar um filtro na logica de backlog dentro da Edge Function `fetch-chatwoot-metrics` para considerar **apenas conversas com um agente humano atribuido** (`hasHumanAssignee === true`).
 
-- Trocar o label de "Aguardando" para "Em Aberto"
-- Trocar o icone de `Clock` para `MessageCircle` ou `CircleDashed` (indica conversa aberta sem atividade recente)
-
-**Arquivo:** `src/types/chatwoot-metrics.ts`
-
-- Atualizar o comentario do campo `semAssignee` para refletir o novo significado
-
-### Mudanca 2: Logica mais inteligente na classificacao
+### O que muda
 
 **Arquivo:** `supabase/functions/fetch-chatwoot-metrics/index.ts`
 
-Atualmente a funcao `classifyCurrentHandler` so verifica `ai_responded` e `assignee`. Podemos manter a mesma logica mas renomear o conceito. O campo `semAssignee` passa a representar "Em Aberto" -- conversas abertas onde nao ha atividade classificada (nem IA confirmada, nem humano atribuido). Nenhuma mudanca de logica necessaria, apenas semantica.
+Na secao de calculo do backlog (linhas 468-486), o `if (conv.status === 'open')` sera alterado para `if (conv.status === 'open' && hasHumanAssignee)`.
 
-### Fluxo n8n: Cadenciamento de Leads Inativos
+Isso garante que:
+- Conversas atendidas pela IA nao entram no backlog
+- Conversas "Em Aberto" (sem ninguem) nao entram no backlog
+- Apenas conversas onde um humano assumiu e o cliente aguarda resposta sao contabilizadas
 
-Este fluxo deve ser criado no n8n para fazer follow-up automatico em conversas onde o lead parou de responder:
+**Arquivo:** `src/components/dashboard/BacklogCard.tsx`
+
+Atualizar o titulo do card de "Backlog de Atendimento" para "Backlog Humano" para deixar claro que se refere a fila dos agentes humanos.
+
+### Detalhe tecnico
 
 ```text
-Trigger: Schedule (a cada 30 min ou 1h)
-  |
-  v
-HTTP Request: GET /api/v1/accounts/{id}/conversations?status=open
-  |
-  v
-Filtro: Conversas onde:
-  - last_activity_at > 2 horas atras (lead inativo)
-  - ai_responded = true (IA ja respondeu)
-  - handoff_to_human != true (nao foi transferido)
-  - human_active != true (humano nao assumiu)
-  |
-  v
-Loop: Para cada conversa inativa
-  |
-  v
-Verificar cadencia (custom_attribute 'followup_count'):
-  - followup_count = 0 ou null -> Enviar mensagem 1 (lembrete gentil)
-  - followup_count = 1 -> Enviar mensagem 2 (ultima tentativa)
-  - followup_count >= 2 -> Resolver conversa automaticamente
-  |
-  v
-Se enviar mensagem:
-  POST /api/v1/accounts/{id}/conversations/{conv_id}/messages
-  + PUT /custom_attributes { followup_count: N+1 }
+ANTES:
+  if (conv.status === 'open') {
+    // conta TODAS as abertas no backlog
+  }
 
-Se encerrar:
-  PUT /custom_attributes { resolved_by: 'ai' }
-  POST edge-function/log-resolution { resolved_by: 'ai' }
-  POST /toggle_status { status: 'resolved' }
+DEPOIS:
+  if (conv.status === 'open' && hasHumanAssignee) {
+    // conta apenas as que tem agente humano atribuido
+  }
 ```
 
-**Atributos customizados necessarios no Chatwoot:**
-- `followup_count` (number): Contador de tentativas de follow-up
-- `last_followup_at` (string/date): Timestamp do ultimo follow-up
-
-**Parametros configuraveis:**
-- Tempo de inatividade antes do 1o follow-up (sugestao: 2h)
-- Tempo entre follow-ups (sugestao: 4h)
-- Maximo de follow-ups antes de encerrar (sugestao: 2)
-
-### Resumo dos Arquivos Alterados
-
-| Arquivo | Mudanca |
-|---------|---------|
-| `src/components/dashboard/AtendimentoRealtimeCard.tsx` | Renomear "Aguardando" para "Em Aberto", trocar icone |
-| `src/types/chatwoot-metrics.ts` | Atualizar comentario do campo |
-
-### Fora do escopo (n8n - responsabilidade do usuario)
-
-O fluxo de cadenciamento descrito acima precisa ser implementado diretamente no n8n. A logica esta detalhada para facilitar a criacao.
+As variaveis `hasHumanAssignee` e `hasBotAssignee` ja sao calculadas algumas linhas acima (linha 429), entao nenhuma logica nova precisa ser criada — apenas adicionamos a condicao ao filtro existente.
 
