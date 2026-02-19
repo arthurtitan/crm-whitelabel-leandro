@@ -460,10 +460,13 @@ serve(async (req) => {
         }
       }
 
-      // Hourly distribution
+      // Hourly distribution - only count conversations CREATED within the date range
       const createdAt = new Date(conv.created_at);
-      const hour = createdAt.getHours();
-      hourlyCount[hour]++;
+      const createdInDateRange = createdAt >= dateFromParsed && createdAt <= dateToParsed;
+      if (createdInDateRange) {
+        const hour = createdAt.getHours();
+        hourlyCount[hour]++;
+      }
 
       // Backlog (only human-assigned open conversations)
       if (conv.status === 'open' && hasHumanAssignee) {
