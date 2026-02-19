@@ -1,43 +1,46 @@
 
+## Corrigir Gráfico de Pico de Atendimento para respeitar filtro de datas
 
-## Corrigir Backlog: contar apenas conversas em atendimento humano
+### Problema identificado
 
-### Problema atual
+O gráfico "Pico de Atendimento por Hora" mostra dados mesmo quando não houve atendimentos no período selecionado. Isso acontece por dois motivos:
 
-O backlog conta **todas** as conversas abertas, incluindo as que a IA esta atendendo normalmente. Isso infla o numero e nao reflete a fila real dos atendentes humanos.
+1. **Conversas fantasma**: O filtro de data inclui conversas que tiveram "qualquer atividade" no período (`activeInRange`), mesmo que tenham sido criadas semanas atrás. O gráfico horário usa `created_at` dessas conversas, plotando horários que não pertencem ao período selecionado.
 
-### Solucao
+2. **Falta de filtro por data da atividade**: O `hourlyCount` deveria considerar apenas a atividade que ocorreu dentro do período, não a data de criação original da conversa.
 
-Adicionar um filtro na logica de backlog dentro da Edge Function `fetch-chatwoot-metrics` para considerar **apenas conversas com um agente humano atribuido** (`hasHumanAssignee === true`).
+### Solução
 
-### O que muda
+**Arquivo:** `supabase/functions/fetch-chatwoot-metrics/index.ts` (linhas 463-466)
 
-**Arquivo:** `supabase/functions/fetch-chatwoot-metrics/index.ts`
-
-Na secao de calculo do backlog (linhas 468-486), o `if (conv.status === 'open')` sera alterado para `if (conv.status === 'open' && hasHumanAssignee)`.
-
-Isso garante que:
-- Conversas atendidas pela IA nao entram no backlog
-- Conversas "Em Aberto" (sem ninguem) nao entram no backlog
-- Apenas conversas onde um humano assumiu e o cliente aguarda resposta sao contabilizadas
-
-**Arquivo:** `src/components/dashboard/BacklogCard.tsx`
-
-Atualizar o titulo do card de "Backlog de Atendimento" para "Backlog Humano" para deixar claro que se refere a fila dos agentes humanos.
-
-### Detalhe tecnico
+Alterar a lógica do `hourlyCount` para contabilizar apenas conversas cuja **data de criação** esteja dentro do período selecionado, ignorando conversas que entraram no filtro apenas por atividade recente:
 
 ```text
 ANTES:
-  if (conv.status === 'open') {
-    // conta TODAS as abertas no backlog
-  }
+  // Hourly distribution
+  const createdAt = new Date(conv.created_at);
+  const hour = createdAt.getHours();
+  hourlyCount[hour]++;
 
 DEPOIS:
-  if (conv.status === 'open' && hasHumanAssignee) {
-    // conta apenas as que tem agente humano atribuido
+  // Hourly distribution - only count conversations CREATED within the date range
+  const createdAt = new Date(conv.created_at);
+  const createdInDateRange = createdAt >= dateFromParsed && createdAt <= dateToParsed;
+  if (createdInDateRange) {
+    const hour = createdAt.getHours();
+    hourlyCount[hour]++;
   }
 ```
 
-As variaveis `hasHumanAssignee` e `hasBotAssignee` ja sao calculadas algumas linhas acima (linha 429), entao nenhuma logica nova precisa ser criada — apenas adicionamos a condicao ao filtro existente.
+### Por que essa abordagem
 
+- O gráfico mostra "em que horários os atendimentos começam", logo faz sentido usar `created_at`
+- Mas deve contar apenas conversas realmente **criadas** no período filtrado
+- Conversas antigas que tiveram atividade no período continuam sendo contabilizadas em outras métricas (resolução, KPIs), mas não distorcem o gráfico horário
+- Se nos últimos 7 dias não houve nenhuma conversa nova, o gráfico ficará zerado (comportamento correto)
+
+### Impacto
+
+- Nenhum componente de UI precisa mudar
+- Apenas a lógica de agregação na Edge Function será ajustada
+- A Edge Function será reimplantada automaticamente
