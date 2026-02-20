@@ -826,6 +826,7 @@ serve(async (req) => {
         // KPIs básicos
         totalLeads: finalConversations.length,
         conversasAtivas: novosLeads,
+        retornosNoPeriodo: Math.max(0, finalConversations.length - novosLeads),
         conversasResolvidas: resolvedCount,
         conversasPendentes: pendingCount,
         conversasSemResposta: unattendedCount,
