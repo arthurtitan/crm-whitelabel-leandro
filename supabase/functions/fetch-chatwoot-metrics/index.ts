@@ -383,6 +383,8 @@ serve(async (req) => {
       
       const custom = conv.custom_attributes || {};
       const additional = conv.additional_attributes || {};
+      const hasBotAssigneeLive = conv.meta?.assignee?.type === 'AgentBot' || !!conv.agent_bot_id;
+      const hasHumanAssigneeLive = !!(conv.meta?.assignee?.id || conv.assignee_id) && !hasBotAssigneeLive;
       console.log(`[Atendimento] Conv #${conv.id} | handler=${handler} | ` +
         `assignee=${conv.meta?.assignee?.name || 'none'} | ` +
         `ai_responded=${custom.ai_responded} | ` +
@@ -395,6 +397,26 @@ serve(async (req) => {
         atendimento.humano++;
       } else {
         atendimento.semAssignee++;
+      }
+
+      // Backlog (only human-assigned open conversations — uses live data for real-time accuracy)
+      if (hasHumanAssigneeLive) {
+        let waitingMs: number;
+        
+        if (conv.waiting_since) {
+          waitingMs = now - (conv.waiting_since * 1000);
+        } else {
+          const lastActivity = conv.last_activity_at 
+            ? conv.last_activity_at * 1000 
+            : new Date(conv.created_at).getTime();
+          waitingMs = now - lastActivity;
+        }
+        
+        const waitingMinutes = waitingMs / 60000;
+        
+        if (waitingMinutes <= 15) backlog.ate15min++;
+        else if (waitingMinutes <= 60) backlog.de15a60min++;
+        else backlog.acima60min++;
       }
     }
 
@@ -461,31 +483,13 @@ serve(async (req) => {
       }
 
       // Hourly distribution - only count conversations CREATED within the date range
+      // Uses UTC-3 (America/Sao_Paulo) offset to display correct local hour
       const createdAt = new Date(conv.created_at);
       const createdInDateRange = createdAt >= dateFromParsed && createdAt <= dateToParsed;
       if (createdInDateRange) {
-        const hour = createdAt.getHours();
-        hourlyCount[hour]++;
-      }
-
-      // Backlog (only human-assigned open conversations)
-      if (conv.status === 'open' && hasHumanAssignee) {
-        let waitingMs: number;
-        
-        if (conv.waiting_since) {
-          waitingMs = now - (conv.waiting_since * 1000);
-        } else {
-          const lastActivity = conv.last_activity_at 
-            ? conv.last_activity_at * 1000 
-            : new Date(conv.created_at).getTime();
-          waitingMs = now - lastActivity;
-        }
-        
-        const waitingMinutes = waitingMs / 60000;
-        
-        if (waitingMinutes <= 15) backlog.ate15min++;
-        else if (waitingMinutes <= 60) backlog.de15a60min++;
-        else backlog.acima60min++;
+        // Convert UTC timestamp to Brasília time (UTC-3)
+        const hourLocal = (createdAt.getUTCHours() - 3 + 24) % 24;
+        hourlyCount[hourLocal]++;
       }
     }
 

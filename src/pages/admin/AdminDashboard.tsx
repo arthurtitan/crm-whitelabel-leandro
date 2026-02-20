@@ -304,8 +304,8 @@ export default function AdminDashboard() {
           isLoading={isLoading}
         />
         <KPICard
-          title="Conversas Ativas"
-          subtitle={getAgentContextSubtitle('Em andamento')}
+          title="Conversas Ativas Agora"
+          subtitle={getAgentContextSubtitle('Tempo real — ignora filtro de data')}
           value={displayedData.kpis.conversasAtivas}
           icon={MessageSquare}
           iconColor="text-info"
