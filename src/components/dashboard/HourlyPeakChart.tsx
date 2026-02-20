@@ -65,7 +65,7 @@ export function HourlyPeakChart({ data, isLoading = false }: HourlyPeakChartProp
                 tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
                 tickLine={false}
                 axisLine={false}
-                interval={3}
+                interval={1}
                 height={25}
               />
               <YAxis
