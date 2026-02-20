@@ -604,6 +604,7 @@ serve(async (req) => {
     // Regra: resolved_by === "ai" → SKIP (n8n já logou). Qualquer outro caso → INSERT human.
     // ========================================================================
     let historicoResolucoes = { totalIA: 0, totalHumano: 0, transbordoCount: 0, percentualIA: 0, percentualHumano: 0 };
+    let novosLeads = 0;
     
     try {
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -721,7 +722,6 @@ serve(async (req) => {
         // NOVOS LEADS: Contatos com atividade no período cujo first_resolved_at
         // é NULL (nunca resolvido) ou caiu dentro do período (1ª resolução no período)
         // ====================================================================
-        let novosLeads = 0;
         try {
           const contactIdsInPeriod = [...new Set(
             finalConversations
