@@ -12,6 +12,7 @@ import {
   X,
   AlertCircle,
   UserPlus,
+  RefreshCw,
 } from 'lucide-react';
 import { subDays, isWithinInterval, parseISO } from 'date-fns';
 import { DateRange } from 'react-day-picker';
@@ -113,6 +114,7 @@ export default function AdminDashboard() {
         kpis: {
           totalLeads: 0,
           conversasAtivas: 0,
+          retornosNoPeriodo: 0,
           atendimentosIA: 0,
           atendimentosHumano: 0,
           atendimentosClassificados: 0,
@@ -157,9 +159,10 @@ export default function AdminDashboard() {
         // Return agent-specific view (simplified for now)
         return {
           kpis: {
-            totalLeads: agentData.atendimentosAssumidos,
-            conversasAtivas: Math.round(agentData.atendimentosAssumidos * 0.1),
-            percentualIA: metricsData.percentualIA,
+          totalLeads: agentData.atendimentosAssumidos,
+          conversasAtivas: Math.round(agentData.atendimentosAssumidos * 0.1),
+          retornosNoPeriodo: 0,
+          percentualIA: metricsData.percentualIA,
             percentualHumano: metricsData.percentualHumano,
             tempoMedioPrimeiraResposta: agentData.tempoMedioResposta,
             tempoMedioResolucao: metricsData.tempoMedioResolucao,
@@ -180,6 +183,7 @@ export default function AdminDashboard() {
       kpis: {
         totalLeads: metricsData.totalLeads,
         conversasAtivas: metricsData.conversasAtivas,
+        retornosNoPeriodo: metricsData.retornosNoPeriodo ?? 0,
         atendimentosIA: metricsData.atendimentosIA ?? 0,
         atendimentosHumano: metricsData.atendimentosHumano ?? 0,
         atendimentosClassificados: metricsData.atendimentosClassificados ?? 0,
@@ -311,6 +315,15 @@ export default function AdminDashboard() {
           icon={UserPlus}
           iconColor="text-success"
           iconBgColor="bg-success/10"
+          isLoading={isLoading}
+        />
+        <KPICard
+          title="Retornos no Período"
+          subtitle={getAgentContextSubtitle('Reentraram em contato')}
+          value={displayedData.kpis.retornosNoPeriodo}
+          icon={RefreshCw}
+          iconColor="text-warning"
+          iconBgColor="bg-warning/10"
           isLoading={isLoading}
         />
         <KPICard

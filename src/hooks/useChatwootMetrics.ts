@@ -6,6 +6,7 @@ import type { AtendimentoMetrics, ResolucaoMetrics, TaxasMetrics, TransbordoMetr
 export interface DashboardMetrics {
   totalLeads: number;
   conversasAtivas: number;
+  retornosNoPeriodo: number;
   conversasResolvidas: number;
   conversasPendentes: number;
   conversasSemResposta: number;
@@ -86,6 +87,7 @@ interface UseChatwootMetricsResult {
 const DEFAULT_METRICS: DashboardMetrics = {
   totalLeads: 0,
   conversasAtivas: 0,
+  retornosNoPeriodo: 0,
   conversasResolvidas: 0,
   conversasPendentes: 0,
   conversasSemResposta: 0,
