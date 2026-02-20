@@ -685,6 +685,28 @@ serve(async (req) => {
             }
           } else {
             syncedCount++;
+
+            // Safety net: marcar first_resolved_at no contato (se ainda não tiver)
+            const chatwootContactId = conv.meta?.sender?.id;
+            if (chatwootContactId) {
+              try {
+                const { data: contactRec } = await supabase
+                  .from('contacts')
+                  .select('id, first_resolved_at')
+                  .eq('chatwoot_contact_id', chatwootContactId)
+                  .eq('account_id', dbAccountId)
+                  .maybeSingle();
+
+                if (contactRec && !contactRec.first_resolved_at) {
+                  await supabase
+                    .from('contacts')
+                    .update({ first_resolved_at: new Date().toISOString() })
+                    .eq('id', contactRec.id);
+                }
+              } catch (_) {
+                // Não fatal
+              }
+            }
           }
         }
 
@@ -694,6 +716,38 @@ serve(async (req) => {
           syncedHuman: syncedCount,
           duplicatesSkipped,
         });
+
+        // ====================================================================
+        // NOVOS LEADS: Contatos com atividade no período cujo first_resolved_at
+        // é NULL (nunca resolvido) ou caiu dentro do período (1ª resolução no período)
+        // ====================================================================
+        let novosLeads = 0;
+        try {
+          const contactIdsInPeriod = [...new Set(
+            finalConversations
+              .map((c: any) => c.meta?.sender?.id)
+              .filter(Boolean)
+          )] as number[];
+
+          if (contactIdsInPeriod.length > 0) {
+            const { data: newLeadContacts } = await supabase
+              .from('contacts')
+              .select('id, first_resolved_at')
+              .eq('account_id', dbAccountId)
+              .in('chatwoot_contact_id', contactIdsInPeriod);
+
+            const dateFromParsedMs = new Date(dateFrom).getTime();
+            const dateToParsedMs = new Date(dateTo).getTime();
+
+            novosLeads = (newLeadContacts || []).filter(c => {
+              if (!c.first_resolved_at) return true; // Nunca resolvido = novo lead
+              const frdMs = new Date(c.first_resolved_at).getTime();
+              return frdMs >= dateFromParsedMs && frdMs <= dateToParsedMs;
+            }).length;
+          }
+        } catch (_) {
+          // Não fatal — fallback para 0
+        }
 
         // ====================================================================
         // CONSULTA: Totais históricos filtrados por período
@@ -771,7 +825,7 @@ serve(async (req) => {
       data: {
         // KPIs básicos
         totalLeads: finalConversations.length,
-        conversasAtivas: openCount,
+        conversasAtivas: novosLeads,
         conversasResolvidas: resolvedCount,
         conversasPendentes: pendingCount,
         conversasSemResposta: unattendedCount,

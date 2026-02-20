@@ -84,6 +84,28 @@ serve(async (req) => {
 
     console.log('[log-resolution] Logged:', { id: data?.id, conversation_id, resolved_by, account_id: account.id });
 
+    // Marcar contato como "já teve primeira resolução" (first_resolved_at)
+    // Só grava uma vez — se já tiver marcador, ignora
+    try {
+      const { data: contactData } = await supabase
+        .from('contacts')
+        .select('id, first_resolved_at')
+        .eq('chatwoot_conversation_id', Number(conversation_id))
+        .eq('account_id', account.id)
+        .maybeSingle();
+
+      if (contactData && !contactData.first_resolved_at) {
+        await supabase
+          .from('contacts')
+          .update({ first_resolved_at: new Date().toISOString() })
+          .eq('id', contactData.id);
+        console.log('[log-resolution] first_resolved_at marked for contact:', contactData.id);
+      }
+    } catch (contactErr) {
+      // Não fatal — o log de resolução já foi salvo
+      console.warn('[log-resolution] Could not mark first_resolved_at:', contactErr);
+    }
+
     return new Response(
       JSON.stringify({ success: true, data }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
