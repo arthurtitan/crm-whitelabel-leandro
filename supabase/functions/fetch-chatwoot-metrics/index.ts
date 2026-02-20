@@ -314,6 +314,7 @@ serve(async (req) => {
     let resolvedCount = 0;
     let pendingCount = 0;
     let unattendedCount = 0;
+    let leadsInPeriod = 0;
 
     // CAMADA 1: Atendimento em tempo real (conversas abertas)
     const atendimento = {
@@ -490,6 +491,7 @@ serve(async (req) => {
       const createdAt = new Date(createdAtMs);
       const createdInDateRange = createdAt >= dateFromParsed && createdAt <= dateToParsed;
       if (createdInDateRange) {
+        leadsInPeriod++;
         // Use Intl to get the correct local hour in America/Sao_Paulo regardless of DST
         const hourLocal = parseInt(
           new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', hour12: false, timeZone: 'America/Sao_Paulo' })
@@ -763,7 +765,7 @@ serve(async (req) => {
       success: true,
       data: {
         // KPIs básicos
-        totalLeads: finalConversations.length,
+        totalLeads: leadsInPeriod,
         conversasAtivas: openCount,
         conversasResolvidas: resolvedCount,
         conversasPendentes: pendingCount,
