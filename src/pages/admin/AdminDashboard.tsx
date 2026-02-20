@@ -11,6 +11,7 @@ import {
   Bot,
   X,
   AlertCircle,
+  UserPlus,
 } from 'lucide-react';
 import { subDays, isWithinInterval, parseISO } from 'date-fns';
 import { DateRange } from 'react-day-picker';
@@ -304,12 +305,12 @@ export default function AdminDashboard() {
           isLoading={isLoading}
         />
         <KPICard
-          title="Conversas Ativas Agora"
-          subtitle={getAgentContextSubtitle('Tempo real — ignora filtro de data')}
+          title="Novos Leads"
+          subtitle={getAgentContextSubtitle('Primeiro contato no período')}
           value={displayedData.kpis.conversasAtivas}
-          icon={MessageSquare}
-          iconColor="text-info"
-          iconBgColor="bg-info/10"
+          icon={UserPlus}
+          iconColor="text-success"
+          iconBgColor="bg-success/10"
           isLoading={isLoading}
         />
         <KPICard

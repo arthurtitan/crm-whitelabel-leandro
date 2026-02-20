@@ -138,6 +138,7 @@ export type Database = {
           chatwoot_conversation_id: number | null
           created_at: string | null
           email: string | null
+          first_resolved_at: string | null
           id: string
           nome: string | null
           origem: Database["public"]["Enums"]["contact_origin"] | null
@@ -150,6 +151,7 @@ export type Database = {
           chatwoot_conversation_id?: number | null
           created_at?: string | null
           email?: string | null
+          first_resolved_at?: string | null
           id?: string
           nome?: string | null
           origem?: Database["public"]["Enums"]["contact_origin"] | null
@@ -162,6 +164,7 @@ export type Database = {
           chatwoot_conversation_id?: number | null
           created_at?: string | null
           email?: string | null
+          first_resolved_at?: string | null
           id?: string
           nome?: string | null
           origem?: Database["public"]["Enums"]["contact_origin"] | null
