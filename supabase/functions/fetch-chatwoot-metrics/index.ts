@@ -278,10 +278,15 @@ serve(async (req) => {
     // Conversas que foram criadas ou tiveram atividade no período solicitado
     // ========================================================================
     const historyConversations = allConversations.filter((conv: any) => {
-      const activityDate = conv.last_activity_at 
-        ? new Date(conv.last_activity_at * 1000)
-        : new Date(conv.created_at);
-      const createdAt = new Date(conv.created_at);
+      const rawCreatedAt = conv.created_at;
+      const createdAtMs = typeof rawCreatedAt === 'number' ? rawCreatedAt * 1000 : new Date(rawCreatedAt).getTime();
+      const createdAt = new Date(createdAtMs);
+
+      const rawActivityAt = conv.last_activity_at;
+      const activityAtMs = rawActivityAt
+        ? (typeof rawActivityAt === 'number' ? rawActivityAt * 1000 : new Date(rawActivityAt).getTime())
+        : createdAtMs;
+      const activityDate = new Date(activityAtMs);
       
       const createdInRange = createdAt >= dateFromParsed && createdAt <= dateToParsed;
       const activeInRange = activityDate >= dateFromParsed && activityDate <= dateToParsed;
