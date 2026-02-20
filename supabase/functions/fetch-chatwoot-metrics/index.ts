@@ -770,7 +770,7 @@ serve(async (req) => {
       success: true,
       data: {
         // KPIs básicos
-        totalLeads: leadsInPeriod,
+        totalLeads: finalConversations.length,
         conversasAtivas: openCount,
         conversasResolvidas: resolvedCount,
         conversasPendentes: pendingCount,
