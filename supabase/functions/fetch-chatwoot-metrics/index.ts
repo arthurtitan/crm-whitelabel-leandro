@@ -483,12 +483,19 @@ serve(async (req) => {
       }
 
       // Hourly distribution - only count conversations CREATED within the date range
-      // Uses UTC-3 (America/Sao_Paulo) offset to display correct local hour
-      const createdAt = new Date(conv.created_at);
+      // Chatwoot returns created_at as Unix timestamp (seconds), must multiply by 1000 for JS Date
+      // The timestamp is already in UTC; convert to Brasília (UTC-3) by subtracting 3h from UTC hours
+      const rawCreatedAt = conv.created_at;
+      const createdAtMs = typeof rawCreatedAt === 'number' ? rawCreatedAt * 1000 : new Date(rawCreatedAt).getTime();
+      const createdAt = new Date(createdAtMs);
       const createdInDateRange = createdAt >= dateFromParsed && createdAt <= dateToParsed;
       if (createdInDateRange) {
-        // Convert UTC timestamp to Brasília time (UTC-3)
-        const hourLocal = (createdAt.getUTCHours() - 3 + 24) % 24;
+        // Use Intl to get the correct local hour in America/Sao_Paulo regardless of DST
+        const hourLocal = parseInt(
+          new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', hour12: false, timeZone: 'America/Sao_Paulo' })
+            .format(createdAt),
+          10
+        );
         hourlyCount[hourLocal]++;
       }
     }
@@ -577,9 +584,9 @@ serve(async (req) => {
       };
     });
 
-    // Hourly peak (business hours only)
+    // Hourly peak — full 24h to avoid hiding off-peak activity (e.g. 23h conversations)
     const picoPorHora = Object.entries(hourlyCount)
-      .filter(([hora]) => Number(hora) >= 7 && Number(hora) <= 21)
+      .sort(([a], [b]) => Number(a) - Number(b))
       .map(([hora, total]) => ({
         hora: Number(hora),
         totalConversas: total,
