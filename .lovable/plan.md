@@ -1,84 +1,31 @@
 
-## Adicionar Card "Retornos no Período"
 
-### O que será feito
+## Fix: Icons saindo dos KPI Cards
 
-Adicionar um novo KPI Card no dashboard que exibe a contagem de contatos que **reentraram em contato** no período selecionado — ou seja, contatos que já tinham conversas anteriores e voltaram a entrar em contato.
+### Problema
+Os icones estao sendo empurrados para fora dos cards porque os titulos longos (ex: "TOTAL DE LEADS", "TAXA DE TRANSBORDO") ocupam muito espaco horizontal, forcando o icone para fora do container.
 
-A fórmula é simples e confiável porque já temos os dois componentes calculados:
+### Solucao
 
+**Arquivo: `src/components/dashboard/KPICard.tsx`**
+
+Ajustar o layout do header para garantir que o icone nunca saia do card:
+
+1. Adicionar `min-w-0` no container do titulo para permitir que o texto quebre corretamente sem empurrar o icone
+2. Reduzir o titulo para `text-[9px] sm:text-[10px]` para caber melhor em colunas estreitas
+3. Garantir que o icone tenha `shrink-0` (ja tem) e que o flex container respeite os limites
+
+**Mudanca principal no header:**
 ```
-Retornos no Período = Total de Leads - Novos Leads
-```
-
-- **Total de Leads**: todas as conversas com atividade no período (novas + retornos)
-- **Novos Leads**: apenas contatos cujo `first_resolved_at` é NULL ou caiu no período
-- **Retornos**: a diferença entre os dois — quem não é novo, é retorno
-
----
-
-### Arquivos alterados
-
-#### 1. `supabase/functions/fetch-chatwoot-metrics/index.ts`
-
-Na resposta final (linha 823), adicionar o campo `retornosNoPeriodo` calculado diretamente:
-
-```typescript
-// Dentro do objeto data da response:
-retornosNoPeriodo: Math.max(0, finalConversations.length - novosLeads),
-```
-
-O `Math.max(0, ...)` evita valores negativos em casos de borda onde `novosLeads` pudesse ser maior que `finalConversations.length`.
-
-#### 2. `src/pages/admin/AdminDashboard.tsx`
-
-**Mapeamento em `displayedData`** — adicionar `retornosNoPeriodo` nos três locais onde `kpis` é construído (estado inicial vazio, visão por agente, e visão geral):
-
-```typescript
-// Nos três blocos de kpis:
-retornosNoPeriodo: 0,                          // default
-retornosNoPeriodo: metricsData.retornosNoPeriodo ?? 0,  // visão geral
+<div className="flex items-start justify-between gap-2">
+  <p className="min-w-0 text-[9px] sm:text-[10px] font-semibold uppercase tracking-wide text-muted-foreground leading-tight">
+    {title}
+  </p>
+  <div className={cn('p-1.5 rounded-lg shrink-0', iconBgColor)}>
+    <Icon className={cn('w-4 h-4', iconColor)} />
+  </div>
+</div>
 ```
 
-**Novo KPI Card** — inserir após o card "Novos Leads" (linha 315), antes de "Agendamentos":
+A chave e o `min-w-0` no texto que permite ele encolher em vez de empurrar o icone para fora, e remover o `flex` extra no container do icone que pode causar problemas de sizing.
 
-```tsx
-<KPICard
-  title="Retornos no Período"
-  subtitle={getAgentContextSubtitle('Reentraram em contato')}
-  value={displayedData.kpis.retornosNoPeriodo}
-  icon={RefreshCw}
-  iconColor="text-warning"
-  iconBgColor="bg-warning/10"
-  isLoading={isLoading}
-/>
-```
-
-**Import** — adicionar `RefreshCw` ao import de `lucide-react` (linha 5).
-
----
-
-### Resultado visual esperado
-
-A grid de KPIs passará de 5 para 6 cards:
-
-```
-┌──────────────┬──────────────┬──────────────┬──────────────┬──────────────┬──────────────┐
-│ Total de     │ Novos Leads  │ Retornos     │ Agendamentos │ Tempo Médio  │ Taxa de      │
-│ Leads        │              │ no Período   │              │ Resposta     │ Transbordo   │
-│              │ Primeiro     │ Reentraram   │              │              │              │
-│ 4            │ contato no   │ em contato   │ 0            │ 2m30s        │ 25%          │
-│              │ período      │              │              │              │              │
-│              │              │              │              │              │              │
-│              │ 1            │ 3            │              │              │              │
-└──────────────┴──────────────┴──────────────┴──────────────┴──────────────┴──────────────┘
-```
-
-- O CSS `kpi-grid-6` já está configurado para suportar 6 cards, então nenhuma mudança de layout é necessária.
-
----
-
-### Arquivos alterados
-
-1. **`supabase/functions/fetch-chatwoot-metrics/index.ts`** — adicionar `retornosNoPeriodo` na resposta (1 linha)
-2. **`src/pages/admin/AdminDashboard.tsx`** — mapear o novo campo nos `kpis` + adicionar o `KPICard` + importar `RefreshCw`
