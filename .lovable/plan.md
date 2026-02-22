@@ -1,25 +1,28 @@
 
 
-## Correcao de Responsividade do Dialog "Adicionar Novo Lead"
+## Correcao definitiva do scroll do CreateLeadDialog
 
-### Problema raiz
-
-O `DialogContent` base ja define `grid`, `gap-4`, `max-h-[90vh]` e `overflow-hidden`. O `CreateLeadDialog` tenta sobrescrever com `flex flex-col` e `max-h-[85dvh]`, mas:
-
-1. O `tailwind-merge` pode nao resolver corretamente `max-h-[90vh]` vs `max-h-[85dvh]` (unidades diferentes)
-2. O padding interno (`p-4 sm:p-6`) e o `gap-4` consomem espaco que nao e contabilizado no calculo do scroll
+### Problema
+A barra de scroll esta visivel e feia. O `max-h-[40dvh]` funciona para conter a area, mas o scrollbar nativo esta aparecendo de forma indesejada.
 
 ### Solucao
 
-Em vez de depender do flex layout do dialog inteiro, aplicar uma altura maxima fixa diretamente no container dos campos do formulario. Isso garante que os campos rolem internamente enquanto o header e o footer (botoes) ficam sempre visiveis, independente do layout do DialogContent.
-
-### Alteracoes
-
 **Arquivo: `src/components/kanban/CreateLeadDialog.tsx`**
 
-- Remover as classes de flex/overflow do `DialogContent` e do `form`, voltando a depender do layout grid padrao do dialog
-- Aplicar `max-h-[40dvh] overflow-y-auto` diretamente no `div` que envolve os campos do formulario
-- Isso cria uma area de scroll fixa para os campos, enquanto header e footer permanecem estaticos
+Adicionar classes CSS para ocultar a scrollbar mantendo o scroll funcional:
+- Trocar `overflow-y-auto pr-1` por classes que escondem a scrollbar nativa
+- Usar as classes utilitarias `scrollbar-hide` ou aplicar inline com `[&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]`
+- Reduzir `max-h-[40dvh]` para `max-h-[50dvh]` para aproveitar melhor o espaco disponivel mantendo os botoes visiveis
 
-Resultado: o header, a area scrollavel de campos, e os botoes de acao ficam sempre visiveis, sem depender de flex nesting complexo que conflita com o componente base.
+A alteracao e de uma unica linha no `div` que envolve os campos do formulario:
+
+```
+// De:
+<div className="space-y-4 max-h-[40dvh] overflow-y-auto pr-1">
+
+// Para:
+<div className="space-y-4 max-h-[50dvh] overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+```
+
+Isso oculta a scrollbar em todos os navegadores (Chrome/Safari via webkit, Firefox via scrollbar-width, IE/Edge via ms-overflow-style) enquanto mantem o scroll por toque/trackpad totalmente funcional.
 
