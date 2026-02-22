@@ -1,31 +1,23 @@
 
 
-## Fix: Icons saindo dos KPI Cards
+## Correcao: Icons saindo dos KPI Cards
 
 ### Problema
-Os icones estao sendo empurrados para fora dos cards porque os titulos longos (ex: "TOTAL DE LEADS", "TAXA DE TRANSBORDO") ocupam muito espaco horizontal, forcando o icone para fora do container.
+Em telas largas (1280px+), o grid de 6 colunas torna os cards muito estreitos. Titulos longos como "TEMPO MEDIO RESPOSTA" e "TAXA DE TRANSBORDO" empurram os icones para fora dos limites do card porque nao ha restricao de overflow.
 
 ### Solucao
 
 **Arquivo: `src/components/dashboard/KPICard.tsx`**
 
-Ajustar o layout do header para garantir que o icone nunca saia do card:
+Duas mudancas:
 
-1. Adicionar `min-w-0` no container do titulo para permitir que o texto quebre corretamente sem empurrar o icone
-2. Reduzir o titulo para `text-[9px] sm:text-[10px]` para caber melhor em colunas estreitas
-3. Garantir que o icone tenha `shrink-0` (ja tem) e que o flex container respeite os limites
+1. Adicionar `overflow-hidden` ao Card para garantir que nada saia dos limites
+2. Reduzir o tamanho do icone e padding em telas pequenas para economizar espaco horizontal
 
-**Mudanca principal no header:**
-```
-<div className="flex items-start justify-between gap-2">
-  <p className="min-w-0 text-[9px] sm:text-[10px] font-semibold uppercase tracking-wide text-muted-foreground leading-tight">
-    {title}
-  </p>
-  <div className={cn('p-1.5 rounded-lg shrink-0', iconBgColor)}>
-    <Icon className={cn('w-4 h-4', iconColor)} />
-  </div>
-</div>
-```
+**Detalhes tecnicos:**
+- Linha 50: Adicionar `overflow-hidden` na classe do Card
+- Linha 57: Reduzir padding do container do icone para `p-1` em mobile e `sm:p-1.5` em telas maiores
+- Linha 58: Reduzir icone para `w-3.5 h-3.5 sm:w-4 sm:h-4`
 
-A chave e o `min-w-0` no texto que permite ele encolher em vez de empurrar o icone para fora, e remover o `flex` extra no container do icone que pode causar problemas de sizing.
+Isso garante que mesmo em colunas estreitas, o icone e o titulo fiquem contidos dentro do card.
 
