@@ -180,8 +180,8 @@ export function CreateLeadDialog({
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md max-h-[85dvh] flex flex-col overflow-hidden">
-        <DialogHeader className="shrink-0">
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
           <DialogTitle>Adicionar Novo Lead</DialogTitle>
           <DialogDescription>
             Cadastre um novo lead no CRM{hasChatwootConfig ? ' e opcionalmente no Chatwoot' : ''}.
@@ -189,8 +189,8 @@ export function CreateLeadDialog({
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col overflow-hidden flex-1 min-h-0" autoComplete="off">
-            <div className="space-y-4 overflow-y-auto pr-1 flex-1 min-h-0">
+          <form onSubmit={form.handleSubmit(onSubmit)} autoComplete="off">
+            <div className="space-y-4 max-h-[40dvh] overflow-y-auto pr-1">
             <FormField
               control={form.control}
               name="nome"
@@ -316,7 +316,7 @@ export function CreateLeadDialog({
 
             </div>
 
-            <DialogFooter className="gap-2 sm:gap-0 pt-4 border-t mt-4">
+            <DialogFooter className="gap-2 sm:gap-0 pt-4 mt-4">
               <Button
                 type="button"
                 variant="outline"
