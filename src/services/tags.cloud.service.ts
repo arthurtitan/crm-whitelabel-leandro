@@ -523,6 +523,35 @@ export const tagsCloudService = {
 
 
   /**
+   * Create 6 default stage tags for an account (template)
+   */
+  async createDefaultStages(accountId: string): Promise<Tag[]> {
+    let funnel = await this.getDefaultFunnel(accountId);
+    if (!funnel) funnel = await this.createDefaultFunnel(accountId);
+    if (!funnel) throw new Error('Não foi possível criar o funil padrão');
+
+    const stages = [
+      { name: 'Novo Lead', color: '#0EA5E9', ordem: 0 },
+      { name: 'Em Atendimento', color: '#8B5CF6', ordem: 1 },
+      { name: 'Aguardando Resposta', color: '#F59E0B', ordem: 2 },
+      { name: 'Agendado', color: '#22C55E', ordem: 3 },
+      { name: 'Convertido', color: '#10B981', ordem: 4 },
+      { name: 'Perdido', color: '#EF4444', ordem: 5 },
+    ];
+
+    const created: Tag[] = [];
+    for (const stage of stages) {
+      const tag = await this.createStageTag({
+        accountId,
+        funnelId: funnel.id,
+        ...stage,
+      });
+      created.push(tag);
+    }
+    return created;
+  },
+
+  /**
    * Get the default funnel for an account
    */
   async getDefaultFunnel(accountId: string): Promise<{ id: string; name: string } | null> {
