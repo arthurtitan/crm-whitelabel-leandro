@@ -485,7 +485,7 @@ export default function SuperAdminAccountsPage() {
                   <DialogDescription>Adicione uma nova conta ao sistema</DialogDescription>
                 </DialogHeader>
 
-                <div className="space-y-4 py-4 overflow-y-auto flex-1 px-1">
+                <div className="space-y-4 py-4 overflow-y-auto flex-1 px-1 py-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                   {/* Status */}
                   <div className="space-y-2">
                     <Label htmlFor="status">Status</Label>
@@ -658,7 +658,7 @@ export default function SuperAdminAccountsPage() {
                   </div>
                 </div>
 
-                <DialogFooter className="flex-shrink-0">
+                <DialogFooter className="flex-shrink-0 gap-3">
                   <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
                     Cancelar
                   </Button>
@@ -909,7 +909,7 @@ export default function SuperAdminAccountsPage() {
             <DialogDescription>Atualize as informações da conta</DialogDescription>
           </DialogHeader>
           {editingAccount && (
-            <div className="space-y-4 py-4 overflow-y-auto flex-1 px-1">
+            <div className="space-y-4 py-4 overflow-y-auto flex-1 px-1 py-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
               <div className="space-y-2">
                 <Label htmlFor="edit-nome">Nome</Label>
                 <Input
@@ -1021,7 +1021,7 @@ export default function SuperAdminAccountsPage() {
               </div>
             </div>
           )}
-          <DialogFooter className="flex-shrink-0">
+          <DialogFooter className="flex-shrink-0 gap-3">
             <Button variant="outline" onClick={() => {
               setEditingAccount(null);
               setEditConnectionStatus('idle');

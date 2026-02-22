@@ -147,7 +147,7 @@ export function CreateProductDialog() {
           Novo Produto
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>Novo Produto</DialogTitle>
           <DialogDescription>
@@ -155,7 +155,7 @@ export function CreateProductDialog() {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-5 py-4">
+        <div className="space-y-5 py-4 overflow-y-auto flex-1 px-1 py-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           {/* Nome */}
           <div className="space-y-2">
             <Label htmlFor="nome">Nome do Produto *</Label>
@@ -302,7 +302,7 @@ export function CreateProductDialog() {
           </div>
         </div>
 
-        <DialogFooter className="flex-col sm:flex-row gap-2">
+        <DialogFooter className="flex-shrink-0 flex-col sm:flex-row gap-3">
           <Button variant="outline" onClick={handleClose} className="w-full sm:w-auto">
             Cancelar
           </Button>

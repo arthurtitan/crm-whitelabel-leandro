@@ -325,7 +325,7 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
           </Button>
         </DialogTrigger>
       )}
-      <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>Registrar Nova Venda</DialogTitle>
           <DialogDescription>
@@ -333,7 +333,7 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+        <div className="space-y-4 py-4 overflow-y-auto flex-1 px-1 py-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           {/* Contact Selection */}
           <div className="space-y-2">
             <Label htmlFor="contact">Cliente *</Label>
@@ -665,7 +665,7 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
           </Alert>
         </div>
 
-        <DialogFooter className="flex-col sm:flex-row gap-2">
+        <DialogFooter className="flex-shrink-0 flex-col sm:flex-row gap-3">
           <Button variant="outline" onClick={handleClose} className="w-full sm:w-auto">
             Cancelar
           </Button>
