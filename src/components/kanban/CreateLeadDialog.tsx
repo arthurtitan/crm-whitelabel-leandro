@@ -316,7 +316,7 @@ export function CreateLeadDialog({
 
             </div>
 
-            <DialogFooter className="gap-2 sm:gap-0 pt-4 mt-4">
+            <DialogFooter className="gap-3 sm:gap-3 pt-4 mt-4">
               <Button
                 type="button"
                 variant="outline"
