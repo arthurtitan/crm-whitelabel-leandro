@@ -190,7 +190,7 @@ export function CreateLeadDialog({
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} autoComplete="off">
-            <div className="space-y-4 max-h-[40dvh] overflow-y-auto pr-1">
+            <div className="space-y-4 max-h-[50dvh] overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             <FormField
               control={form.control}
               name="nome"
