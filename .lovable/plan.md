@@ -1,23 +1,48 @@
 
 
-## Correcao: Icons saindo dos KPI Cards
+## Correcao definitiva: Icons dos KPI Cards
 
-### Problema
-Em telas largas (1280px+), o grid de 6 colunas torna os cards muito estreitos. Titulos longos como "TEMPO MEDIO RESPOSTA" e "TAXA DE TRANSBORDO" empurram os icones para fora dos limites do card porque nao ha restricao de overflow.
+### Problema raiz
+A classe `.kpi-grid-6` forca 6 colunas a partir de 1280px, tornando cada card com apenas ~170px de largura. Titulos longos como "AGENDAMENTOS", "TEMPO MEDIO RESPOSTA" e "TAXA DE TRANSBORDO" nao cabem ao lado do icone nessa largura.
 
 ### Solucao
 
-**Arquivo: `src/components/dashboard/KPICard.tsx`**
+**Arquivo: `src/index.css`**
 
-Duas mudancas:
+Alterar o breakpoint de 6 colunas de 1280px para 1536px (2xl). Em 1280px, manter 3 colunas (grid 3x2):
 
-1. Adicionar `overflow-hidden` ao Card para garantir que nada saia dos limites
-2. Reduzir o tamanho do icone e padding em telas pequenas para economizar espaco horizontal
+- `@media (min-width: 1280px)`: manter `repeat(3, minmax(0, 1fr))` (3 colunas)
+- Adicionar `@media (min-width: 1536px)`: usar `repeat(6, minmax(0, 1fr))` (6 colunas)
 
-**Detalhes tecnicos:**
-- Linha 50: Adicionar `overflow-hidden` na classe do Card
-- Linha 57: Reduzir padding do container do icone para `p-1` em mobile e `sm:p-1.5` em telas maiores
-- Linha 58: Reduzir icone para `w-3.5 h-3.5 sm:w-4 sm:h-4`
+Isso garante que os cards tenham largura suficiente (~350px em 1280px) para acomodar titulo + icone sem overflow.
 
-Isso garante que mesmo em colunas estreitas, o icone e o titulo fiquem contidos dentro do card.
+### Detalhes tecnicos
 
+Mudanca no `src/index.css`, linhas 605-609:
+
+Antes:
+```css
+@media (min-width: 1280px) {
+  .kpi-grid-6 {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+```
+
+Depois:
+```css
+@media (min-width: 1280px) {
+  .kpi-grid-6 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1536px) {
+  .kpi-grid-6 {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 1rem;
+  }
+}
+```
+
+Nenhuma outra mudanca necessaria. O KPICard.tsx ja tem `overflow-hidden`, `min-w-0` e `shrink-0` corretos.
