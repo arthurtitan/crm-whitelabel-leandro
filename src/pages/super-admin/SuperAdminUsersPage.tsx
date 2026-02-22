@@ -420,7 +420,7 @@ export default function SuperAdminUsersPage() {
               <DialogTitle>Criar Novo Usuário</DialogTitle>
               <DialogDescription>Adicione um novo usuário ao sistema</DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4 overflow-y-auto flex-1 px-1">
+            <div className="space-y-4 py-4 overflow-y-auto flex-1 px-1 py-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
               <div className="space-y-2">
                 <Label htmlFor="nome">Nome <span className="text-destructive">*</span></Label>
                 <Input
@@ -623,7 +623,7 @@ export default function SuperAdminUsersPage() {
                 </div>
               </div>
             </div>
-            <DialogFooter className="flex-shrink-0 flex-col sm:flex-row gap-2">
+            <DialogFooter className="flex-shrink-0 flex-col sm:flex-row gap-3">
               <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
                 Cancelar
               </Button>
@@ -805,7 +805,7 @@ export default function SuperAdminUsersPage() {
             <DialogDescription>Atualize os dados do usuário</DialogDescription>
           </DialogHeader>
           {editingUser && (
-            <div className="space-y-4 py-4 overflow-y-auto flex-1 px-1">
+            <div className="space-y-4 py-4 overflow-y-auto flex-1 px-1 py-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
               <div className="space-y-2">
                 <Label htmlFor="edit-nome">Nome <span className="text-destructive">*</span></Label>
                 <Input
@@ -1030,7 +1030,7 @@ export default function SuperAdminUsersPage() {
               </div>
             </div>
           )}
-          <DialogFooter className="flex-shrink-0 flex-col sm:flex-row gap-2">
+          <DialogFooter className="flex-shrink-0 flex-col sm:flex-row gap-3">
             <Button variant="outline" onClick={() => setEditingUser(null)}>
               Cancelar
             </Button>

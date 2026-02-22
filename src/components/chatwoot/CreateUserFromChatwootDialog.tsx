@@ -148,7 +148,7 @@ export function CreateUserFromChatwootDialog({
         {/* Progress */}
         <Progress value={progress} className="h-2 flex-shrink-0" />
 
-        <div className="space-y-4 py-2 overflow-y-auto flex-1 px-1">
+        <div className="space-y-4 py-2 overflow-y-auto flex-1 px-1 py-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           {/* Dados do Chatwoot (readonly) */}
           <div className="p-3 rounded-lg bg-muted/50 space-y-2">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -293,7 +293,7 @@ export function CreateUserFromChatwootDialog({
           )}
         </div>
 
-        <DialogFooter className="flex-shrink-0 flex-col sm:flex-row gap-2">
+        <DialogFooter className="flex-shrink-0 flex-col sm:flex-row gap-3">
           <Button variant="ghost" onClick={onSkip}>
             Pular este agente
           </Button>
@@ -402,7 +402,7 @@ export function EmbeddedUserCreationForm({
       {/* Progress */}
       <Progress value={progress} className="h-2 flex-shrink-0" />
 
-      <div className="space-y-4 py-2 overflow-y-auto flex-1 px-1">
+      <div className="space-y-4 py-2 overflow-y-auto flex-1 px-1 py-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         {/* Dados do Chatwoot (readonly) */}
         <div className="p-3 rounded-lg bg-muted/50 space-y-2">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">

@@ -419,13 +419,13 @@ export default function AdminLeadsPage() {
 
       {/* Edit Dialog */}
       <Dialog open={!!editingContact} onOpenChange={() => setEditingContact(null)}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle>Editar Lead</DialogTitle>
             <DialogDescription>Atualize as informações do lead</DialogDescription>
           </DialogHeader>
           {editingContact && (
-            <div className="space-y-4 py-4">
+            <div className="space-y-4 py-4 overflow-y-auto flex-1 px-1 py-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
               <div className="space-y-2">
                 <Label htmlFor="edit-nome">Nome</Label>
                 <Input
@@ -480,7 +480,7 @@ export default function AdminLeadsPage() {
               </div>
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="flex-shrink-0 gap-3">
             <Button variant="outline" onClick={() => setEditingContact(null)}>
               Cancelar
             </Button>

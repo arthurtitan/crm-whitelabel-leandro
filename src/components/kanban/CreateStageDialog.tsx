@@ -133,7 +133,7 @@ export function CreateStageDialog({ trigger, onStageCreated }: CreateStageDialog
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-6 overflow-y-auto flex-1 px-1 py-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           {/* Name Input */}
           <div className="space-y-2">
             <Label htmlFor="stage-name">Nome da Etapa</Label>
@@ -206,7 +206,7 @@ export function CreateStageDialog({ trigger, onStageCreated }: CreateStageDialog
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="gap-3">
             <Button
               type="button"
               variant="outline"

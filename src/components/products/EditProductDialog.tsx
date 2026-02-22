@@ -140,7 +140,7 @@ export function EditProductDialog({ product, open, onOpenChange }: EditProductDi
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>Editar Produto</DialogTitle>
           <DialogDescription>
@@ -148,7 +148,7 @@ export function EditProductDialog({ product, open, onOpenChange }: EditProductDi
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-5 py-4">
+        <div className="space-y-5 py-4 overflow-y-auto flex-1 px-1 py-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           {/* Nome */}
           <div className="space-y-2">
             <Label htmlFor="nome">Nome do Produto *</Label>
@@ -295,7 +295,7 @@ export function EditProductDialog({ product, open, onOpenChange }: EditProductDi
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="flex-shrink-0 gap-3">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>

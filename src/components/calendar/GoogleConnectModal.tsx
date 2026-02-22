@@ -51,7 +51,7 @@ export function GoogleConnectModal({ open, onOpenChange, onConnect }: GoogleConn
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+        <div className="space-y-4 py-4 overflow-y-auto flex-1 px-1 py-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
               Ao conectar, você permite que o sistema:
@@ -78,7 +78,7 @@ export function GoogleConnectModal({ open, onOpenChange, onConnect }: GoogleConn
           </div>
         </div>
 
-        <DialogFooter className="flex-col sm:flex-row gap-2">
+        <DialogFooter className="flex-shrink-0 flex-col sm:flex-row gap-3">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
