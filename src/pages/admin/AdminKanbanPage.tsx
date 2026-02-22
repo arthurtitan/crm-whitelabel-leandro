@@ -81,6 +81,7 @@ export default function AdminKanbanPage() {
   const [deleteConfirmStage, setDeleteConfirmStage] = useState<CloudTag | null>(null);
   const [isSyncingChatwoot, setIsSyncingChatwoot] = useState(false);
   const [isPushingLabels, setIsPushingLabels] = useState(false);
+  const [isCreatingTemplate, setIsCreatingTemplate] = useState(false);
 
   const isFirstTagsLoad = useRef(true);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
@@ -565,19 +566,59 @@ export default function AdminKanbanPage() {
 
       {/* Empty State */}
       {stageTags.length === 0 && (
-        <div className="flex flex-col items-center justify-center h-[calc(100%-6rem)] gap-4">
+        <div className="flex flex-col items-center justify-center h-[calc(100%-6rem)] gap-6">
           <div className="text-center space-y-2">
             <h2 className="text-xl font-semibold">Nenhuma etapa criada</h2>
-            <p className="text-muted-foreground">
-              Crie sua primeira etapa para começar a usar o Kanban.
+            <p className="text-muted-foreground max-w-md">
+              Use o template recomendado para começar rapidamente ou crie suas próprias etapas.
             </p>
           </div>
-          <div className="flex gap-2">
+
+          {/* Template preview */}
+          <div className="flex flex-wrap justify-center gap-3 max-w-lg">
+            {[
+              { name: 'Novo Lead', color: '#0EA5E9' },
+              { name: 'Em Atendimento', color: '#8B5CF6' },
+              { name: 'Aguardando Resposta', color: '#F59E0B' },
+              { name: 'Agendado', color: '#22C55E' },
+              { name: 'Convertido', color: '#10B981' },
+              { name: 'Perdido', color: '#EF4444' },
+            ].map((s) => (
+              <div key={s.name} className="flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm">
+                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
+                {s.name}
+              </div>
+            ))}
+          </div>
+
+          <div className="flex gap-3">
+            <Button
+              disabled={isCreatingTemplate}
+              onClick={async () => {
+                if (!accountId) return;
+                setIsCreatingTemplate(true);
+                try {
+                  await tagsCloudService.createDefaultStages(accountId);
+                  await fetchTagsData(false);
+                  toast.success('6 etapas criadas com sucesso!');
+                } catch (err: any) {
+                  toast.error(err.message || 'Erro ao criar etapas');
+                } finally {
+                  setIsCreatingTemplate(false);
+                }
+              }}
+            >
+              {isCreatingTemplate ? (
+                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Plus className="w-4 h-4 mr-2" />
+              )}
+              {isCreatingTemplate ? 'Criando...' : 'Usar Template Padrão'}
+            </Button>
             <CreateStageDialog
               trigger={
-                <Button>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Criar Etapa
+                <Button variant="outline">
+                  Criar Manualmente
                 </Button>
               }
               onStageCreated={() => fetchTagsData(false)}
