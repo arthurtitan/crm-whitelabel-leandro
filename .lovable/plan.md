@@ -1,37 +1,25 @@
 
 
-## Normalização de Slugs: Underscore como Padrão Universal
+## Correcao de Responsividade do Dialog "Adicionar Novo Lead"
 
-### O que precisa mudar
+### Problema raiz
 
-Uma unica correção em 3 arquivos: trocar a geração de slugs de hífen para underscore, alinhando com o padrão do Chatwoot e eliminando o risco de labels duplicadas.
+O `DialogContent` base ja define `grid`, `gap-4`, `max-h-[90vh]` e `overflow-hidden`. O `CreateLeadDialog` tenta sobrescrever com `flex flex-col` e `max-h-[85dvh]`, mas:
 
-### O que NAO precisa mudar
+1. O `tailwind-merge` pode nao resolver corretamente `max-h-[90vh]` vs `max-h-[85dvh]` (unidades diferentes)
+2. O padding interno (`p-4 sm:p-6`) e o `gap-4` consomem espaco que nao e contabilizado no calculo do scroll
 
-- Estrutura do Kanban (colunas dinâmicas, drag-and-drop, reorder) -- ja esta correto
-- LeadCard -- funcional como esta
-- CreateStageDialog -- ja usa underscore
-- Lógica de sincronização bilateral -- funcional
-- As 6 etapas padrão serao criadas pelo admin via dialog existente, sem necessidade de seed/migracao automatica
+### Solucao
 
-### Arquivos a alterar
+Em vez de depender do flex layout do dialog inteiro, aplicar uma altura maxima fixa diretamente no container dos campos do formulario. Isso garante que os campos rolem internamente enquanto o header e o footer (botoes) ficam sempre visiveis, independente do layout do DialogContent.
 
-**1. `src/services/tags.cloud.service.ts`** (linhas 113 e 220)
-- De: `.replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')`
-- Para: `.replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')`
+### Alteracoes
 
-**2. `src/services/tags.service.ts`** (linhas 99 e 130)
-- De: `.replace(/\s+/g, '-')`
-- Para: `.replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')`
+**Arquivo: `src/components/kanban/CreateLeadDialog.tsx`**
 
-**3. `src/contexts/TagContext.tsx`** (linha 353)
-- De: `.replace(/\s+/g, '-')`
-- Para: `.replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')`
+- Remover as classes de flex/overflow do `DialogContent` e do `form`, voltando a depender do layout grid padrao do dialog
+- Aplicar `max-h-[40dvh] overflow-y-auto` diretamente no `div` que envolve os campos do formulario
+- Isso cria uma area de scroll fixa para os campos, enquanto header e footer permanecem estaticos
 
-### Impacto
-
-- Zero mudança visual no Kanban
-- Zero mudança de comportamento para o usuario
-- Elimina risco de labels duplicadas no Chatwoot
-- Garante que qualquer etapa criada por qualquer caminho (dialog, auto-create, API) tenha o mesmo formato de slug
+Resultado: o header, a area scrollavel de campos, e os botoes de acao ficam sempre visiveis, sem depender de flex nesting complexo que conflita com o componente base.
 
