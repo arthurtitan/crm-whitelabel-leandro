@@ -180,7 +180,7 @@ export function CreateLeadDialog({
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Adicionar Novo Lead</DialogTitle>
           <DialogDescription>
@@ -189,7 +189,8 @@ export function CreateLeadDialog({
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col overflow-hidden">
+            <div className="space-y-4 overflow-y-auto pr-1 flex-1">
             <FormField
               control={form.control}
               name="nome"
@@ -313,7 +314,9 @@ export function CreateLeadDialog({
               />
             )}
 
-            <DialogFooter className="gap-2 sm:gap-0">
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0 pt-4 border-t mt-4">
               <Button
                 type="button"
                 variant="outline"
