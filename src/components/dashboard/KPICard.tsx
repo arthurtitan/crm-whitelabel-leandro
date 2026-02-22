@@ -47,15 +47,15 @@ export function KPICard({
   }
 
   return (
-    <Card className={cn('min-w-0 w-full h-full', className)}>
+    <Card className={cn('min-w-0 w-full h-full overflow-hidden', className)}>
       <CardContent className="p-4 sm:p-5 h-full flex flex-col justify-between gap-3">
         {/* Header: label + icon */}
         <div className="flex items-start justify-between gap-2">
           <p className="min-w-0 text-[9px] sm:text-[10px] font-semibold uppercase tracking-wide text-muted-foreground leading-tight">
             {title}
           </p>
-          <div className={cn('p-1.5 rounded-lg shrink-0', iconBgColor)}>
-            <Icon className={cn('w-4 h-4', iconColor)} />
+          <div className={cn('p-1 sm:p-1.5 rounded-lg shrink-0', iconBgColor)}>
+            <Icon className={cn('w-3.5 h-3.5 sm:w-4 sm:h-4', iconColor)} />
           </div>
         </div>
         {/* Value */}
