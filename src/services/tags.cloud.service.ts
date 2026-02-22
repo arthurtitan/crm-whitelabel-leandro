@@ -110,7 +110,7 @@ export const tagsCloudService = {
     color: string;
     ordem?: number;
   }): Promise<Tag> {
-    const slug = input.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    const slug = input.name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
 
     // Get max ordem if not provided
     let ordem = input.ordem;
@@ -217,7 +217,7 @@ export const tagsCloudService = {
     
     if (input.name !== undefined) {
       updateData.name = input.name;
-      updateData.slug = input.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+      updateData.slug = input.name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
     }
     if (input.color !== undefined) updateData.color = input.color;
     if (input.ordem !== undefined) updateData.ordem = input.ordem;
