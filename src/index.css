@@ -604,6 +604,12 @@
 
 @media (min-width: 1280px) {
   .kpi-grid-6 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1536px) {
+  .kpi-grid-6 {
     grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 1rem;
   }
