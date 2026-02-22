@@ -96,7 +96,7 @@ export const tagsService = {
         account_id: 'acc-1',
         funnel_id: data.funnelId,
         name: data.name,
-        slug: data.name.toLowerCase().replace(/\s+/g, '-'),
+        slug: data.name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''),
         type: data.type,
         color: data.color,
         ordem: data.ordem ?? maxOrdem + 1,
@@ -127,7 +127,7 @@ export const tagsService = {
         ...mockTags[index],
         ...(data.name && { 
           name: data.name,
-          slug: data.name.toLowerCase().replace(/\s+/g, '-'),
+          slug: data.name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''),
         }),
         ...(data.color && { color: data.color }),
         ...(data.ordem !== undefined && { ordem: data.ordem }),

@@ -350,7 +350,7 @@ export const TagProvider: React.FC<TagProviderProps> = ({ children, accountId })
       account_id: accountId,
       funnel_id: funnel.id,
       name,
-      slug: slug.toLowerCase().replace(/\s+/g, '-'),
+      slug: slug.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''),
       type: 'stage',
       color,
       ordem: maxOrdem + 1,
