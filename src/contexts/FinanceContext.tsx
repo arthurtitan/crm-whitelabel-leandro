@@ -5,10 +5,8 @@ import { useTagContext } from '@/contexts/TagContext';
 import { supabase } from '@/integrations/supabase/client';
 import { mergeContacts } from '@/utils/dataSync';
 import { 
-  mockSales, 
   mockLeadFunnelStates, 
   mockFunnelStages,
-  mockProducts 
 } from '@/data/mockData';
 
 // Event types for finance
@@ -137,9 +135,7 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
     // TagContext may not be available in all contexts
   }
   
-  const [sales, setSales] = useState<Sale[]>(
-    mockSales.filter((s) => s.account_id === accountId)
-  );
+  const [sales, setSales] = useState<Sale[]>([]);
   
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [isLoadingContacts, setIsLoadingContacts] = useState(true);
@@ -155,10 +151,95 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
   
   const [events, setEvents] = useState<FinanceEvent[]>([]);
   
-  const products = useMemo(
-    () => mockProducts.filter((p) => p.account_id === accountId && p.ativo),
-    [accountId]
-  );
+  const [products, setProducts] = useState<Product[]>([]);
+
+  // Fetch sales from database
+  const fetchSalesFromDb = useCallback(async () => {
+    if (!accountId) return;
+    try {
+      const { data, error } = await supabase
+        .from('sales')
+        .select('*, sale_items:sale_items(id, product_id, quantidade, valor_unitario, valor_total, refunded, refunded_at, refund_reason)')
+        .eq('account_id', accountId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching sales:', error);
+        return;
+      }
+
+      const mapped: Sale[] = (data || []).map((s: any) => ({
+        id: s.id,
+        account_id: s.account_id,
+        contact_id: s.contact_id,
+        items: (s.sale_items || []).map((i: any) => ({
+          id: i.id,
+          product_id: i.product_id,
+          quantidade: i.quantidade || 1,
+          valor_unitario: Number(i.valor_unitario),
+          valor_total: Number(i.valor_total),
+          refunded: i.refunded,
+          refunded_at: i.refunded_at,
+          refund_reason: i.refund_reason,
+        })),
+        valor: Number(s.valor),
+        status: s.status,
+        metodo_pagamento: s.metodo_pagamento,
+        convenio_nome: s.convenio_nome,
+        responsavel_id: s.responsavel_id,
+        is_recurring: s.is_recurring,
+        created_at: s.created_at,
+        paid_at: s.paid_at,
+        refunded_at: s.refunded_at,
+      }));
+
+      setSales(mapped);
+    } catch (err) {
+      console.error('Error fetching sales:', err);
+    }
+  }, [accountId]);
+
+  // Fetch products from database
+  const fetchProductsFromDb = useCallback(async () => {
+    if (!accountId) return;
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .eq('account_id', accountId)
+        .eq('ativo', true)
+        .order('nome');
+
+      if (error) {
+        console.error('Error fetching products:', error);
+        return;
+      }
+
+      const mapped: Product[] = (data || []).map((p: any) => ({
+        id: p.id,
+        account_id: p.account_id,
+        nome: p.nome,
+        valor_padrao: Number(p.valor_padrao),
+        ativo: p.ativo,
+        metodos_pagamento: p.metodos_pagamento || ['pix'],
+        convenios_aceitos: p.convenios_aceitos || [],
+        created_at: p.created_at,
+        updated_at: p.updated_at,
+      }));
+
+      setProducts(mapped);
+    } catch (err) {
+      console.error('Error fetching products:', err);
+    }
+  }, [accountId]);
+
+  // Fetch sales and products on mount
+  useEffect(() => {
+    if (accountId) {
+      fetchSalesFromDb();
+      fetchProductsFromDb();
+    }
+  }, [accountId, fetchSalesFromDb, fetchProductsFromDb]);
 
   // Clear new contact animation after delay
   const clearNewContactIds = useCallback((ids: string[]) => {
