@@ -421,6 +421,33 @@ export default function AdminInsightsPage() {
     return null;
   }, [paymentMethodData]);
 
+  // ============ AGENT RANKING (REAL DATA) ============
+  const agentRanking = useMemo(() => {
+    if (!user?.account_id || profiles.length === 0) return [];
+
+    return profiles.map(profile => {
+      const agentSales = paidSales.filter(s => s.responsavel_id === profile.user_id);
+      const totalSales = agentSales.length;
+      const totalRevenue = agentSales.reduce((sum, s) => sum + s.valor, 0);
+      const avgTicket = totalSales > 0 ? totalRevenue / totalSales : 0;
+
+      return {
+        id: profile.user_id,
+        name: profile.nome,
+        totalSales,
+        totalRevenue,
+        avgTicket,
+      };
+    })
+    .filter(a => a.totalSales > 0)
+    .sort((a, b) => b.totalRevenue - a.totalRevenue);
+  }, [paidSales, profiles, user]);
+
+  const maxAgentRevenue = useMemo(() => {
+    if (agentRanking.length === 0) return 1;
+    return Math.max(...agentRanking.map(a => a.totalRevenue), 1);
+  }, [agentRanking]);
+
   // ============ AUTOMATIC INSIGHTS (ENHANCED) ============
   const automaticInsights = useMemo((): Insight[] => {
     const insights: Insight[] = [];
@@ -561,34 +588,9 @@ export default function AdminInsightsPage() {
     }
     
     return insights;
-  }, [productAnalysis, temporalData, marketingMetrics, kpis, paymentMethodData, velocityData, paidSales.length, formatCurrency]);
+  }, [productAnalysis, temporalData, marketingMetrics, kpis, paymentMethodData, velocityData, paidSales.length, formatCurrency, agentRanking]);
 
-  // ============ AGENT RANKING (REAL DATA) ============
-  const agentRanking = useMemo(() => {
-    if (!user?.account_id || profiles.length === 0) return [];
-
-    return profiles.map(profile => {
-      const agentSales = paidSales.filter(s => s.responsavel_id === profile.user_id);
-      const totalSales = agentSales.length;
-      const totalRevenue = agentSales.reduce((sum, s) => sum + s.valor, 0);
-      const avgTicket = totalSales > 0 ? totalRevenue / totalSales : 0;
-
-      return {
-        id: profile.user_id,
-        name: profile.nome,
-        totalSales,
-        totalRevenue,
-        avgTicket,
-      };
-    })
-    .filter(a => a.totalSales > 0)
-    .sort((a, b) => b.totalRevenue - a.totalRevenue);
-  }, [paidSales, profiles, user]);
-
-  const maxAgentRevenue = useMemo(() => {
-    if (agentRanking.length === 0) return 1;
-    return Math.max(...agentRanking.map(a => a.totalRevenue), 1);
-  }, [agentRanking]);
+  // (agentRanking moved above automaticInsights)
 
   // ============ HANDLERS ============
   const handlePeriodChange = (period: string, range?: DateRange) => {
