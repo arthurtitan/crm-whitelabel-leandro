@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useAuth, useRoleAccess } from '@/contexts/AuthContext';
 import { useFinance } from '@/contexts/FinanceContext';
 import { useCalendar } from '@/contexts/CalendarContext';
@@ -10,20 +10,20 @@ import {
   MarketingMetrics,
   AutomaticInsights,
   PaymentMethodAnalysis,
+  BottleneckCard,
+  ConversionVelocity,
   type ProductAnalysis,
   type Insight,
 } from '@/components/insights';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { mockUsers, mockConversations } from '@/data/mockData';
+import { supabase } from '@/integrations/supabase/client';
 import {
   ShoppingCart,
-  MessageSquare,
   Medal,
   ArrowRight,
   Users,
@@ -63,6 +63,20 @@ export default function AdminInsightsPage() {
   const { sales, contacts, products: contextProducts } = useFinance();
   const { events } = useCalendar();
 
+  // Real profiles from database
+  const [profiles, setProfiles] = useState<Array<{ id: string; user_id: string; nome: string; email: string }>>([]);
+
+  useEffect(() => {
+    if (!user?.account_id) return;
+    supabase
+      .from('profiles')
+      .select('id, user_id, nome, email')
+      .eq('account_id', user.account_id)
+      .then(({ data }) => {
+        if (data) setProfiles(data);
+      });
+  }, [user?.account_id]);
+
   // Filter states
   const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
     from: subDays(new Date(), 30),
@@ -88,7 +102,6 @@ export default function AdminInsightsPage() {
 
       if (!inDateRange) return false;
 
-      // Role-based filtering - Agents see only their own, Admins see all
       if (!isAdmin || user?.role !== 'admin') {
         return sale.responsavel_id === user?.id;
       }
@@ -195,7 +208,6 @@ export default function AdminInsightsPage() {
     if (products.length > 0) {
       products[0].classification = 'star';
       
-      // Find opportunity (high ticket, low volume)
       const avgUnidades = products.reduce((sum, p) => sum + p.unidadesVendidas, 0) / products.length;
       const avgTicket = products.reduce((sum, p) => sum + p.ticketMedio, 0) / products.length;
       
@@ -206,7 +218,6 @@ export default function AdminInsightsPage() {
       );
       if (opportunity) opportunity.classification = 'opportunity';
       
-      // Find risk (lowest performer)
       if (products.length > 2) {
         const lastProduct = products[products.length - 1];
         if (lastProduct.classification === 'normal') {
@@ -220,7 +231,6 @@ export default function AdminInsightsPage() {
 
   // ============ TEMPORAL ANALYSIS ============
   const temporalData = useMemo(() => {
-    // Daily revenue
     const dailyMap: Record<string, { valor: number; count: number }> = {};
     const hourlyMap: Record<number, number> = {};
     const weekdayMap: Record<number, { total: number; count: number }> = {};
@@ -249,12 +259,10 @@ export default function AdminInsightsPage() {
       .map(([date, data]) => ({ date, ...data }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
-    // Best and worst days
     const sortedByRevenue = [...dailyData].sort((a, b) => b.valor - a.valor);
     const bestDay = sortedByRevenue.length > 0 ? sortedByRevenue[0] : null;
     const worstDay = sortedByRevenue.length > 0 ? sortedByRevenue[sortedByRevenue.length - 1] : null;
 
-    // Best weekday
     const weekdayStats = Object.entries(weekdayMap)
       .map(([day, data]) => ({
         day: weekdayNames[parseInt(day)],
@@ -264,7 +272,6 @@ export default function AdminInsightsPage() {
       .sort((a, b) => b.averageRevenue - a.averageRevenue);
     const bestWeekday = weekdayStats.length > 0 ? weekdayStats[0] : null;
 
-    // Peak hour
     const hourlyStats = Object.entries(hourlyMap)
       .map(([hour, count]) => ({ hour: parseInt(hour), count }))
       .sort((a, b) => b.count - a.count);
@@ -275,7 +282,6 @@ export default function AdminInsightsPage() {
 
   // ============ MARKETING METRICS ============
   const marketingMetrics = useMemo(() => {
-    // Identify recurring customers
     const customerSales: Record<string, { count: number; total: number; firstSale: string; lastPaid: string | null }> = {};
     
     paidSales.forEach((sale) => {
@@ -293,16 +299,13 @@ export default function AdminInsightsPage() {
     const clientesRecorrentes = Object.values(customerSales).filter(c => c.count > 1).length;
     const taxaRecorrencia = totalClientes > 0 ? (clientesRecorrentes / totalClientes) * 100 : 0;
 
-    // LTV (average revenue from recurring customers)
     const recurringRevenue = Object.values(customerSales)
       .filter(c => c.count > 1)
       .reduce((sum, c) => sum + c.total, 0);
     const ltv = clientesRecorrentes > 0 ? recurringRevenue / clientesRecorrentes : kpis.ticketMedio;
 
-    // CAC implícito
     const cacImplicito = kpis.totalVendas > 0 ? kpis.totalLeads / kpis.totalVendas : 0;
 
-    // Ciclo médio de venda (days from lead to paid)
     let totalCycleDays = 0;
     let cycleCount = 0;
     
@@ -330,6 +333,48 @@ export default function AdminInsightsPage() {
       totalClientes,
     };
   }, [paidSales, contacts, kpis]);
+
+  // ============ CONVERSION VELOCITY ============
+  const velocityData = useMemo(() => {
+    const bucketDefs = [
+      { label: 'Mesmo dia', min: 0, max: 0 },
+      { label: '1-3 dias', min: 1, max: 3 },
+      { label: '4-7 dias', min: 4, max: 7 },
+      { label: '8-30 dias', min: 8, max: 30 },
+      { label: '30+ dias', min: 31, max: Infinity },
+    ];
+
+    const counts = bucketDefs.map(() => 0);
+    let total = 0;
+
+    paidSales.forEach((sale) => {
+      const contact = contacts.find(c => c.id === sale.contact_id);
+      if (contact && sale.paid_at) {
+        const days = differenceInDays(parseISO(sale.paid_at), parseISO(contact.created_at));
+        if (days >= 0 && days < 365) {
+          total++;
+          for (let i = 0; i < bucketDefs.length; i++) {
+            if (days >= bucketDefs[i].min && days <= bucketDefs[i].max) {
+              counts[i]++;
+              break;
+            }
+          }
+        }
+      }
+    });
+
+    const buckets = bucketDefs.map((def, i) => ({
+      label: def.label,
+      count: counts[i],
+      percentage: total > 0 ? (counts[i] / total) * 100 : 0,
+    }));
+
+    // Fast conversion = same day + 1-3 days
+    const fastCount = counts[0] + counts[1];
+    const fastConversionPercent = total > 0 ? (fastCount / total) * 100 : 0;
+
+    return { buckets, fastConversionPercent };
+  }, [paidSales, contacts]);
 
   // ============ PAYMENT METHOD ANALYSIS ============
   const paymentMethodData = useMemo(() => {
@@ -376,7 +421,7 @@ export default function AdminInsightsPage() {
     return null;
   }, [paymentMethodData]);
 
-  // ============ AUTOMATIC INSIGHTS ============
+  // ============ AUTOMATIC INSIGHTS (ENHANCED) ============
   const automaticInsights = useMemo((): Insight[] => {
     const insights: Insight[] = [];
     
@@ -401,6 +446,25 @@ export default function AdminInsightsPage() {
           title: `"${opportunityProduct.nome}" tem ticket alto mas poucas vendas`,
           description: 'Oportunidade para campanhas focadas. Alto valor agregado com potencial de crescimento.',
           metric: `Ticket: ${formatCurrency(opportunityProduct.ticketMedio)}`,
+        });
+      }
+
+      // NEW: High-ticket product with low volume
+      const avgTicket = productAnalysis.reduce((sum, p) => sum + p.ticketMedio, 0) / productAnalysis.length;
+      const avgUnidades = productAnalysis.reduce((sum, p) => sum + p.unidadesVendidas, 0) / productAnalysis.length;
+      const highTicketLowVol = productAnalysis.find(p =>
+        p.classification !== 'star' &&
+        p.classification !== 'opportunity' &&
+        p.ticketMedio > avgTicket * 1.5 &&
+        p.unidadesVendidas < avgUnidades * 0.5
+      );
+      if (highTicketLowVol) {
+        insights.push({
+          id: 'high-ticket-low-vol',
+          type: 'opportunity',
+          title: `"${highTicketLowVol.nome}" tem ticket ${((highTicketLowVol.ticketMedio / avgTicket - 1) * 100).toFixed(0)}% acima da média`,
+          description: 'Produto premium com poucas vendas. Priorize-o em apresentações e kits.',
+          metric: formatCurrency(highTicketLowVol.ticketMedio),
         });
       }
     }
@@ -447,58 +511,83 @@ export default function AdminInsightsPage() {
         metric: `${kpis.totalVendas}/${kpis.totalLeads}`,
       });
     }
+
+    // NEW: Payment method dependency risk
+    if (paymentMethodData.length > 1) {
+      const topMethod = paymentMethodData[0];
+      if (topMethod.participacao > 60) {
+        insights.push({
+          id: 'payment-dependency',
+          type: 'warning',
+          title: `${topMethod.label} concentra ${topMethod.participacao.toFixed(0)}% das vendas`,
+          description: 'Dependência excessiva de um método de pagamento. Diversifique para reduzir risco operacional.',
+        });
+      }
+    }
+
+    // NEW: Conversion velocity insight
+    if (velocityData.fastConversionPercent > 0 && paidSales.length >= 5) {
+      const slowPercent = 100 - velocityData.fastConversionPercent;
+      if (velocityData.fastConversionPercent >= 50) {
+        insights.push({
+          id: 'velocity-fast',
+          type: 'success',
+          title: `${velocityData.fastConversionPercent.toFixed(0)}% das vendas fecham em até 3 dias`,
+          description: 'Velocidade de conversão alta. Mantenha a agilidade no atendimento.',
+        });
+      } else if (slowPercent >= 60) {
+        insights.push({
+          id: 'velocity-slow',
+          type: 'warning',
+          title: `${slowPercent.toFixed(0)}% das vendas demoram mais de 3 dias`,
+          description: 'Leads que não fecham rápido têm menor chance de converter. Priorize follow-up nos primeiros dias.',
+        });
+      }
+    }
+
+    // NEW: Top agent highlight
+    if (agentRanking.length >= 2) {
+      const topAgent = agentRanking[0];
+      const avgRevenue = agentRanking.reduce((sum, a) => sum + a.totalRevenue, 0) / agentRanking.length;
+      if (topAgent.totalRevenue > avgRevenue * 1.3 && topAgent.totalSales >= 3) {
+        insights.push({
+          id: 'agent-highlight',
+          type: 'success',
+          title: `${topAgent.name} fatura ${((topAgent.totalRevenue / avgRevenue - 1) * 100).toFixed(0)}% acima da média`,
+          description: 'Analise a estratégia deste agente e replique com a equipe.',
+          metric: formatCurrency(topAgent.totalRevenue),
+        });
+      }
+    }
     
     return insights;
-  }, [productAnalysis, temporalData, marketingMetrics, kpis, formatCurrency]);
+  }, [productAnalysis, temporalData, marketingMetrics, kpis, paymentMethodData, velocityData, paidSales.length, formatCurrency]);
 
-  // ============ AGENT RANKING ============
+  // ============ AGENT RANKING (REAL DATA) ============
   const agentRanking = useMemo(() => {
-    if (!user?.account_id) return [];
+    if (!user?.account_id || profiles.length === 0) return [];
 
-    const agents = mockUsers.filter(u => 
-      u.account_id === user.account_id && 
-      (u.role === 'agent' || u.role === 'admin')
-    );
-
-    return agents.map(agent => {
-      const agentSales = paidSales.filter(s => s.responsavel_id === agent.id);
+    return profiles.map(profile => {
+      const agentSales = paidSales.filter(s => s.responsavel_id === profile.user_id);
       const totalSales = agentSales.length;
       const totalRevenue = agentSales.reduce((sum, s) => sum + s.valor, 0);
       const avgTicket = totalSales > 0 ? totalRevenue / totalSales : 0;
 
-      const agentConversations = mockConversations.filter(c => 
-        c.assignee_id === agent.id && c.assignee_type === 'user'
-      );
-      const totalConversations = agentConversations.length;
-      const resolvedConversations = agentConversations.filter(c => c.status === 'resolved').length;
-      const resolutionRate = totalConversations > 0 
-        ? ((resolvedConversations / totalConversations) * 100)
-        : 0;
-
-      const agentAppointments = filteredAppointments.filter(e => e.createdBy === agent.id);
-      const totalAppointments = agentAppointments.length;
-
       return {
-        id: agent.id,
-        name: agent.nome,
-        role: agent.role,
+        id: profile.user_id,
+        name: profile.nome,
         totalSales,
         totalRevenue,
         avgTicket,
-        totalConversations,
-        resolvedConversations,
-        resolutionRate,
-        totalAppointments,
       };
-    }).sort((a, b) => b.totalRevenue - a.totalRevenue);
-  }, [paidSales, filteredAppointments, user]);
+    })
+    .filter(a => a.totalSales > 0)
+    .sort((a, b) => b.totalRevenue - a.totalRevenue);
+  }, [paidSales, profiles, user]);
 
-  const maxMetrics = useMemo(() => {
-    if (agentRanking.length === 0) return { revenue: 1, conversations: 1 };
-    return {
-      revenue: Math.max(...agentRanking.map(a => a.totalRevenue), 1),
-      conversations: Math.max(...agentRanking.map(a => a.totalConversations), 1),
-    };
+  const maxAgentRevenue = useMemo(() => {
+    if (agentRanking.length === 0) return 1;
+    return Math.max(...agentRanking.map(a => a.totalRevenue), 1);
   }, [agentRanking]);
 
   // ============ HANDLERS ============
@@ -579,6 +668,14 @@ export default function AdminInsightsPage() {
         totalVendas={kpis.totalVendas}
       />
 
+      {/* Bottleneck Card */}
+      <BottleneckCard
+        totalLeads={kpis.totalLeads}
+        taxaConversao={kpis.taxaConversao}
+        ticketMedio={kpis.ticketMedio}
+        receitaPorLead={kpis.receitaPorLead}
+      />
+
       {/* Automatic Insights */}
       {automaticInsights.length > 0 && (
         <AutomaticInsights insights={automaticInsights} />
@@ -614,13 +711,21 @@ export default function AdminInsightsPage() {
         />
       </div>
 
-      {/* Payment Method Analysis */}
-      {paymentMethodData.length > 0 && (
-        <PaymentMethodAnalysis 
-          data={paymentMethodData}
-          highlightInsight={paymentInsight}
+      {/* Conversion Velocity + Payment Methods */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <ConversionVelocity
+          buckets={velocityData.buckets}
+          cicloMedio={marketingMetrics.cicloMedioVenda}
+          fastConversionPercent={velocityData.fastConversionPercent}
         />
-      )}
+
+        {paymentMethodData.length > 0 && (
+          <PaymentMethodAnalysis 
+            data={paymentMethodData}
+            highlightInsight={paymentInsight}
+          />
+        )}
+      </div>
 
       {/* Funnel Conversion */}
       <Card>
@@ -706,142 +811,61 @@ export default function AdminInsightsPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="sales" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-4">
-                <TabsTrigger value="sales" className="gap-2">
-                  <ShoppingCart className="w-4 h-4" />
-                  Por Vendas
-                </TabsTrigger>
-                <TabsTrigger value="conversations" className="gap-2">
-                  <MessageSquare className="w-4 h-4" />
-                  Por Atendimentos
-                </TabsTrigger>
-              </TabsList>
-
-              {/* Sales Ranking Tab */}
-              <TabsContent value="sales">
-                <ScrollArea className="h-[350px]">
-                  <div className="overflow-x-auto">
-                    <Table className="min-w-[550px]">
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-14 min-w-[56px]">Pos.</TableHead>
-                          <TableHead className="min-w-[140px]">Agente</TableHead>
-                          <TableHead className="text-center min-w-[70px]">Vendas</TableHead>
-                          <TableHead className="text-right min-w-[100px]">Faturamento</TableHead>
-                          <TableHead className="text-right min-w-[90px] hidden sm:table-cell">Ticket Médio</TableHead>
-                          <TableHead className="w-[100px] hidden md:table-cell">Performance</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {[...agentRanking].sort((a, b) => b.totalRevenue - a.totalRevenue).map((agent, index) => (
-                          <TableRow 
-                            key={agent.id}
-                            className={index < 3 ? 'bg-primary/5' : ''}
-                          >
-                            <TableCell className="text-center">
-                              {getPositionDisplay(index + 1)}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <Avatar className="h-7 w-7 sm:h-8 sm:w-8">
-                                  <AvatarFallback className="text-xs bg-primary/10 text-primary">
-                                    {getInitials(agent.name)}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <div className="min-w-0">
-                                  <p className="font-medium truncate">{agent.name}</p>
-                                  <p className="text-xs text-muted-foreground capitalize hidden sm:block">{agent.role}</p>
-                                </div>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <Badge variant="secondary">{agent.totalSales}</Badge>
-                            </TableCell>
-                            <TableCell className="text-right font-semibold text-success">
-                              {formatCurrency(agent.totalRevenue)}
-                            </TableCell>
-                            <TableCell className="text-right text-muted-foreground hidden sm:table-cell">
-                              {formatCurrency(agent.avgTicket)}
-                            </TableCell>
-                            <TableCell className="hidden md:table-cell">
-                              <Progress 
-                                value={(agent.totalRevenue / maxMetrics.revenue) * 100} 
-                                className="h-2"
-                              />
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </ScrollArea>
-              </TabsContent>
-
-              {/* Conversations Ranking Tab */}
-              <TabsContent value="conversations">
-                <ScrollArea className="h-[350px]">
-                  <div className="overflow-x-auto">
-                    <Table className="min-w-[520px]">
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-14 min-w-[56px]">Pos.</TableHead>
-                          <TableHead className="min-w-[140px]">Agente</TableHead>
-                          <TableHead className="text-center min-w-[80px]">Conversas</TableHead>
-                          <TableHead className="text-center min-w-[80px] hidden sm:table-cell">Resolvidas</TableHead>
-                          <TableHead className="text-center min-w-[60px]">Taxa</TableHead>
-                          <TableHead className="w-[100px] hidden md:table-cell">Performance</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {[...agentRanking].sort((a, b) => b.totalConversations - a.totalConversations).map((agent, index) => (
-                          <TableRow 
-                            key={agent.id}
-                            className={index < 3 ? 'bg-primary/5' : ''}
-                          >
-                            <TableCell className="text-center">
-                              {getPositionDisplay(index + 1)}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <Avatar className="h-7 w-7 sm:h-8 sm:w-8">
-                                  <AvatarFallback className="text-xs bg-primary/10 text-primary">
-                                    {getInitials(agent.name)}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <div className="min-w-0">
-                                  <p className="font-medium truncate">{agent.name}</p>
-                                  <p className="text-xs text-muted-foreground capitalize hidden sm:block">{agent.role}</p>
-                                </div>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <Badge variant="secondary">{agent.totalConversations}</Badge>
-                            </TableCell>
-                            <TableCell className="text-center hidden sm:table-cell">
-                              <Badge variant="outline" className="text-success">
-                                {agent.resolvedConversations}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <span className={`font-medium ${agent.resolutionRate >= 80 ? 'text-success' : agent.resolutionRate >= 50 ? 'text-warning' : 'text-destructive'}`}>
-                                {agent.resolutionRate.toFixed(0)}%
-                              </span>
-                            </TableCell>
-                            <TableCell className="hidden md:table-cell">
-                              <Progress 
-                                value={(agent.totalConversations / maxMetrics.conversations) * 100} 
-                                className="h-2"
-                              />
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </ScrollArea>
-              </TabsContent>
-            </Tabs>
+            <ScrollArea className="h-[350px]">
+              <div className="overflow-x-auto">
+                <Table className="min-w-[550px]">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-14 min-w-[56px]">Pos.</TableHead>
+                      <TableHead className="min-w-[140px]">Agente</TableHead>
+                      <TableHead className="text-center min-w-[70px]">Vendas</TableHead>
+                      <TableHead className="text-right min-w-[100px]">Faturamento</TableHead>
+                      <TableHead className="text-right min-w-[90px] hidden sm:table-cell">Ticket Médio</TableHead>
+                      <TableHead className="w-[100px] hidden md:table-cell">Performance</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {agentRanking.map((agent, index) => (
+                      <TableRow 
+                        key={agent.id}
+                        className={index < 3 ? 'bg-primary/5' : ''}
+                      >
+                        <TableCell className="text-center">
+                          {getPositionDisplay(index + 1)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Avatar className="h-7 w-7 sm:h-8 sm:w-8">
+                              <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                                {getInitials(agent.name)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="min-w-0">
+                              <p className="font-medium truncate">{agent.name}</p>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant="secondary">{agent.totalSales}</Badge>
+                        </TableCell>
+                        <TableCell className="text-right font-semibold text-success">
+                          {formatCurrency(agent.totalRevenue)}
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground hidden sm:table-cell">
+                          {formatCurrency(agent.avgTicket)}
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          <Progress 
+                            value={(agent.totalRevenue / maxAgentRevenue) * 100} 
+                            className="h-2"
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </ScrollArea>
           </CardContent>
         </Card>
       )}
