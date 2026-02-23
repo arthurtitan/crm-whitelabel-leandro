@@ -400,9 +400,24 @@ serve(async (req) => {
         if (allStageTagIds.length > 0) {
           const { data: currentLeadTags } = await supabaseAdmin
             .from('lead_tags')
-            .select('id, tag_id')
+            .select('id, tag_id, source, created_at')
             .eq('contact_id', contactId)
             .in('tag_id', allStageTagIds);
+
+          // === PROTECTION WINDOW: skip contacts with recent kanban moves ===
+          const recentKanbanTag = (currentLeadTags || []).find(lt => {
+            if (lt.source !== 'kanban') return false;
+            const tagAge = Date.now() - new Date(lt.created_at).getTime();
+            return tagAge < 120000; // 2 minutes
+          });
+
+          if (recentKanbanTag) {
+            console.log('[Sync Contacts] Skipping contact (recent kanban move, age:', 
+              Math.round((Date.now() - new Date(recentKanbanTag.created_at).getTime()) / 1000), 
+              's):', contactId);
+            continue; // Skip to next conversation — CRM is source of truth
+          }
+          // === END PROTECTION WINDOW ===
 
           const currentTagIds = new Set(currentLeadTags?.map(lt => lt.tag_id) || []);
 
