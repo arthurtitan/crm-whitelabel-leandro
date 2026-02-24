@@ -61,11 +61,17 @@ class ChatwootService {
   ): Promise<T> {
     const url = `${config.baseUrl}/api/v1/accounts/${config.accountId}${endpoint}`;
 
-    const headers: Record<string, string> = {
+    const baseHeaders: Record<string, string> = {
       'api_access_token': config.apiKey,
       'Content-Type': 'application/json',
-      ...(options.headers || {}),
     };
+
+    if (options.headers) {
+      const h = options.headers as Record<string, string>;
+      Object.assign(baseHeaders, h);
+    }
+
+    const headers = baseHeaders;
 
     try {
       const response = await fetch(url, {
