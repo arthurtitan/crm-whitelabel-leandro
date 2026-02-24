@@ -1,51 +1,32 @@
 
 
-# Auditoria Final - Preparar Backend para Deploy Limpo
+# Corrigir Build do Frontend - package-lock.json desatualizado
 
-## Status dos Erros TypeScript
-Todos os ~50 erros de compilacao foram corrigidos nas rodadas anteriores. Nao ha mais erros de tipagem pendentes.
+O backend compilou com sucesso! O erro agora e exclusivamente no **frontend**.
 
-## Problema Encontrado: Falta de `.dockerignore`
+## O Problema
 
-O `backend/Dockerfile` executa `COPY . .` sem um `.dockerignore`, o que causa:
+O `Dockerfile.frontend` usa `npm ci`, que exige sincronia perfeita entre `package.json` e `package-lock.json`. Como o Lovable atualiza dependencias automaticamente sem regenerar o lock file, o `npm ci` falha com erros de pacotes faltantes.
 
-1. **Risco de binarios nativos**: `node_modules` local (macOS/Windows) sobrescreve os compilados para Alpine Linux, podendo quebrar o Prisma Client
-2. **Vazamento do `.env`**: Credenciais de dev sao copiadas para a imagem Docker
-3. **Build lento**: Arquivos desnecessarios (`.git`, `dist`, etc.) sao enviados ao contexto do Docker
+## A Correcao
 
-## Correcao
-
-### Criar `backend/.dockerignore`
+Trocar `npm ci` por `npm install` na linha 18 do `Dockerfile.frontend`:
 
 ```text
-node_modules
-dist
-.env
-.env.*
-*.log
-.git
-.gitignore
-README.md
+# Antes
+RUN npm ci
+
+# Depois
+RUN npm install
 ```
 
-Este arquivo garante que:
-- O `npm install` dentro do container usa binarios corretos para Alpine
-- Credenciais locais nao vazam na imagem
-- O contexto de build fica menor e mais rapido
+`npm install` e tolerante com lock files desatualizados e resolve as dependencias corretamente.
 
----
+## Arquivo a Modificar
 
-## Checklist Completo do Deploy
-
-| Item | Status |
+| Arquivo | Mudanca |
 |---|---|
-| Erros TypeScript | Todos corrigidos |
-| `backend/.dockerignore` | A criar |
-| `Dockerfile.frontend` | OK |
-| `docker-compose.yml` | OK |
-| `nginx.conf` (proxy /api) | OK |
-| Prisma schema | OK |
-| Variaveis de ambiente | Definidas no docker-compose |
+| `Dockerfile.frontend` | Linha 18: `npm ci` -> `npm install` |
 
-Apos esta unica correcao, o sistema estara pronto para deploy no EasyPanel.
+Uma unica linha. Apos isso, tanto backend quanto frontend devem buildar sem erros no EasyPanel.
 
