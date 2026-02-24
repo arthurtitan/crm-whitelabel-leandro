@@ -1,5 +1,5 @@
-import { ReactNode } from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { ReactNode, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/hooks/usePermissions';
 
@@ -19,6 +19,30 @@ export function ProtectedRoute({
   const { isAuthenticated, user, isLoading } = useAuth();
   const { canAccessRoute, getFirstAllowedRoute } = usePermissions();
   const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (isLoading) return;
+
+    if (!isAuthenticated || !user) {
+      navigate('/login', { state: { from: location }, replace: true });
+      return;
+    }
+
+    if (requireSuperAdmin && user.role !== 'super_admin') {
+      navigate('/unauthorized', { replace: true });
+      return;
+    }
+
+    if (allowedRoles && !allowedRoles.includes(user.role)) {
+      navigate('/unauthorized', { replace: true });
+      return;
+    }
+
+    if (user.role === 'agent' && !canAccessRoute(location.pathname)) {
+      navigate(getFirstAllowedRoute(), { replace: true });
+    }
+  }, [isLoading, isAuthenticated, user, requireSuperAdmin, allowedRoles, location.pathname, canAccessRoute, getFirstAllowedRoute, navigate]);
 
   if (isLoading) {
     return (
@@ -32,24 +56,19 @@ export function ProtectedRoute({
   }
 
   if (!isAuthenticated || !user) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    return null;
   }
 
-  // Super Admin check
   if (requireSuperAdmin && user.role !== 'super_admin') {
-    return <Navigate to="/unauthorized" replace />;
+    return null;
   }
 
-  // Role check
   if (allowedRoles && !allowedRoles.includes(user.role)) {
-    return <Navigate to="/unauthorized" replace />;
+    return null;
   }
 
-  // For agents, check granular permissions
   if (user.role === 'agent' && !canAccessRoute(location.pathname)) {
-    // Redirect to first allowed route instead of unauthorized
-    const allowedRoute = getFirstAllowedRoute();
-    return <Navigate to={allowedRoute} replace />;
+    return null;
   }
 
   return <>{children}</>;
@@ -63,7 +82,7 @@ export function getDefaultRoute(role: UserRole): string {
     case 'admin':
       return '/admin';
     case 'agent':
-      return '/admin'; // Agents now use /admin routes with permission check
+      return '/admin';
     default:
       return '/';
   }
