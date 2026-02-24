@@ -26,18 +26,28 @@ RUN npm run build
 # Production stage with nginx
 FROM nginx:alpine AS production
 
-# Copy nginx configuration
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Install envsubst (already in nginx:alpine via gettext)
+RUN apk add --no-cache gettext
+
+# Copy nginx template (usado em runtime com envsubst)
+COPY deploy/easypanel/nginx/default.conf.template /etc/nginx/templates/default.conf.template
+
+# Also copy static nginx.conf as fallback for non-EasyPanel environments
+COPY nginx.conf /etc/nginx/conf.d/default.conf.bak
 
 # Copy built application
 COPY --from=builder /app/dist /usr/share/nginx/html
+
+# Default value for BACKEND_UPSTREAM
+ENV BACKEND_UPSTREAM=backend:3000
 
 # Expose port
 EXPOSE 80
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD wget --spider -q http://localhost:80 || exit 1
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget --spider -q http://localhost:80/health || exit 1
 
-# Start nginx
+# Start nginx with envsubst template processing
+# nginx:alpine image processes /etc/nginx/templates/*.template automatically
 CMD ["nginx", "-g", "daemon off;"]

@@ -26,6 +26,9 @@ const envSchema = z.object({
   RATE_LIMIT_WINDOW_MS: z.string().transform(Number).default('900000'),
   RATE_LIMIT_MAX: z.string().transform(Number).default('100'),
 
+  // CORS (optional - comma-separated origins)
+  CORS_ORIGINS: z.string().optional(),
+
   // Chatwoot (optional)
   CHATWOOT_WEBHOOK_SECRET: z.string().optional(),
 

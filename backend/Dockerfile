@@ -47,9 +47,9 @@ COPY prisma ./prisma/
 RUN npm install --omit=dev && \
     npx prisma generate
 
-# Copy migration script
-COPY scripts ./scripts/
-RUN chmod +x scripts/*.sh
+# Copy startup script
+COPY scripts/start.sh ./scripts/start.sh
+RUN chmod +x scripts/start.sh
 
 # Copy built application
 COPY --from=builder /app/dist ./dist
@@ -63,9 +63,9 @@ USER nodejs
 # Expose port
 EXPOSE 3000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+# Health check (start_period alto para dar tempo de migrations + seed)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=5 \
   CMD wget --spider -q http://localhost:3000/api/health || exit 1
 
-# Start command (runs migrations, seed, then starts the app — fail-fast)
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/prisma/seed.js && node dist/server.js"]
+# Start via script (aguarda banco, roda migrations, seed, depois inicia)
+CMD ["sh", "scripts/start.sh"]
