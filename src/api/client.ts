@@ -116,25 +116,29 @@ function createTimeoutPromise(ms: number): Promise<never> {
 }
 
 // Handle response errors
-async function handleResponse<T>(response: Response): Promise<T> {
+async function handleResponse<T>(response: Response, skipAuth = false): Promise<T> {
   if (!response.ok) {
-    // Handle 401 Unauthorized
-    if (response.status === 401) {
-      tokenManager.clearTokens();
-      // Dispatch event for auth state listeners
-      window.dispatchEvent(new CustomEvent('auth:unauthorized'));
-      throw { message: 'Sessão expirada', status: 401 } as ApiError;
-    }
-    
-    // Handle other errors
+    // Parse error body first to get the real message
     let errorData: ApiError;
     try {
-      errorData = await response.json();
+      const body = await response.json();
+      errorData = {
+        message: body?.error?.message || body?.message || body?.error || response.statusText || 'Erro desconhecido',
+        code: body?.error?.code || body?.code,
+        status: response.status,
+        details: body?.details,
+      };
     } catch {
       errorData = { 
         message: response.statusText || 'Erro desconhecido', 
         status: response.status 
       };
+    }
+
+    // Handle 401 Unauthorized — only trigger global logout for authenticated routes
+    if (response.status === 401 && !skipAuth) {
+      tokenManager.clearTokens();
+      window.dispatchEvent(new CustomEvent('auth:unauthorized'));
     }
     
     throw errorData;
@@ -177,7 +181,7 @@ async function request<T>(
   };
   
   // Execute with timeout
-  const fetchPromise = fetch(url, config).then(handleResponse<T>);
+  const fetchPromise = fetch(url, config).then(res => handleResponse<T>(res, skipAuth));
   
   if (timeout > 0) {
     return Promise.race([fetchPromise, createTimeoutPromise(timeout)]);
