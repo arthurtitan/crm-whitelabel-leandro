@@ -216,7 +216,7 @@ class ChatwootController {
   async updateLabel(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const accountId = req.user!.accountId!;
-      const labelId = parseInt(req.params.labelId, 10);
+      const labelId = parseInt(req.params.labelId as string, 10);
       const { title, description, color, show_on_sidebar } = req.body;
 
       const label = await chatwootService.updateLabel(accountId, labelId, {
@@ -239,7 +239,7 @@ class ChatwootController {
   async deleteLabel(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const accountId = req.user!.accountId!;
-      const labelId = parseInt(req.params.labelId, 10);
+      const labelId = parseInt(req.params.labelId as string, 10);
 
       await chatwootService.deleteLabel(accountId, labelId);
       res.status(204).send();
