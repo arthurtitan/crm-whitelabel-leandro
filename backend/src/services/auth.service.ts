@@ -137,12 +137,17 @@ class AuthService {
         role: user.role,
         permissions: user.permissions,
         status: user.status,
+        accountId: user.accountId,
+        chatwootAgentId: user.chatwootAgentId,
       },
       account: user.account ? {
         id: user.account.id,
         nome: user.account.nome,
         status: user.account.status,
         timezone: user.account.timezone,
+        chatwootBaseUrl: user.account.chatwootBaseUrl,
+        chatwootAccountId: user.account.chatwootAccountId,
+        chatwootApiKey: user.account.chatwootApiKey,
       } : null,
       token,
       refreshToken,
@@ -258,6 +263,8 @@ class AuthService {
         status: user.status,
         lastLoginAt: user.lastLoginAt,
         createdAt: user.createdAt,
+        accountId: user.accountId,
+        chatwootAgentId: user.chatwootAgentId,
       },
       account: user.account ? {
         id: user.account.id,
@@ -265,6 +272,9 @@ class AuthService {
         status: user.account.status,
         timezone: user.account.timezone,
         plano: user.account.plano,
+        chatwootBaseUrl: user.account.chatwootBaseUrl,
+        chatwootAccountId: user.account.chatwootAccountId,
+        chatwootApiKey: user.account.chatwootApiKey,
       } : null,
     };
   }
