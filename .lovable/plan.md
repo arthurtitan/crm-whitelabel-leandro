@@ -1,47 +1,51 @@
 
-# Corrigir Erro do Prisma no Alpine - OpenSSL Ausente
 
-## O Problema
+# Criar Migration Inicial do Prisma
 
-O build passou com sucesso, mas o container backend falha ao executar `prisma migrate deploy` porque o Alpine Linux nao inclui OpenSSL por padrao. O Prisma precisa do OpenSSL para seus binarios nativos (schema engine, migration engine).
+## Situacao Atual
 
-O erro repetido nos logs:
+Os 3 containers estao saudaveis. O backend inicia, conecta ao banco, mas o log diz:
+
 ```
-prisma:warn Prisma failed to detect the libssl/openssl version to use
-Error: Could not parse schema engine response: SyntaxError: Unexpected token 'E', "Error load"... is not valid JSON
-```
-
-## A Correcao
-
-Adicionar `RUN apk add --no-cache openssl` em ambos os estagios do `backend/Dockerfile`:
-
-### Arquivo: `backend/Dockerfile`
-
-```text
-# Build stage
-FROM node:20-alpine AS builder
-WORKDIR /app
-RUN apk add --no-cache openssl    # <-- ADICIONAR
-
-...
-
-# Production stage
-FROM node:20-alpine AS production
-WORKDIR /app
-RUN apk add --no-cache openssl    # <-- ADICIONAR
+No migration found in prisma/migrations
+No pending migrations to apply.
 ```
 
-Especificamente:
-- **Linha 8 (apos WORKDIR no builder)**: Adicionar `RUN apk add --no-cache openssl`
-- **Linha 31 (apos WORKDIR no production)**: Adicionar `RUN apk add --no-cache openssl`
+O diretorio `backend/prisma/migrations/` simplesmente nao existe. Sem ele, `prisma migrate deploy` nao cria nenhuma tabela.
 
-## Por que funciona
+## Correcao
 
-O Prisma usa binarios nativos que dependem de `libssl`. Sem ela no Alpine, o engine tenta carregar a biblioteca, falha com "Error loading...", e o JSON parser do Prisma recebe esse texto de erro em vez de JSON valido, gerando o erro "Unexpected token 'E'".
+Criar 2 arquivos:
+
+### 1. `backend/prisma/migrations/migration_lock.toml`
+
+Arquivo de controle que indica o provider do banco:
+
+```toml
+provider = "postgresql"
+```
+
+### 2. `backend/prisma/migrations/0001_init/migration.sql`
+
+SQL completo derivado do `schema.prisma` contendo:
+
+- **14 enums**: AccountStatus, UserRole, UserStatus, ContactOrigin, TagType, ActorType, LeadTagSource, TagHistoryAction, SaleStatus, PaymentMethod, CalendarEventType, CalendarEventSource, CalendarEventStatus, AttendeeStatus
+- **16 tabelas**: accounts, users, refresh_tokens, contacts, funnels, tags, lead_tags, tag_history, products, sales, sale_items, lead_notes, events, calendar_events, calendar_attendees, google_calendar_tokens
+- Todos os indices, foreign keys, constraints de unicidade e valores default
+
+## Sobre o Dominio no EasyPanel
+
+A configuracao de dominios no print esta correta:
+- `360.gleps.com.br` aponta para `frontend:80` (estrela amarela = primario)
+- O subdominio do EasyPanel aponta para o servico raiz
+
+Uma vez que as tabelas existam no banco, o backend respondera normalmente e o frontend podera se comunicar via `/api` (proxy nginx).
 
 ## Resultado Esperado
 
-Apos esta correcao:
-1. `prisma migrate deploy` executara com sucesso, criando as tabelas no PostgreSQL
-2. `node dist/server.js` iniciara o backend normalmente
-3. O frontend (nginx) ja esta funcionando corretamente
+Apos o proximo deploy:
+1. `prisma migrate deploy` encontra `0001_init` e executa o SQL
+2. Todas as 16 tabelas sao criadas no PostgreSQL
+3. O backend inicia com `node dist/server.js` sem erros
+4. O sistema fica acessivel em `360.gleps.com.br`
+
