@@ -69,7 +69,7 @@ export class SaleController {
    */
   async getById(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const result = await saleService.getById(id, req.user!.accountId!);
 
       // Agents can only see their own sales
@@ -112,7 +112,7 @@ export class SaleController {
    */
   async markPaid(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const result = await saleService.markPaid(id, req.user!.accountId!, req.user!.id);
 
       res.json({ data: result });
@@ -126,7 +126,7 @@ export class SaleController {
    */
   async refund(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const body = refundSchema.parse(req.body);
       const result = await saleService.refund(id, req.user!.accountId!, body.reason, req.user!.id);
 
@@ -141,7 +141,8 @@ export class SaleController {
    */
   async refundItem(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id, itemId } = req.params;
+      const id = req.params.id as string;
+      const itemId = req.params.itemId as string;
       const body = refundSchema.parse(req.body);
       const result = await saleService.refundItem(
         id,

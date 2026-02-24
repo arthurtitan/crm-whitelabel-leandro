@@ -54,7 +54,7 @@ export class ContactController {
    */
   async getById(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const result = await contactService.getById(id, req.user!.accountId!);
 
       res.json({ data: result });
@@ -85,7 +85,7 @@ export class ContactController {
    */
   async update(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const body = updateContactSchema.parse(req.body);
       const result = await contactService.update(id, body, req.user!.accountId!, req.user!.id);
 
@@ -100,7 +100,7 @@ export class ContactController {
    */
   async delete(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       await contactService.delete(id, req.user!.accountId!, req.user!.id);
 
       res.json({ data: { success: true } });
@@ -114,7 +114,7 @@ export class ContactController {
    */
   async getSales(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const pagination = getPaginationParams(req);
       const result = await contactService.getSales(id, req.user!.accountId!, pagination);
 
@@ -129,7 +129,7 @@ export class ContactController {
    */
   async getNotes(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const pagination = getPaginationParams(req);
       const result = await contactService.getNotes(id, req.user!.accountId!, pagination);
 
@@ -144,7 +144,7 @@ export class ContactController {
    */
   async addNote(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const body = addNoteSchema.parse(req.body);
       const result = await contactService.addNote(
         id,
@@ -165,7 +165,7 @@ export class ContactController {
    */
   async getTags(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const result = await contactService.getTags(id, req.user!.accountId!);
 
       res.json({ data: result });
@@ -179,7 +179,7 @@ export class ContactController {
    */
   async applyTag(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const body = applyTagSchema.parse(req.body);
       const result = await contactService.applyTag(
         id,
@@ -200,7 +200,8 @@ export class ContactController {
    */
   async removeTag(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id, tagId } = req.params;
+      const id = req.params.id as string;
+      const tagId = req.params.tagId as string;
       const result = await contactService.removeTag(
         id,
         req.user!.accountId!,
@@ -220,7 +221,7 @@ export class ContactController {
    */
   async getHistory(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const pagination = getPaginationParams(req);
       const result = await contactService.getHistory(id, req.user!.accountId!, pagination);
 

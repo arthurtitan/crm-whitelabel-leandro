@@ -35,15 +35,15 @@ router.get('/inboxes', (req, res, next) => chatwootController.getInboxes(req, re
 // Labels
 // ============================================
 router.get('/labels', (req, res, next) => chatwootController.getLabels(req, res, next));
-router.post('/labels', requireRole(['admin', 'super_admin']), (req, res, next) => chatwootController.createLabel(req, res, next));
-router.patch('/labels/:labelId', requireRole(['admin', 'super_admin']), (req, res, next) => chatwootController.updateLabel(req, res, next));
-router.delete('/labels/:labelId', requireRole(['admin', 'super_admin']), (req, res, next) => chatwootController.deleteLabel(req, res, next));
+router.post('/labels', requireRole('admin', 'super_admin'), (req, res, next) => chatwootController.createLabel(req, res, next));
+router.patch('/labels/:labelId', requireRole('admin', 'super_admin'), (req, res, next) => chatwootController.updateLabel(req, res, next));
+router.delete('/labels/:labelId', requireRole('admin', 'super_admin'), (req, res, next) => chatwootController.deleteLabel(req, res, next));
 
 // ============================================
 // Metrics
 // ============================================
 router.get('/metrics', (req, res, next) => chatwootController.getMetrics(req, res, next));
-router.get('/metrics/agents', requireRole(['admin', 'super_admin']), (req, res, next) => chatwootController.getAgentMetrics(req, res, next));
+router.get('/metrics/agents', requireRole('admin', 'super_admin'), (req, res, next) => chatwootController.getAgentMetrics(req, res, next));
 router.get('/metrics/conversations', (req, res, next) => chatwootController.getConversationMetrics(req, res, next));
 
 // ============================================
@@ -54,6 +54,6 @@ router.get('/conversations', (req, res, next) => chatwootController.getConversat
 // ============================================
 // Sync
 // ============================================
-router.post('/sync-labels', requireRole(['admin', 'super_admin']), (req, res, next) => chatwootController.syncLabels(req, res, next));
+router.post('/sync-labels', requireRole('admin', 'super_admin'), (req, res, next) => chatwootController.syncLabels(req, res, next));
 
 export default router;

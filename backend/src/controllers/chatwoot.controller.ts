@@ -6,7 +6,7 @@ import { eventService } from '../services/event.service';
 import { prisma } from '../config/database';
 import { env } from '../config/env';
 import { logger } from '../utils/logger';
-import { AuthRequest } from '../middlewares/auth.middleware';
+import { AuthenticatedRequest } from '../types';
 import { ChatwootWebhookEvent } from '../types/chatwoot.types';
 
 class ChatwootController {
@@ -93,7 +93,7 @@ class ChatwootController {
    * GET /api/chatwoot/test-connection
    * Test Chatwoot connection for the user's account
    */
-  async testConnection(req: AuthRequest, res: Response, next: NextFunction) {
+  async testConnection(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const accountId = req.user!.accountId!;
       const result = await chatwootService.testConnection(accountId);
@@ -107,7 +107,7 @@ class ChatwootController {
    * POST /api/chatwoot/test-connection
    * Test Chatwoot connection with provided credentials
    */
-  async testConnectionWithCredentials(req: AuthRequest, res: Response, next: NextFunction) {
+  async testConnectionWithCredentials(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const { baseUrl, accountId: chatwootAccountId, apiKey } = req.body;
       
@@ -126,7 +126,7 @@ class ChatwootController {
    * GET /api/chatwoot/agents
    * Get agents for the user's account
    */
-  async getAgents(req: AuthRequest, res: Response, next: NextFunction) {
+  async getAgents(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const accountId = req.user!.accountId!;
       const agents = await chatwootService.getAgents(accountId);
@@ -140,7 +140,7 @@ class ChatwootController {
    * POST /api/chatwoot/agents/fetch
    * Fetch agents with provided credentials (for import during setup)
    */
-  async fetchAgentsWithCredentials(req: AuthRequest, res: Response, next: NextFunction) {
+  async fetchAgentsWithCredentials(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const { baseUrl, accountId: chatwootAccountId, apiKey } = req.body;
       
@@ -159,7 +159,7 @@ class ChatwootController {
    * GET /api/chatwoot/inboxes
    * Get inboxes (channels) for the user's account
    */
-  async getInboxes(req: AuthRequest, res: Response, next: NextFunction) {
+  async getInboxes(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const accountId = req.user!.accountId!;
       const inboxes = await chatwootService.getInboxes(accountId);
@@ -173,7 +173,7 @@ class ChatwootController {
    * GET /api/chatwoot/labels
    * Get labels for the user's account
    */
-  async getLabels(req: AuthRequest, res: Response, next: NextFunction) {
+  async getLabels(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const accountId = req.user!.accountId!;
       const labels = await chatwootService.getLabels(accountId);
@@ -187,7 +187,7 @@ class ChatwootController {
    * POST /api/chatwoot/labels
    * Create a new label
    */
-  async createLabel(req: AuthRequest, res: Response, next: NextFunction) {
+  async createLabel(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const accountId = req.user!.accountId!;
       const { title, description, color, show_on_sidebar } = req.body;
@@ -213,7 +213,7 @@ class ChatwootController {
    * PATCH /api/chatwoot/labels/:labelId
    * Update a label
    */
-  async updateLabel(req: AuthRequest, res: Response, next: NextFunction) {
+  async updateLabel(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const accountId = req.user!.accountId!;
       const labelId = parseInt(req.params.labelId, 10);
@@ -236,7 +236,7 @@ class ChatwootController {
    * DELETE /api/chatwoot/labels/:labelId
    * Delete a label
    */
-  async deleteLabel(req: AuthRequest, res: Response, next: NextFunction) {
+  async deleteLabel(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const accountId = req.user!.accountId!;
       const labelId = parseInt(req.params.labelId, 10);
@@ -252,7 +252,7 @@ class ChatwootController {
    * GET /api/chatwoot/metrics
    * Get overall metrics from Chatwoot
    */
-  async getMetrics(req: AuthRequest, res: Response, next: NextFunction) {
+  async getMetrics(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const accountId = req.user!.accountId!;
       const metrics = await chatwootService.getAccountMetrics(accountId);
@@ -266,7 +266,7 @@ class ChatwootController {
    * GET /api/chatwoot/metrics/agents
    * Get agent performance metrics
    */
-  async getAgentMetrics(req: AuthRequest, res: Response, next: NextFunction) {
+  async getAgentMetrics(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const accountId = req.user!.accountId!;
       const { since, until } = req.query;
@@ -287,7 +287,7 @@ class ChatwootController {
    * GET /api/chatwoot/metrics/conversations
    * Get conversation metrics
    */
-  async getConversationMetrics(req: AuthRequest, res: Response, next: NextFunction) {
+  async getConversationMetrics(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const accountId = req.user!.accountId!;
       const { since, until } = req.query;
@@ -308,7 +308,7 @@ class ChatwootController {
    * GET /api/chatwoot/conversations
    * Get conversations with filters
    */
-  async getConversations(req: AuthRequest, res: Response, next: NextFunction) {
+  async getConversations(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const accountId = req.user!.accountId!;
       const { status, inbox_id, assignee_type, page, labels } = req.query;
@@ -331,7 +331,7 @@ class ChatwootController {
    * POST /api/chatwoot/sync-labels
    * Sync all stage tags to Chatwoot labels
    */
-  async syncLabels(req: AuthRequest, res: Response, next: NextFunction) {
+  async syncLabels(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const accountId = req.user!.accountId!;
       

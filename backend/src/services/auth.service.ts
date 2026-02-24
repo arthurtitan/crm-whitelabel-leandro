@@ -297,7 +297,7 @@ class AuthService {
     };
 
     const token = jwt.sign(payload, env.JWT_SECRET, {
-      expiresIn: env.JWT_EXPIRES_IN,
+      expiresIn: env.JWT_EXPIRES_IN as any,
     });
 
     return { token, expiresAt: expiresAt.toISOString() };

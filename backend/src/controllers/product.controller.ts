@@ -52,7 +52,7 @@ export class ProductController {
    */
   async getById(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const result = await productService.getById(id, req.user!.accountId!);
 
       res.json({ data: result });
@@ -83,7 +83,7 @@ export class ProductController {
    */
   async update(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const body = updateProductSchema.parse(req.body);
       const result = await productService.update(id, body, req.user!.accountId!, req.user!.id);
 
@@ -98,7 +98,7 @@ export class ProductController {
    */
   async delete(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       await productService.delete(id, req.user!.accountId!, req.user!.id);
 
       res.json({ data: { success: true } });
@@ -112,7 +112,7 @@ export class ProductController {
    */
   async toggleStatus(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const body = toggleStatusSchema.parse(req.body);
       const result = await productService.toggleStatus(id, req.user!.accountId!, body.ativo, req.user!.id);
 
