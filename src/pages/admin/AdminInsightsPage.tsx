@@ -21,7 +21,10 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { useBackend } from '@/config/backend.config';
 import { supabase } from '@/integrations/supabase/client';
+import { apiClient } from '@/api/client';
+import { API_ENDPOINTS } from '@/api/endpoints';
 import {
   ShoppingCart,
   Medal,
@@ -68,13 +71,28 @@ export default function AdminInsightsPage() {
 
   useEffect(() => {
     if (!user?.account_id) return;
-    supabase
-      .from('profiles')
-      .select('id, user_id, nome, email')
-      .eq('account_id', user.account_id)
-      .then(({ data }) => {
-        if (data) setProfiles(data);
-      });
+    
+    if (useBackend) {
+      apiClient.get<any>(API_ENDPOINTS.USERS.LIST, { params: { accountId: user.account_id } })
+        .then((response) => {
+          const data = Array.isArray(response) ? response : (response as any).data || [];
+          setProfiles(data.map((u: any) => ({
+            id: u.id,
+            user_id: u.user_id || u.id,
+            nome: u.nome,
+            email: u.email,
+          })));
+        })
+        .catch((err) => console.error('Error fetching profiles:', err));
+    } else {
+      supabase
+        .from('profiles')
+        .select('id, user_id, nome, email')
+        .eq('account_id', user.account_id)
+        .then(({ data }) => {
+          if (data) setProfiles(data);
+        });
+    }
   }, [user?.account_id]);
 
   // Filter states

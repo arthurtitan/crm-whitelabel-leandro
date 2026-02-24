@@ -4,6 +4,7 @@ import { KPICard } from '@/components/dashboard/KPICard';
 import { ServerResourceCard } from '@/components/dashboard/ServerResourceCard';
 import { ServerConsumptionChart } from '@/components/dashboard/ServerConsumptionChart';
 import { WeeklyConsumptionChart } from '@/components/dashboard/WeeklyConsumptionChart';
+import { useBackend } from '@/config/backend.config';
 import { supabase } from '@/integrations/supabase/client';
 import { apiClient } from '@/api/client';
 import { API_ENDPOINTS } from '@/api/endpoints';
@@ -93,9 +94,17 @@ export default function SuperAdminDashboard() {
   useEffect(() => {
     async function fetchKPIs() {
       try {
-        const { data, error } = await supabase.functions.invoke('super-admin-kpis');
-        if (error) throw error;
-        setKpis(data);
+        if (useBackend) {
+          const response = await apiClient.get<SuperAdminKPIs | { data: SuperAdminKPIs }>(
+            API_ENDPOINTS.DASHBOARD.SUPER_ADMIN_KPIS
+          );
+          const data = (response as any).data || response;
+          setKpis(data);
+        } else {
+          const { data, error } = await supabase.functions.invoke('super-admin-kpis');
+          if (error) throw error;
+          setKpis(data);
+        }
       } catch (err: any) {
         console.error('Erro ao buscar KPIs:', err);
         toast({
