@@ -21,12 +21,17 @@ export interface LoginResult {
     role: string;
     permissions: string[];
     status: string;
+    accountId: string | null;
+    chatwootAgentId: number | null;
   };
   account: {
     id: string;
     nome: string;
     status: string;
     timezone: string;
+    chatwootBaseUrl: string | null;
+    chatwootAccountId: string | null;
+    chatwootApiKey: string | null;
   } | null;
   token: string;
   refreshToken: string;
