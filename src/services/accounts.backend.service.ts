@@ -52,8 +52,7 @@ export const accountsBackendService = {
     accountId: string,
     apiKey: string
   ): Promise<{ success: boolean; message: string; agents?: any[]; inboxes?: any[]; labels?: any[] }> {
-    return apiClient.post<any>(API_ENDPOINTS.CHATWOOT.METRICS, {
-      action: 'test-connection',
+    return apiClient.post<any>('/api/chatwoot/test-connection', {
       baseUrl,
       accountId,
       apiKey,

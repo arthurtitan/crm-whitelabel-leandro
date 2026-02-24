@@ -55,9 +55,16 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { tagsCloudService, type Tag as CloudTag, type LeadTag } from '@/services/tags.cloud.service';
+import { tagsBackendService } from '@/services/tags.backend.service';
+import { useBackend } from '@/config/backend.config';
 import { supabase } from '@/integrations/supabase/client';
+import { apiClient } from '@/api/client';
+import { API_ENDPOINTS } from '@/api/endpoints';
 import { mergeById } from '@/utils/dataSync';
 import { cn } from '@/lib/utils';
+
+// Choose service based on backend flag
+const tagsService = useBackend ? tagsBackendService : tagsCloudService;
 
 interface KanbanLead extends Contact {
   stage_id: string | null;
@@ -117,15 +124,24 @@ export default function AdminKanbanPage() {
 
     try {
       // Fetch stage tags
-      const tags = await tagsCloudService.listStageTags(accountId);
+      const tags = await tagsService.listStageTags(accountId);
       setStageTags(tags);
 
       // Fetch all lead_tags for this account's contacts
-      const { data: leadTagsData } = await supabase
-        .from('lead_tags')
-        .select('*');
-
-      const incoming = leadTagsData || [];
+      let incoming: LeadTag[] = [];
+      if (useBackend) {
+        // Backend: fetch all lead_tags via API (contacts endpoint aggregates them)
+        try {
+          incoming = await apiClient.get<LeadTag[]>('/api/lead-tags', { params: { accountId } });
+        } catch {
+          incoming = [];
+        }
+      } else {
+        const { data: leadTagsData } = await supabase
+          .from('lead_tags')
+          .select('*');
+        incoming = leadTagsData || [];
+      }
       
       setLeadTags(current => {
         if (current.length === 0 || isFirstTagsLoad.current) {
@@ -169,7 +185,7 @@ export default function AdminKanbanPage() {
     setIsSyncingTags(true);
     try {
       // Call the edge function to sync with Chatwoot (the real sync)
-      const result = await tagsCloudService.syncChatwootContacts(accountId);
+      const result = await tagsService.syncChatwootContacts(accountId);
       
       if (result.success) {
         const hasChanges = result.contacts_created > 0 || 
@@ -297,7 +313,7 @@ export default function AdminKanbanPage() {
 
     // BACKGROUND SYNC: Update database without blocking UI
     try {
-      await tagsCloudService.applyStageTag(draggedLead, stageTagId, 'kanban');
+      await tagsService.applyStageTag(draggedLead, stageTagId, 'kanban');
       toast.success(`${lead?.nome} movido para ${stage?.name}`);
     } catch (error: any) {
       // Rollback on error
@@ -319,7 +335,7 @@ export default function AdminKanbanPage() {
     const adjacentTag = stageTags[newIndex];
 
     try {
-      await tagsCloudService.swapTagOrder(tagId, adjacentTag.id);
+      await tagsService.swapTagOrder(tagId, adjacentTag.id);
       toast.success('Etapa reordenada!');
       fetchTagsData(false);
     } catch (error: any) {
@@ -331,7 +347,7 @@ export default function AdminKanbanPage() {
     if (!deleteConfirmStage) return;
 
     try {
-      await tagsCloudService.deleteTag(deleteConfirmStage.id);
+      await tagsService.deleteTag(deleteConfirmStage.id);
       toast.success(`Etapa "${deleteConfirmStage.name}" excluída!`);
       fetchTagsData(false);
     } catch (error: any) {
@@ -392,7 +408,7 @@ export default function AdminKanbanPage() {
     
     setIsPushingLabels(true);
     try {
-      const result = await tagsCloudService.pushAllLabelsToChatwoot(accountId);
+      const result = await tagsService.pushAllLabelsToChatwoot(accountId);
       
       if (result.success) {
         const total = result.pushed + result.linked;
@@ -417,7 +433,7 @@ export default function AdminKanbanPage() {
     
     setIsSyncingChatwoot(true);
     try {
-      const result = await tagsCloudService.syncChatwootContacts(accountId);
+      const result = await tagsService.syncChatwootContacts(accountId);
       
       if (result.success) {
         const total = result.contacts_created + result.contacts_updated;
@@ -598,7 +614,29 @@ export default function AdminKanbanPage() {
                 if (!accountId) return;
                 setIsCreatingTemplate(true);
                 try {
-                  await tagsCloudService.createDefaultStages(accountId);
+                  if (useBackend) {
+                    // Backend: create stages via API calls
+                    const defaultStages = [
+                      { name: 'Novo Lead', color: '#0EA5E9', ordem: 1 },
+                      { name: 'Em Atendimento', color: '#8B5CF6', ordem: 2 },
+                      { name: 'Aguardando Resposta', color: '#F59E0B', ordem: 3 },
+                      { name: 'Agendado', color: '#22C55E', ordem: 4 },
+                      { name: 'Convertido', color: '#10B981', ordem: 5 },
+                      { name: 'Perdido', color: '#EF4444', ordem: 6 },
+                    ];
+                    // Get or create default funnel
+                    const funnels = await apiClient.get<any[]>(API_ENDPOINTS.FUNNELS.LIST, { params: { accountId } });
+                    let funnelId = funnels.find((f: any) => f.is_default)?.id;
+                    if (!funnelId) {
+                      const newFunnel = await apiClient.post<any>(API_ENDPOINTS.FUNNELS.CREATE, { name: 'Funil Principal', accountId, isDefault: true });
+                      funnelId = newFunnel.id;
+                    }
+                    for (const s of defaultStages) {
+                      await tagsBackendService.createStageTag({ accountId, funnelId, name: s.name, color: s.color, ordem: s.ordem });
+                    }
+                  } else {
+                    await tagsCloudService.createDefaultStages(accountId);
+                  }
                   await fetchTagsData(false);
                   toast.success('6 etapas criadas com sucesso!');
                 } catch (err: any) {
