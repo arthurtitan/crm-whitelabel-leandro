@@ -1,6 +1,7 @@
 import { prisma } from '../config/database';
 import { DateRangeFilter } from '../types';
-import { startOfDay, endOfDay, subDays, format, eachDayOfInterval, eachHourOfInterval, startOfHour } from 'date-fns';
+import { subDays } from 'date-fns';
+import { metricsCollector } from './metrics-collector';
 
 class DashboardService {
   /**
@@ -228,101 +229,24 @@ class DashboardService {
   }
 
   /**
-   * Get server resources (Super Admin only)
+   * Get server resources (Super Admin only) - Real metrics
    */
   async getServerResources() {
-    // This would typically integrate with system monitoring
-    // For now, return placeholder data
-    const memUsage = process.memoryUsage();
-
-    return {
-      cpuUsage: Math.random() * 50 + 20, // Simulated
-      memoryUsage: {
-        heapUsed: memUsage.heapUsed,
-        heapTotal: memUsage.heapTotal,
-        external: memUsage.external,
-        rss: memUsage.rss,
-      },
-      uptime: process.uptime(),
-    };
+    return metricsCollector.getCurrentResources();
   }
 
   /**
-   * Get consumption history (Super Admin only)
+   * Get consumption history (Super Admin only) - Real metrics
    */
   async getConsumptionHistory(period: '24h' | '7d' | '30d') {
-    const now = new Date();
-    let startDate: Date;
-    let interval: 'hour' | 'day';
+    return metricsCollector.getHistory(period);
+  }
 
-    switch (period) {
-      case '24h':
-        startDate = subDays(now, 1);
-        interval = 'hour';
-        break;
-      case '7d':
-        startDate = subDays(now, 7);
-        interval = 'day';
-        break;
-      case '30d':
-        startDate = subDays(now, 30);
-        interval = 'day';
-        break;
-    }
-
-    const events = await prisma.event.findMany({
-      where: {
-        createdAt: { gte: startDate },
-      },
-      select: { createdAt: true },
-    });
-
-    const sales = await prisma.sale.findMany({
-      where: {
-        createdAt: { gte: startDate },
-        status: 'paid',
-      },
-      select: { createdAt: true, valor: true },
-    });
-
-    // Group by interval
-    if (interval === 'hour') {
-      const hours = eachHourOfInterval({ start: startDate, end: now });
-      return hours.map(hour => {
-        const hourEvents = events.filter(
-          e => startOfHour(e.createdAt).getTime() === hour.getTime()
-        );
-        const hourSales = sales.filter(
-          s => startOfHour(s.createdAt).getTime() === hour.getTime()
-        );
-
-        return {
-          timestamp: hour.toISOString(),
-          events: hourEvents.length,
-          sales: hourSales.length,
-          revenue: hourSales.reduce((sum, s) => sum + Number(s.valor), 0),
-        };
-      });
-    } else {
-      const days = eachDayOfInterval({ start: startDate, end: now });
-      return days.map(day => {
-        const dayStart = startOfDay(day);
-        const dayEnd = endOfDay(day);
-        const dayEvents = events.filter(
-          e => e.createdAt >= dayStart && e.createdAt <= dayEnd
-        );
-        const daySales = sales.filter(
-          s => s.createdAt >= dayStart && s.createdAt <= dayEnd
-        );
-
-        return {
-          timestamp: day.toISOString(),
-          events: dayEvents.length,
-          sales: daySales.length,
-          revenue: daySales.reduce((sum, s) => sum + Number(s.valor), 0),
-        };
-      });
-    }
+  /**
+   * Get weekly consumption averages (Super Admin only)
+   */
+  async getWeeklyConsumption() {
+    return metricsCollector.getWeeklyConsumption();
   }
 }
 

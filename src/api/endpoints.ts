@@ -150,6 +150,9 @@ export const API_ENDPOINTS = {
     AGENT_PERFORMANCE: '/api/dashboard/agent-performance',
     REVENUE: '/api/dashboard/revenue',
     CONVERSION_FUNNEL: '/api/dashboard/conversion-funnel',
+    SERVER_RESOURCES: '/api/admin/server-resources',
+    CONSUMPTION_HISTORY: '/api/admin/consumption-history',
+    WEEKLY_CONSUMPTION: '/api/admin/weekly-consumption',
   },
 
   // ============= INSIGHTS/REPORTS =============

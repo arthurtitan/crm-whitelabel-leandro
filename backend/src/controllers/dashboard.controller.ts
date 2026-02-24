@@ -134,6 +134,18 @@ export class DashboardController {
       next(error);
     }
   }
+
+  /**
+   * GET /admin/weekly-consumption
+   */
+  async getWeeklyConsumption(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await dashboardService.getWeeklyConsumption();
+      res.json({ data: result });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export const dashboardController = new DashboardController();

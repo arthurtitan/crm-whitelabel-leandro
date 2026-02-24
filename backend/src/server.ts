@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { env, isDevelopment } from './config/env';
 import { connectDatabase } from './config/database';
+import { metricsCollector } from './services/metrics-collector';
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware';
 import routes from './routes';
 import { logger } from './utils/logger';
@@ -11,6 +12,9 @@ import { logger } from './utils/logger';
 async function bootstrap() {
   // Connect to database
   await connectDatabase();
+
+  // Start metrics collector
+  metricsCollector.start();
 
   const app = express();
 
