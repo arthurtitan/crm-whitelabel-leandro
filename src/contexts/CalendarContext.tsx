@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode, useEffect } from 'react';
+import { useBackend } from '@/config/backend.config';
 import { supabase } from '@/integrations/supabase/client';
+import { calendarBackendService } from '@/services/calendar.backend.service';
 import {
   GoogleConnection,
   CalendarEvent,
@@ -96,6 +98,13 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
     console.log('[Calendar] loadEvents called with accountId:', accountId, 'userId:', userId);
     
     try {
+      if (useBackend) {
+        const mappedEvents = await calendarBackendService.fetchEvents();
+        mappedEvents.sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+        setEvents(mappedEvents);
+        return;
+      }
+
       // Load CRM events for the whole account
       const { data: crmEvents, error: crmError } = await supabase
         .from('calendar_events')
@@ -107,7 +116,6 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
       if (crmError) {
         console.error('[Calendar] Error loading CRM events:', crmError);
       }
-      console.log('[Calendar] CRM events loaded:', crmEvents?.length || 0);
 
       // Load Google events only for the current user
       const { data: googleEvents, error: googleError } = await supabase
@@ -120,11 +128,8 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
       if (googleError) {
         console.error('[Calendar] Error loading Google events:', googleError);
       }
-      console.log('[Calendar] Google events loaded:', googleEvents?.length || 0);
 
-      // Combine both event types
       const allEvents = [...(crmEvents || []), ...(googleEvents || [])];
-      console.log('[Calendar] Total events:', allEvents.length);
 
       const mappedEvents: CalendarEvent[] = allEvents.map((event) => ({
         id: event.id,
@@ -143,11 +148,9 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
         createdBy: event.created_by || undefined,
         createdAt: event.created_at || undefined,
         contactId: event.contact_id || undefined,
-      }));
+      }) as CalendarEvent);
 
-      // Sort by start time
       mappedEvents.sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
-
       setEvents(mappedEvents);
     } catch (error) {
       console.error('[Calendar] Failed to load events:', error);
@@ -158,6 +161,26 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
 
   const checkConnectionStatus = useCallback(async () => {
     try {
+      if (useBackend) {
+        const status = await calendarBackendService.getGoogleStatus();
+        if (status.needsReauth) {
+          setConnection({ ...defaultConnection, status: 'error', email: status.email });
+        } else if (status.connected) {
+          setConnection({
+            status: 'connected',
+            email: status.email,
+            connectedAt: new Date().toISOString(),
+            calendars: [],
+            settings: mockCalendarSettings,
+            lastSync: new Date().toISOString(),
+          });
+        } else {
+          setConnection(defaultConnection);
+        }
+        setIsLoading(false);
+        return;
+      }
+
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         setIsLoading(false);
@@ -173,11 +196,7 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
         const { connected, email, needsReauth } = response.data;
         
         if (needsReauth) {
-          setConnection({
-            ...defaultConnection,
-            status: 'error',
-            email,
-          });
+          setConnection({ ...defaultConnection, status: 'error', email });
         } else if (connected) {
           setConnection({
             status: 'connected',
@@ -224,38 +243,32 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
     if (!accountId) return;
     if (!isConnected) return;
 
-    const SYNC_INTERVAL = 30000; // 30 seconds
+    const SYNC_INTERVAL = 30000;
 
     const intervalId = setInterval(async () => {
       console.log('[Calendar] Auto-sync polling...');
 
-      // Check if still authenticated before syncing
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        console.log('[Calendar] No session, skipping auto-sync');
-        return;
-      }
-
       try {
-        // Silent sync - don't show toast for auto-sync
-        const response = await supabase.functions.invoke('google-calendar-sync', {});
-
-        if (!response.error) {
-          console.log('[Calendar] Auto-sync complete, reloading events...');
+        if (useBackend) {
+          await calendarBackendService.syncGoogle();
           await loadEvents();
-        } else {
-          console.warn('[Calendar] Auto-sync error (ignored):', response.error);
+          return;
+        }
+
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+
+        const response = await supabase.functions.invoke('google-calendar-sync', {});
+        if (!response.error) {
+          await loadEvents();
         }
       } catch (error) {
         console.warn('[Calendar] Auto-sync failed (ignored):', error);
       }
     }, SYNC_INTERVAL);
 
-    console.log('[Calendar] Polling started (30s interval)');
-
     return () => {
       clearInterval(intervalId);
-      console.log('[Calendar] Polling stopped');
     };
   }, [accountId, isConnected, loadEvents]);
 
@@ -265,25 +278,27 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
     setConnection(prev => ({ ...prev, status: 'connecting' }));
 
     try {
-      const response = await supabase.functions.invoke('google-calendar-auth-url', {});
-      
-      if (response.error) {
-        throw new Error(response.error.message || 'Erro ao iniciar conexão');
+      let authUrl: string;
+
+      if (useBackend) {
+        const result = await calendarBackendService.connectGoogle();
+        authUrl = result.authUrl;
+      } else {
+        const response = await supabase.functions.invoke('google-calendar-auth-url', {});
+        if (response.error) {
+          throw new Error(response.error.message || 'Erro ao iniciar conexão');
+        }
+        if (!response.data?.authUrl) {
+          throw new Error('URL de autorização não recebida');
+        }
+        authUrl = response.data.authUrl;
       }
 
-      if (response.data?.authUrl) {
-        // Detect if we're inside an iframe (Preview environment)
-        const isInIframe = window.self !== window.top;
-        
-        if (isInIframe) {
-          // In Preview/iframe: open new tab to bypass security restrictions
-          window.open(response.data.authUrl, '_blank');
-        } else {
-          // In Published site: navigate in same tab for better UX
-          window.location.href = response.data.authUrl;
-        }
+      const isInIframe = window.self !== window.top;
+      if (isInIframe) {
+        window.open(authUrl, '_blank');
       } else {
-        throw new Error('URL de autorização não recebida');
+        window.location.href = authUrl;
       }
     } catch (error: any) {
       console.error('Connect error:', error);
@@ -294,21 +309,18 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
 
   const disconnectGoogle = useCallback(async () => {
     try {
-      const response = await supabase.functions.invoke('google-calendar-disconnect', {});
-      
-      if (response.error) {
-        throw new Error(response.error.message || 'Erro ao desconectar');
+      if (useBackend) {
+        await calendarBackendService.disconnectGoogle();
+      } else {
+        const response = await supabase.functions.invoke('google-calendar-disconnect', {});
+        if (response.error) {
+          throw new Error(response.error.message || 'Erro ao desconectar');
+        }
       }
 
-      // Clear connection state
       setConnection(defaultConnection);
-      
-      // Remove Google events from local state immediately
       setEvents(prev => prev.filter(event => event.source !== 'google'));
-      
-      // Reload events from database to ensure UI reflects backend state
       await loadEvents();
-      
       toast.success('Google Calendar desconectado');
     } catch (error: any) {
       console.error('Disconnect error:', error);
@@ -319,43 +331,39 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
   const syncNow = useCallback(async () => {
     console.log('[Calendar] syncNow called');
     
-    // Don't rely on isConnected state (closure bug) - check session and let backend validate
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      console.warn('[Calendar] syncNow: No session, aborting');
-      return;
-    }
-    
-    console.log('[Calendar] syncNow: Session found, proceeding...');
     setConnection(prev => ({ ...prev, status: 'syncing' }));
 
     try {
-      console.log('[Calendar] Invoking google-calendar-sync...');
+      if (useBackend) {
+        const result = await calendarBackendService.syncGoogle();
+        await loadEvents();
+        setConnection(prev => ({ ...prev, status: 'connected', lastSync: new Date().toISOString() }));
+        toast.success(`Sincronizado! ${result.created || 0} novos, ${result.updated || 0} atualizados`);
+        return;
+      }
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        console.warn('[Calendar] syncNow: No session, aborting');
+        setConnection(prev => ({ ...prev, status: 'connected' }));
+        return;
+      }
+      
       const response = await supabase.functions.invoke('google-calendar-sync', {});
       
       if (response.error) {
-        console.error('[Calendar] Sync error response:', response.error);
-        // Never hard-disconnect on sync errors; only mark as "error" (reauth needed) when applicable.
         if (response.error.message?.toLowerCase().includes('não conectado')) {
           setConnection(prev => ({ ...prev, status: 'error' }));
-          toast.error('Sua conexão com o Google Calendar expirou. Clique em “Reconectar”.');
+          toast.error('Sua conexão com o Google Calendar expirou. Clique em "Reconectar".');
           return;
         }
         throw new Error(response.error.message || 'Erro ao sincronizar');
       }
 
-      console.log('[Calendar] Sync successful, reloading events...');
-      // Reload events from database
       await loadEvents();
+      setConnection(prev => ({ ...prev, status: 'connected', lastSync: new Date().toISOString() }));
 
-      setConnection(prev => ({
-        ...prev,
-        status: 'connected',
-        lastSync: new Date().toISOString(),
-      }));
-
-      const { synced, created, updated } = response.data || {};
-      console.log(`[Calendar] Sync complete: ${created || 0} created, ${updated || 0} updated`);
+      const { created, updated } = response.data || {};
       toast.success(`Sincronizado! ${created || 0} novos, ${updated || 0} atualizados`);
     } catch (error: any) {
       console.error('[Calendar] Sync error:', error);
@@ -387,6 +395,13 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
   // ============= EVENT ACTIONS =============
 
   const createEvent = useCallback(async (data: CreateEventDTO): Promise<CalendarEvent> => {
+    if (useBackend) {
+      const mappedEvent = await calendarBackendService.createEvent(data);
+      setEvents(prev => [...prev, mappedEvent]);
+      toast.success('Evento criado com sucesso!');
+      return mappedEvent;
+    }
+
     const { data: newEvent, error } = await supabase
       .from('calendar_events')
       .insert({
@@ -432,6 +447,13 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
   }, [accountId]);
 
   const updateEvent = useCallback(async (id: string, data: Partial<CreateEventDTO>): Promise<CalendarEvent> => {
+    if (useBackend) {
+      const mappedEvent = await calendarBackendService.updateEvent(id, data);
+      setEvents(prev => prev.map(event => event.id === id ? mappedEvent : event));
+      toast.success('Evento atualizado!');
+      return mappedEvent;
+    }
+
     const { data: updatedEvent, error } = await supabase
       .from('calendar_events')
       .update({
@@ -473,6 +495,14 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
   }, []);
 
   const deleteEvent = useCallback(async (id: string) => {
+    if (useBackend) {
+      await calendarBackendService.deleteEvent(id);
+      setEvents(prev => prev.filter(event => event.id !== id));
+      setSelectedEvent(null);
+      toast.success('Evento excluído!');
+      return;
+    }
+
     const { error } = await supabase
       .from('calendar_events')
       .delete()

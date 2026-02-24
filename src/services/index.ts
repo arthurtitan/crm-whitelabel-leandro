@@ -37,3 +37,7 @@ export { contactsService } from './contacts.service';
 export { salesService } from './sales.service';
 export { productsService } from './products.service';
 export { tagsService } from './tags.service';
+
+// Finance & Calendar backend services
+export { financeBackendService } from './finance.backend.service';
+export { calendarBackendService } from './calendar.backend.service';
