@@ -87,7 +87,7 @@ class DashboardService {
       totalUsers,
       activeUsers,
       totalContacts,
-      totalSales,
+      totalPaidSales: totalSales,
       totalRevenue: Number(totalRevenue._sum.valor || 0),
     };
   }
