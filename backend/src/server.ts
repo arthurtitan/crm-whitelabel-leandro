@@ -27,10 +27,14 @@ async function bootstrap() {
   }));
 
   // CORS
+  const corsOrigins = isDevelopment
+    ? ['http://localhost:8080', 'http://localhost:5173', 'http://127.0.0.1:8080']
+    : env.CORS_ORIGINS
+      ? env.CORS_ORIGINS.split(',').map(o => o.trim()).filter(Boolean)
+      : [env.FRONTEND_URL];
+
   app.use(cors({
-    origin: isDevelopment
-      ? ['http://localhost:8080', 'http://localhost:5173', 'http://127.0.0.1:8080']
-      : env.FRONTEND_URL,
+    origin: corsOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Confirm-Password'],
