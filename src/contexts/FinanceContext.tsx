@@ -2,7 +2,9 @@ import { createContext, useContext, useState, useMemo, ReactNode, useCallback, u
 import { Sale, SaleItem, Contact, LeadFunnelState, SaleStatus, PaymentMethod, Product, ContactOrigin, LeadNote } from '@/types/crm';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTagContext } from '@/contexts/TagContext';
+import { useBackend } from '@/config/backend.config';
 import { supabase } from '@/integrations/supabase/client';
+import { financeBackendService } from '@/services/finance.backend.service';
 import { mergeContacts } from '@/utils/dataSync';
 import { 
   mockLeadFunnelStates, 
@@ -157,6 +159,12 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
   const fetchSalesFromDb = useCallback(async () => {
     if (!accountId) return;
     try {
+      if (useBackend) {
+        const mapped = await financeBackendService.fetchSales(accountId);
+        setSales(mapped);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('sales')
         .select('*, sale_items:sale_items(id, product_id, quantidade, valor_unitario, valor_total, refunded, refunded_at, refund_reason)')
@@ -203,6 +211,12 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
   const fetchProductsFromDb = useCallback(async () => {
     if (!accountId) return;
     try {
+      if (useBackend) {
+        const mapped = await financeBackendService.fetchProducts(accountId);
+        setProducts(mapped);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('products')
         .select('*')
@@ -254,7 +268,6 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
 
   // Fetch contacts from Supabase with merge strategy
   const fetchContactsFromDb = useCallback(async () => {
-    // Only show full loading on first load
     if (isFirstContactsLoad.current) {
       setIsLoadingContacts(true);
     } else {
@@ -262,29 +275,32 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
     }
     
     try {
-      const { data, error } = await supabase
-        .from('contacts')
-        .select('*')
-        .eq('account_id', accountId)
-        .order('created_at', { ascending: false });
+      let incoming: Contact[];
 
-      if (error) {
-        console.error('Error fetching contacts:', error);
-        return;
+      if (useBackend) {
+        incoming = await financeBackendService.fetchContacts(accountId);
+      } else {
+        const { data, error } = await supabase
+          .from('contacts')
+          .select('*')
+          .eq('account_id', accountId)
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          console.error('Error fetching contacts:', error);
+          return;
+        }
+
+        incoming = (data || []) as Contact[];
       }
-
-      const incoming = (data || []) as Contact[];
       
       setContacts(current => {
         if (current.length === 0 || isFirstContactsLoad.current) {
-          // First load - just set data
           return incoming;
         }
 
-        // Merge with existing data (stale-while-revalidate)
         const result = mergeContacts(current, incoming);
         
-        // Track new items for animation
         if (result.added.length > 0) {
           setNewContactIds(prev => new Set([...prev, ...result.added]));
           clearNewContactIds(result.added);
