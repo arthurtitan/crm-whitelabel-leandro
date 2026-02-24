@@ -22,3 +22,4 @@ adminRouter.use(authenticate, requireSuperAdmin);
 adminRouter.get('/kpis', (req, res, next) => dashboardController.getSuperAdminKPIs(req, res, next));
 adminRouter.get('/server-resources', (req, res, next) => dashboardController.getServerResources(req, res, next));
 adminRouter.get('/consumption-history', (req, res, next) => dashboardController.getConsumptionHistory(req, res, next));
+adminRouter.get('/weekly-consumption', (req, res, next) => dashboardController.getWeeklyConsumption(req, res, next));
