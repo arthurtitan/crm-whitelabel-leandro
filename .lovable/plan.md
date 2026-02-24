@@ -1,32 +1,47 @@
 
-
-# Corrigir Build do Frontend - package-lock.json desatualizado
-
-O backend compilou com sucesso! O erro agora e exclusivamente no **frontend**.
+# Corrigir Erro do Prisma no Alpine - OpenSSL Ausente
 
 ## O Problema
 
-O `Dockerfile.frontend` usa `npm ci`, que exige sincronia perfeita entre `package.json` e `package-lock.json`. Como o Lovable atualiza dependencias automaticamente sem regenerar o lock file, o `npm ci` falha com erros de pacotes faltantes.
+O build passou com sucesso, mas o container backend falha ao executar `prisma migrate deploy` porque o Alpine Linux nao inclui OpenSSL por padrao. O Prisma precisa do OpenSSL para seus binarios nativos (schema engine, migration engine).
+
+O erro repetido nos logs:
+```
+prisma:warn Prisma failed to detect the libssl/openssl version to use
+Error: Could not parse schema engine response: SyntaxError: Unexpected token 'E', "Error load"... is not valid JSON
+```
 
 ## A Correcao
 
-Trocar `npm ci` por `npm install` na linha 18 do `Dockerfile.frontend`:
+Adicionar `RUN apk add --no-cache openssl` em ambos os estagios do `backend/Dockerfile`:
+
+### Arquivo: `backend/Dockerfile`
 
 ```text
-# Antes
-RUN npm ci
+# Build stage
+FROM node:20-alpine AS builder
+WORKDIR /app
+RUN apk add --no-cache openssl    # <-- ADICIONAR
 
-# Depois
-RUN npm install
+...
+
+# Production stage
+FROM node:20-alpine AS production
+WORKDIR /app
+RUN apk add --no-cache openssl    # <-- ADICIONAR
 ```
 
-`npm install` e tolerante com lock files desatualizados e resolve as dependencias corretamente.
+Especificamente:
+- **Linha 8 (apos WORKDIR no builder)**: Adicionar `RUN apk add --no-cache openssl`
+- **Linha 31 (apos WORKDIR no production)**: Adicionar `RUN apk add --no-cache openssl`
 
-## Arquivo a Modificar
+## Por que funciona
 
-| Arquivo | Mudanca |
-|---|---|
-| `Dockerfile.frontend` | Linha 18: `npm ci` -> `npm install` |
+O Prisma usa binarios nativos que dependem de `libssl`. Sem ela no Alpine, o engine tenta carregar a biblioteca, falha com "Error loading...", e o JSON parser do Prisma recebe esse texto de erro em vez de JSON valido, gerando o erro "Unexpected token 'E'".
 
-Uma unica linha. Apos isso, tanto backend quanto frontend devem buildar sem erros no EasyPanel.
+## Resultado Esperado
 
+Apos esta correcao:
+1. `prisma migrate deploy` executara com sucesso, criando as tabelas no PostgreSQL
+2. `node dist/server.js` iniciara o backend normalmente
+3. O frontend (nginx) ja esta funcionando corretamente
