@@ -15,7 +15,7 @@ ENV VITE_USE_BACKEND=$VITE_USE_BACKEND
 COPY package*.json ./
 
 # Install dependencies
-RUN npm ci
+RUN npm install
 
 # Copy source code
 COPY . .
