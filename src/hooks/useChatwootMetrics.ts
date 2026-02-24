@@ -1,6 +1,9 @@
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBackend } from '@/config/backend.config';
 import { supabase } from '@/integrations/supabase/client';
+import { apiClient } from '@/api/client';
+import { API_ENDPOINTS } from '@/api/endpoints';
 import type { AtendimentoMetrics, ResolucaoMetrics, TaxasMetrics, TransbordoMetrics } from '@/types/chatwoot-metrics';
 
 export interface DashboardMetrics {
@@ -137,6 +140,28 @@ const DEFAULT_METRICS: DashboardMetrics = {
 
 const DEFAULT_POLLING_INTERVAL = 30000; // 30 seconds
 
+async function fetchChatwootMetricsViaBackend(
+  dateFrom: Date,
+  dateTo: Date,
+  inboxId?: number,
+  agentId?: number,
+): Promise<DashboardMetrics> {
+  const response = await apiClient.post<{ success: boolean; data: DashboardMetrics }>(
+    API_ENDPOINTS.CHATWOOT.METRICS,
+    {
+      dateFrom: dateFrom.toISOString(),
+      dateTo: dateTo.toISOString(),
+      inboxId,
+      agentId,
+    }
+  );
+  if ((response as any).success && (response as any).data) {
+    return (response as any).data as DashboardMetrics;
+  }
+  // If the response itself is the metrics data
+  return response as unknown as DashboardMetrics;
+}
+
 async function fetchChatwootMetrics(
   account: {
     id?: string;
@@ -226,6 +251,9 @@ export function useChatwootMetrics({
     queryFn: async ({ signal }) => {
       if (!account || !isConfigured) {
         return DEFAULT_METRICS;
+      }
+      if (useBackend) {
+        return fetchChatwootMetricsViaBackend(dateFrom, dateTo, inboxId, agentId);
       }
       return fetchChatwootMetrics(account, dateFrom, dateTo, inboxId, agentId, signal);
     },
