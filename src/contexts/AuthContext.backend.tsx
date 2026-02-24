@@ -74,10 +74,9 @@ export function BackendAuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const response = await apiClient.get<{
-        user: any;
-        account: any;
-      }>(API_ENDPOINTS.AUTH.ME);
+      const raw = await apiClient.get<any>(API_ENDPOINTS.AUTH.ME);
+      // Support both { data: { user, account } } and { user, account }
+      const response = raw?.data ?? raw;
 
       if (!mountedRef.current) return;
 
@@ -140,9 +139,11 @@ export function BackendAuthProvider({ children }: { children: ReactNode }) {
     setAuthState(prev => ({ ...prev, authError: null, isLoading: true }));
 
     try {
-      const response = await apiClient.post<{
-        user: any; account: any; token: string; refreshToken: string;
-      }>(API_ENDPOINTS.AUTH.LOGIN, { email, password }, { skipAuth: true });
+      const raw = await apiClient.post<any>(
+        API_ENDPOINTS.AUTH.LOGIN, { email, password }, { skipAuth: true }
+      );
+      // Support both { data: { user, token, ... } } and flat response
+      const response = raw?.data ?? raw;
 
       tokenManager.setToken(response.token);
       tokenManager.setRefreshToken(response.refreshToken);
