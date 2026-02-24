@@ -1,80 +1,86 @@
 
-# Revisao Completa: Correcoes de Alinhamento Frontend-Backend
+# Correcao Completa: Sistema 100% Funcional no VPS/Docker
 
-## Status atual do sistema (360.gleps.com.br)
-- Backend health check: OK (uptime ~4.5 min, respondendo em `/api/health`)
-- Frontend: SPA servida via Nginx, proxy reverso para backend em `/api`
-- Configuracao de build: `VITE_USE_BACKEND=true`, `VITE_API_URL=/api` -- correto
+## Diagnostico
 
-## Problemas encontrados
+O sistema funciona no Lovable local porque usa Supabase Cloud direto. No VPS com `VITE_USE_BACKEND=true`, todas as operacoes passam pelo Express, e existem 4 problemas criticos de incompatibilidade entre o backend e o frontend.
 
-### Problema 1: Rota do Dashboard Admin incorreta (CRITICO)
-- **Frontend**: `ADMIN_KPIS: '/api/dashboard/admin/kpis'`
-- **Backend**: `router.get('/kpis', ...)` montado em `/dashboard` = `/api/dashboard/kpis`
-- **Resultado**: Quando um admin de conta acessar o dashboard, vai receber "Rota nao encontrada: GET /api/dashboard/admin/kpis"
-- **Correcao**: Alterar para `'/api/dashboard/kpis'`
+## Problemas Identificados
 
-### Problema 2: Rota de Performance dos Agentes incorreta (CRITICO)
-- **Frontend**: `AGENT_PERFORMANCE: '/api/dashboard/agent-performance'` (singular)
-- **Backend**: `router.get('/agents-performance', ...)` = `/api/dashboard/agents-performance` (plural)
-- **Resultado**: Tabela de performance dos agentes nao vai carregar
-- **Correcao**: Alterar para `'/api/dashboard/agents-performance'`
+### Problema 1: Auth Service nao retorna campos criticos (CRITICO)
+O backend `auth.service.ts` retorna o user sem `accountId` e `chatwootAgentId` no login e no `/auth/me`. O frontend (`BackendAuthProvider`) espera esses campos para:
+- Rotear admin vs super_admin
+- Configurar o hook `useChatwootMetrics` (que checa `account.chatwoot_base_url`)
 
-### Items ja corrigidos (verificados OK)
-- `SUPER_ADMIN_KPIS: '/api/admin/kpis'` -- alinhado com backend
-- `SERVER_RESOURCES`, `CONSUMPTION_HISTORY`, `WEEKLY_CONSUMPTION` -- todos `/api/admin/...` -- OK
-- `ACCOUNTS` endpoints -- alinhados
-- `USERS` endpoints -- alinhados
-- `CHATWOOT test-connection` -- POST `/api/chatwoot/test-connection` -- alinhado
-- SuperAdmin pages usando `accountsCloudOrBackend` / `usersCloudOrBackend` -- OK
-- Services backend com mapeamento camelCase para snake_case -- OK
+**Arquivo**: `backend/src/services/auth.service.ts`
+**Correcao**: Adicionar `accountId` e `chatwootAgentId` ao objeto `user` retornado no login e no getMe. Adicionar campos Chatwoot ao objeto `account` retornado no getMe.
 
-## Plano de correcao
+### Problema 2: KPI field name mismatch (CRITICO)
+O backend `dashboardService.getSuperAdminKPIs()` retorna `totalSales`, mas o frontend `SuperAdminDashboard.tsx` espera `totalPaidSales`.
 
-### 1. Corrigir endpoints no `src/api/endpoints.ts`
-Duas linhas a alterar:
-```
-ADMIN_KPIS: '/api/dashboard/kpis'        (era '/api/dashboard/admin/kpis')
-AGENT_PERFORMANCE: '/api/dashboard/agents-performance'  (era '/api/dashboard/agent-performance')
-```
+**Arquivo**: `backend/src/services/dashboard.service.ts`
+**Correcao**: Renomear `totalSales` para `totalPaidSales` no retorno do `getSuperAdminKPIs()`.
 
-### 2. Nenhuma outra mudanca necessaria
-Todas as demais rotas estao alinhadas. Os servicos de contas, usuarios e Chatwoot ja usam os proxies corretos.
+### Problema 3: Nginx proxy nao repassa timeout longo (MENOR)
+Operacoes demoradas como teste de conexao Chatwoot podem exceder o timeout padrao do Nginx.
 
-## Detalhes tecnicos
+**Arquivo**: `nginx.conf`
+**Correcao**: Adicionar `proxy_read_timeout 120s` e `proxy_connect_timeout 10s` no bloco `/api`.
 
-### Mapa de rotas verificadas (frontend -> backend)
+### Problema 4: Account service nao envia `chatwoot_base_url` no retorno de getMe
+Quando o admin loga, o `getMe` retorna a conta sem os campos Chatwoot. O dashboard admin usa `account.chatwoot_base_url` para decidir se mostra metricas.
 
+Ja coberto pelo Problema 1.
+
+## Plano de Implementacao
+
+### 1. Corrigir auth.service.ts (backend)
+No metodo `login()`, adicionar ao objeto user:
 ```text
-CONTAS
-  /api/accounts              GET/POST     OK
-  /api/accounts/:id          GET/PUT/DEL  OK
-
-USUARIOS
-  /api/users                 GET/POST     OK
-  /api/users/:id             GET/PUT/DEL  OK
-
-AUTH
-  /api/auth/login            POST         OK
-  /api/auth/logout           POST         OK
-  /api/auth/me               GET          OK
-
-DASHBOARD
-  /api/admin/kpis            GET          OK (super admin)
-  /api/dashboard/kpis        GET          CORRIGIR (admin)
-  /api/dashboard/agents-performance  GET  CORRIGIR
-  /api/dashboard/hourly-peak GET          OK
-
-CHATWOOT
-  /api/chatwoot/test-connection  POST     OK
-  /api/chatwoot/agents/fetch     POST     OK
-
-SERVIDOR
-  /api/admin/server-resources       GET   OK
-  /api/admin/consumption-history    GET   OK
-  /api/admin/weekly-consumption     GET   OK
+accountId: user.accountId
+chatwootAgentId: user.chatwootAgentId
 ```
 
-### Impacto
-- **Sem correcao**: O dashboard de contas admin vai falhar ao carregar KPIs e tabela de agentes no modo backend
-- **Com correcao**: Todas as rotas do sistema ficam alinhadas entre frontend e backend
+No metodo `getMe()`, adicionar ao objeto user:
+```text
+accountId: user.accountId
+chatwootAgentId: user.chatwootAgentId
+```
+
+E ao objeto account:
+```text
+chatwootBaseUrl: user.account.chatwootBaseUrl
+chatwootAccountId: user.account.chatwootAccountId
+chatwootApiKey: user.account.chatwootApiKey
+```
+
+### 2. Corrigir dashboard.service.ts (backend)
+No metodo `getSuperAdminKPIs()`, renomear no retorno:
+```text
+totalSales  ->  totalPaidSales
+```
+
+### 3. Melhorar nginx.conf
+Adicionar timeouts e buffer no proxy:
+```text
+proxy_read_timeout 120s;
+proxy_connect_timeout 10s;
+proxy_send_timeout 120s;
+```
+
+### 4. Corrigir BackendAuthProvider hydration
+O `BackendAuthProvider` ja faz `response.user.account_id || response.user.accountId` - com o backend retornando `accountId` (camelCase), o segundo fallback vai funcionar. Nenhuma mudanca necessaria no frontend auth context.
+
+## Impacto pos-correcao
+
+Apos rebuild do Docker:
+1. Login com `admin@gleps.com.br` vai popular corretamente `user.account_id` e `account.chatwoot_*`
+2. SuperAdmin KPIs vao mostrar "Vendas Pagas" corretamente
+3. Admin Dashboard vai detectar config Chatwoot e carregar metricas
+4. Criacao de conta via Super Admin vai passar pelo Express (sem tocar RLS do Supabase Cloud)
+
+## Checklist de deploy
+1. Aplicar correcoes nos 3 arquivos
+2. Rebuild containers: `docker compose build --no-cache`
+3. Restart: `docker compose up -d`
+4. Testar: login -> dashboard -> criar conta -> importar agentes
