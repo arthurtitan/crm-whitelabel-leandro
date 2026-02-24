@@ -144,10 +144,10 @@ export const API_ENDPOINTS = {
   // ============= DASHBOARD/ANALYTICS =============
   DASHBOARD: {
     SUPER_ADMIN_KPIS: '/api/admin/kpis',
-    ADMIN_KPIS: '/api/dashboard/admin/kpis',
+    ADMIN_KPIS: '/api/dashboard/kpis',
     AGENT_KPIS: '/api/dashboard/agent/kpis',
     HOURLY_PEAK: '/api/dashboard/hourly-peak',
-    AGENT_PERFORMANCE: '/api/dashboard/agent-performance',
+    AGENT_PERFORMANCE: '/api/dashboard/agents-performance',
     REVENUE: '/api/dashboard/revenue',
     CONVERSION_FUNNEL: '/api/dashboard/conversion-funnel',
     SERVER_RESOURCES: '/api/admin/server-resources',
