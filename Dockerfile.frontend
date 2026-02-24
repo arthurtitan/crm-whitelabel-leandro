@@ -3,6 +3,14 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+# Accept build arguments
+ARG VITE_API_URL=/api
+ARG VITE_USE_BACKEND=true
+
+# Set as environment variables for the build
+ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_USE_BACKEND=$VITE_USE_BACKEND
+
 # Copy package files
 COPY package*.json ./
 
