@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { accountsCloudService, Account } from '@/services/accounts.cloud.service';
-import { usersCloudService, Profile } from '@/services/users.cloud.service';
+import { accountsCloudOrBackend, usersCloudOrBackend } from '@/services';
+import type { Account } from '@/services/accounts.cloud.service';
+import type { Profile } from '@/services/users.cloud.service';
 import { UserRole, UserStatus } from '@/types/crm';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -104,8 +105,8 @@ export default function SuperAdminUsersPage() {
         setUsersLoading(true);
         
         const [accountsData, usersData] = await Promise.all([
-          accountsCloudService.list(),
-          usersCloudService.list(),
+          accountsCloudOrBackend.list(),
+          usersCloudOrBackend.list(),
         ]);
         
         setAccounts(accountsData);
@@ -228,7 +229,7 @@ export default function SuperAdminUsersPage() {
     setCreateLoading(true);
     
     try {
-      const newUser = await usersCloudService.create({
+      const newUser = await usersCloudOrBackend.create({
         nome: formData.nome,
         email: formData.email,
         password: formData.password,
@@ -352,7 +353,7 @@ export default function SuperAdminUsersPage() {
     
     try {
       // Call the real delete service with password verification
-      await usersCloudService.delete(userToDelete.user_id, deletePassword);
+      await usersCloudOrBackend.delete(userToDelete.user_id, deletePassword);
       
       // Remove from local state on success
       setUsers(users.filter((u) => u.id !== userToDelete.id));

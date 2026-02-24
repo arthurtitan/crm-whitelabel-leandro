@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { accountsCloudService, Account } from '@/services/accounts.cloud.service';
-import { usersCloudService } from '@/services/users.cloud.service';
+import { accountsCloudOrBackend, usersCloudOrBackend } from '@/services';
+import type { Account } from '@/services/accounts.cloud.service';
 import { ChatwootAgent, User } from '@/types/crm';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -145,7 +145,7 @@ export default function SuperAdminAccountsPage() {
   const loadAccounts = async () => {
     try {
       setIsLoading(true);
-      const data = await accountsCloudService.list();
+      const data = await accountsCloudOrBackend.list();
       setAccounts(data);
     } catch (error: any) {
       toast.error('Erro ao carregar contas: ' + error.message);
@@ -167,7 +167,7 @@ export default function SuperAdminAccountsPage() {
     setSelectedAgentIds([]);
 
     try {
-      const result = await accountsCloudService.testChatwootConnection(
+      const result = await accountsCloudOrBackend.testChatwootConnection(
         formData.chatwootBaseUrl,
         formData.chatwootAccountId,
         formData.chatwootApiKey
@@ -213,7 +213,7 @@ export default function SuperAdminAccountsPage() {
       setIsSaving(true);
       
       // Create the account first
-      const newAccount = await accountsCloudService.create({
+      const newAccount = await accountsCloudOrBackend.create({
         nome: formData.nome,
         chatwoot_base_url: formData.chatwootEnabled ? formData.chatwootBaseUrl : undefined,
         chatwoot_account_id: formData.chatwootEnabled ? formData.chatwootAccountId : undefined,
@@ -250,7 +250,7 @@ export default function SuperAdminAccountsPage() {
     try {
       setIsSaving(true);
       
-      await accountsCloudService.create({
+      await accountsCloudOrBackend.create({
         nome: formData.nome,
         chatwoot_base_url: formData.chatwootEnabled ? formData.chatwootBaseUrl : undefined,
         chatwoot_account_id: formData.chatwootEnabled ? formData.chatwootAccountId : undefined,
@@ -302,7 +302,7 @@ export default function SuperAdminAccountsPage() {
 
     try {
       // Use the password provided by the user in the form
-      await usersCloudService.create({
+      await usersCloudOrBackend.create({
         email: currentAgent.email,
         nome: currentAgent.name,
         password: data.password,
@@ -367,7 +367,7 @@ export default function SuperAdminAccountsPage() {
 
     try {
       setIsSaving(true);
-      await accountsCloudService.update(editingAccount.id, {
+      await accountsCloudOrBackend.update(editingAccount.id, {
         nome: editingAccount.nome,
         status: editingAccount.status,
         chatwoot_base_url: editingAccount.chatwoot_base_url,
@@ -393,7 +393,7 @@ export default function SuperAdminAccountsPage() {
 
     try {
       setIsSaving(true);
-      await accountsCloudService.delete(deleteAccount.id);
+      await accountsCloudOrBackend.delete(deleteAccount.id);
       await loadAccounts();
       setDeleteAccount(null);
       setDeletePassword('');
@@ -409,7 +409,7 @@ export default function SuperAdminAccountsPage() {
     const newStatus = account.status === 'active' ? 'paused' : 'active';
     
     try {
-      await accountsCloudService.update(account.id, { status: newStatus });
+      await accountsCloudOrBackend.update(account.id, { status: newStatus });
       await loadAccounts();
       toast.success(`Conta ${newStatus === 'active' ? 'reativada' : 'pausada'} com sucesso!`);
     } catch (error: any) {
@@ -424,7 +424,7 @@ export default function SuperAdminAccountsPage() {
     setEditConnectionError(null);
     
     try {
-      const result = await accountsCloudService.testChatwootConnection(
+      const result = await accountsCloudOrBackend.testChatwootConnection(
         editingAccount.chatwoot_base_url || '',
         editingAccount.chatwoot_account_id || '',
         editingAccount.chatwoot_api_key || ''
