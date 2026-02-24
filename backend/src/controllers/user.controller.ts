@@ -64,7 +64,7 @@ export class UserController {
    */
   async getById(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const result = await userService.getById(id);
 
       // Check access
@@ -113,7 +113,7 @@ export class UserController {
    */
   async update(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const body = updateUserSchema.parse(req.body);
 
       // Check access
@@ -146,7 +146,7 @@ export class UserController {
    */
   async delete(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
 
       // Check access
       const existing = await userService.getById(id);
@@ -178,7 +178,7 @@ export class UserController {
    */
   async changePassword(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const body = changePasswordSchema.parse(req.body);
 
       // Can only change own password (unless super_admin)
@@ -202,7 +202,7 @@ export class UserController {
    */
   async impersonate(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
 
       const result = await userService.impersonate(id, req.user!.id);
 

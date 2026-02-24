@@ -46,7 +46,7 @@ export class AccountController {
    */
   async getById(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const result = await accountService.getById(id);
 
       res.json({ data: result });
@@ -74,7 +74,7 @@ export class AccountController {
    */
   async update(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const body = updateAccountSchema.parse(req.body);
       const result = await accountService.update(id, body, req.user!.id);
 
@@ -89,7 +89,7 @@ export class AccountController {
    */
   async delete(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       await accountService.delete(id, req.user!.id);
 
       res.json({ data: { success: true } });
@@ -103,7 +103,7 @@ export class AccountController {
    */
   async pause(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const { reason } = req.body;
       const result = await accountService.pause(id, req.user!.id, reason);
 
@@ -118,7 +118,7 @@ export class AccountController {
    */
   async activate(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const result = await accountService.activate(id, req.user!.id);
 
       res.json({ data: result });
@@ -132,7 +132,7 @@ export class AccountController {
    */
   async getStats(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const result = await accountService.getStats(id);
 
       res.json({ data: result });
@@ -146,7 +146,7 @@ export class AccountController {
    */
   async testChatwoot(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const result = await accountService.testChatwootConnection(id);
 
       res.json({ data: result });
@@ -160,7 +160,7 @@ export class AccountController {
    */
   async getChatwootAgents(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const result = await accountService.getChatwootAgents(id);
 
       res.json({ data: result });

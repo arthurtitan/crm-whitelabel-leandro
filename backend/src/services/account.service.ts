@@ -305,7 +305,7 @@ class AccountService {
       );
 
       if (response.ok) {
-        const data = await response.json();
+        const data: any = await response.json();
         return { connected: true, agentsCount: data.length };
       } else {
         return { connected: false, error: `HTTP ${response.status}` };

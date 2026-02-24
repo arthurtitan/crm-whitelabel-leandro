@@ -37,7 +37,7 @@ class EventService {
           entityType: input.entityType ?? null,
           entityId: input.entityId ?? null,
           channel: input.channel ?? null,
-          payload: input.payload ?? null,
+          payload: (input.payload as any) ?? undefined,
         },
       });
     } catch (error) {

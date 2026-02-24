@@ -63,7 +63,7 @@ export class TagController {
    */
   async getById(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const result = await tagService.getById(id, req.user!.accountId!);
 
       res.json({ data: result });
@@ -94,7 +94,7 @@ export class TagController {
    */
   async update(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const body = updateTagSchema.parse(req.body);
       const result = await tagService.update(id, body, req.user!.accountId!, req.user!.id);
 
@@ -109,7 +109,7 @@ export class TagController {
    */
   async delete(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       await tagService.delete(id, req.user!.accountId!, req.user!.id);
 
       res.json({ data: { success: true } });
@@ -123,7 +123,7 @@ export class TagController {
    */
   async reorder(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const body = reorderTagSchema.parse(req.body);
       const result = await tagService.reorder(id, body.ordem, req.user!.accountId!, req.user!.id);
 
@@ -166,7 +166,7 @@ export class TagController {
    */
   async getContactsByStage(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const result = await contactService.getByStage(req.user!.accountId!, id);
 
       res.json({ data: result });
@@ -197,7 +197,7 @@ export class FunnelController {
    */
   async getById(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const result = await funnelService.getById(id, req.user!.accountId!);
 
       res.json({ data: result });
@@ -225,7 +225,7 @@ export class FunnelController {
    */
   async update(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const body = createFunnelSchema.parse(req.body);
       const result = await funnelService.update(id, body.name, req.user!.accountId!);
 
@@ -240,7 +240,7 @@ export class FunnelController {
    */
   async delete(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       await funnelService.delete(id, req.user!.accountId!);
 
       res.json({ data: { success: true } });

@@ -238,7 +238,7 @@ class CalendarService {
       throw new Error('Falha ao obter tokens do Google');
     }
 
-    const tokens = await tokenResponse.json();
+    const tokens: any = await tokenResponse.json();
 
     // Get user info
     const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
@@ -247,7 +247,7 @@ class CalendarService {
       },
     });
 
-    const userInfo = await userInfoResponse.json();
+    const userInfo: any = await userInfoResponse.json();
 
     // Save tokens
     await prisma.googleCalendarToken.upsert({
@@ -353,7 +353,7 @@ class CalendarService {
       throw new Error('Falha ao sincronizar com Google Calendar');
     }
 
-    const data = await response.json();
+    const data: any = await response.json();
     const googleEvents = data.items || [];
 
     // Sync events
@@ -424,7 +424,7 @@ class CalendarService {
       throw new Error('Falha ao renovar token do Google');
     }
 
-    const tokens = await response.json();
+    const tokens: any = await response.json();
 
     await prisma.googleCalendarToken.update({
       where: { accountId },

@@ -63,7 +63,7 @@ export class CalendarController {
    */
   async getById(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const result = await calendarService.getById(id, req.user!.accountId!);
 
       res.json({ data: result });
@@ -97,7 +97,7 @@ export class CalendarController {
    */
   async update(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const body = updateEventSchema.parse(req.body);
       const result = await calendarService.update(id, {
         ...body,
@@ -116,7 +116,7 @@ export class CalendarController {
    */
   async delete(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       await calendarService.delete(id, req.user!.accountId!);
 
       res.json({ data: { success: true } });
