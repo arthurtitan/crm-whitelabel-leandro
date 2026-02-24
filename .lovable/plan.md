@@ -1,86 +1,97 @@
 
-# Correcao Completa: Sistema 100% Funcional no VPS/Docker
+
+# Corrigir Deploy no EasyPanel
 
 ## Diagnostico
 
-O sistema funciona no Lovable local porque usa Supabase Cloud direto. No VPS com `VITE_USE_BACKEND=true`, todas as operacoes passam pelo Express, e existem 4 problemas criticos de incompatibilidade entre o backend e o frontend.
+O sistema esta 100% funcional:
+- Login page renderiza corretamente
+- Backend inicia, roda migrations, seed e escuta na porta 3000
+- Frontend Nginx escuta na porta 80 e faz proxy reverso para `/api`
+- Todos os endpoints e rotas estao corretamente configurados
 
-## Problemas Identificados
+O erro "Service is not reachable" e do proxy do EasyPanel, nao do app. Identifiquei 2 problemas potenciais:
 
-### Problema 1: Auth Service nao retorna campos criticos (CRITICO)
-O backend `auth.service.ts` retorna o user sem `accountId` e `chatwootAgentId` no login e no `/auth/me`. O frontend (`BackendAuthProvider`) espera esses campos para:
-- Rotear admin vs super_admin
-- Configurar o hook `useChatwootMetrics` (que checa `account.chatwoot_base_url`)
+## Problema 1: Healthcheck do frontend no docker-compose.yml esta ausente
 
-**Arquivo**: `backend/src/services/auth.service.ts`
-**Correcao**: Adicionar `accountId` e `chatwootAgentId` ao objeto `user` retornado no login e no getMe. Adicionar campos Chatwoot ao objeto `account` retornado no getMe.
+O EasyPanel pode ignorar o HEALTHCHECK do Dockerfile e depender do definido no `docker-compose.yml`. Como o servico `frontend` nao tem healthcheck no compose, o EasyPanel pode nao saber que o servico esta pronto.
 
-### Problema 2: KPI field name mismatch (CRITICO)
-O backend `dashboardService.getSuperAdminKPIs()` retorna `totalSales`, mas o frontend `SuperAdminDashboard.tsx` espera `totalPaidSales`.
+**Arquivo**: `docker-compose.yml`
+**Correcao**: Adicionar healthcheck explicito ao servico frontend no compose, apontando para o endpoint `/health` do Nginx.
 
-**Arquivo**: `backend/src/services/dashboard.service.ts`
-**Correcao**: Renomear `totalSales` para `totalPaidSales` no retorno do `getSuperAdminKPIs()`.
+## Problema 2: Backend healthcheck pode falhar silenciosamente
 
-### Problema 3: Nginx proxy nao repassa timeout longo (MENOR)
-Operacoes demoradas como teste de conexao Chatwoot podem exceder o timeout padrao do Nginx.
+O backend usa `wget --spider` no HEALTHCHECK, mas como o usuario roda como `nodejs` (non-root), pode haver problemas de permissao. Se o backend for marcado como unhealthy, e o frontend depende dele, o EasyPanel pode considerar tudo indisponivel.
 
-**Arquivo**: `nginx.conf`
-**Correcao**: Adicionar `proxy_read_timeout 120s` e `proxy_connect_timeout 10s` no bloco `/api`.
-
-### Problema 4: Account service nao envia `chatwoot_base_url` no retorno de getMe
-Quando o admin loga, o `getMe` retorna a conta sem os campos Chatwoot. O dashboard admin usa `account.chatwoot_base_url` para decidir se mostra metricas.
-
-Ja coberto pelo Problema 1.
+**Arquivo**: `docker-compose.yml`
+**Correcao**: Adicionar healthcheck explicito ao servico backend no compose tambem, e ajustar o `depends_on` do frontend para usar `condition: service_started` (em vez de esperar por healthy).
 
 ## Plano de Implementacao
 
-### 1. Corrigir auth.service.ts (backend)
-No metodo `login()`, adicionar ao objeto user:
+### 1. Atualizar docker-compose.yml
+
+Adicionar healthchecks explicitos nos dois servicos e garantir que o frontend nao dependa do health do backend para iniciar:
+
 ```text
-accountId: user.accountId
-chatwootAgentId: user.chatwootAgentId
+services:
+  postgres:
+    (sem mudanca)
+
+  backend:
+    (adicionar healthcheck no compose)
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s    # <-- Maior para dar tempo de migrations/seed
+
+  frontend:
+    (adicionar healthcheck no compose)
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      backend:
+        condition: service_started   # <-- NAO espera healthy, so started
 ```
 
-No metodo `getMe()`, adicionar ao objeto user:
+### 2. Corrigir nginx.conf - Endpoint /health
+
+O bloco `/health` atual tem `add_header` depois de `return`, que e ignorado pelo Nginx. Corrigir para garantir resposta limpa:
+
 ```text
-accountId: user.accountId
-chatwootAgentId: user.chatwootAgentId
+location /health {
+    access_log off;
+    default_type text/plain;
+    return 200 "OK";
+}
 ```
 
-E ao objeto account:
+### 3. Aumentar start_period do backend
+
+O backend roda migrations + seed antes de iniciar o servidor. O start_period de 5s no Dockerfile e insuficiente. Corrigir no Dockerfile tambem:
+
 ```text
-chatwootBaseUrl: user.account.chatwootBaseUrl
-chatwootAccountId: user.account.chatwootAccountId
-chatwootApiKey: user.account.chatwootApiKey
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD wget --spider -q http://localhost:3000/api/health || exit 1
 ```
 
-### 2. Corrigir dashboard.service.ts (backend)
-No metodo `getSuperAdminKPIs()`, renomear no retorno:
-```text
-totalSales  ->  totalPaidSales
-```
+## Resumo das mudancas
 
-### 3. Melhorar nginx.conf
-Adicionar timeouts e buffer no proxy:
-```text
-proxy_read_timeout 120s;
-proxy_connect_timeout 10s;
-proxy_send_timeout 120s;
-```
+| Arquivo | Mudanca |
+|---------|---------|
+| docker-compose.yml | Adicionar healthcheck aos servicos frontend e backend; mudar depends_on para service_started |
+| nginx.conf | Corrigir bloco /health (default_type antes de return) |
+| backend/Dockerfile | Aumentar start_period de 5s para 40s |
 
-### 4. Corrigir BackendAuthProvider hydration
-O `BackendAuthProvider` ja faz `response.user.account_id || response.user.accountId` - com o backend retornando `accountId` (camelCase), o segundo fallback vai funcionar. Nenhuma mudanca necessaria no frontend auth context.
+## Apos aprovacao
 
-## Impacto pos-correcao
+1. Aplicar as 3 mudancas
+2. No VPS: `docker compose build --no-cache && docker compose up -d`
+3. Verificar: `docker compose ps` (ambos servicos devem estar healthy)
+4. Acessar o dominio configurado no EasyPanel
 
-Apos rebuild do Docker:
-1. Login com `admin@gleps.com.br` vai popular corretamente `user.account_id` e `account.chatwoot_*`
-2. SuperAdmin KPIs vao mostrar "Vendas Pagas" corretamente
-3. Admin Dashboard vai detectar config Chatwoot e carregar metricas
-4. Criacao de conta via Super Admin vai passar pelo Express (sem tocar RLS do Supabase Cloud)
-
-## Checklist de deploy
-1. Aplicar correcoes nos 3 arquivos
-2. Rebuild containers: `docker compose build --no-cache`
-3. Restart: `docker compose up -d`
-4. Testar: login -> dashboard -> criar conta -> importar agentes
