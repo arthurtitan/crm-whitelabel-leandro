@@ -81,15 +81,32 @@ export const accountsBackendService = {
     accountId: string,
     apiKey: string
   ): Promise<{ success: boolean; message: string; agents?: any[]; inboxes?: any[]; labels?: any[] }> {
-    return apiClient.post<any>('/api/chatwoot/test-connection', {
+    const result = await apiClient.post<any>('/api/chatwoot/test-connection', {
       baseUrl,
       accountId,
       apiKey,
     });
+    // Normalize: ensure agents/inboxes/labels are always arrays
+    return {
+      success: result.success,
+      message: result.message || (result.success ? 'Conexão estabelecida' : 'Falha na conexão'),
+      agents: Array.isArray(result.agents) ? result.agents : [],
+      inboxes: Array.isArray(result.inboxes) ? result.inboxes : [],
+      labels: Array.isArray(result.labels) ? result.labels : [],
+    };
   },
 
   async fetchChatwootAgents(baseUrl: string, accountId: string, apiKey: string) {
-    const result = await this.testChatwootConnection(baseUrl, accountId, apiKey);
-    return result.agents || [];
+    // Try test-connection first (returns agents in new backend)
+    try {
+      const result = await this.testChatwootConnection(baseUrl, accountId, apiKey);
+      if (result.agents && result.agents.length > 0) return result.agents;
+    } catch (_) { /* fallback below */ }
+    // Fallback: dedicated agents endpoint
+    try {
+      return await apiClient.post<any[]>('/api/chatwoot/agents/fetch', { baseUrl, accountId, apiKey });
+    } catch (_) {
+      return [];
+    }
   },
 };
