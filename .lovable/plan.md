@@ -1,51 +1,139 @@
 
+Objetivo: fazer o sistema subir e permitir login no EasyPanel com estabilidade, corrigindo os 3 pontos que hoje impedem o fluxo completo.
 
-# Criar Migration Inicial do Prisma
+## Diagnóstico (com base nos logs + código)
 
-## Situacao Atual
+1) Frontend está saudável  
+- Nginx iniciou normal.
+- Assets e rota `/login` estão sendo servidos (HTTP 200).
 
-Os 3 containers estao saudaveis. O backend inicia, conecta ao banco, mas o log diz:
+2) Backend está saudável  
+- A API responde em `GET /api/health` com status `ok`.
+- Portanto, “não há backend” não é o problema principal.
 
-```
-No migration found in prisma/migrations
-No pending migrations to apply.
-```
+3) Falta de logs no backend é enganosa  
+- Em produção, o backend só loga startup e erros (não loga toda request).
+- Então “não apareceu log no backend” não significa que a API está fora.
 
-O diretorio `backend/prisma/migrations/` simplesmente nao existe. Sem ele, `prisma migrate deploy` nao cria nenhuma tabela.
+4) Causa crítica #1: montagem de URL no frontend está incorreta para proxy local  
+- `src/config/api.config.ts` usa `VITE_API_URL=/api`.
+- `src/api/endpoints.ts` já inclui `/api/...`.
+- `src/api/client.ts` concatena os dois => vira `/api/api/...`.
+- Além disso, o `new URL()` atual não trata bem URLs relativas sem base explícita.
+- Resultado: chamadas de login/API quebram antes (ou vão para caminho errado).
 
-## Correcao
+5) Causa crítica #2: provider de autenticação backend lê payload errado  
+- Backend responde padrão `{ data: ... }`.
+- `src/contexts/AuthContext.backend.tsx` tenta ler `response.user`, `response.token` diretamente.
+- Mesmo com credenciais válidas, o parse quebra.
 
-Criar 2 arquivos:
+6) Causa crítica #3: não há seed automático no deploy  
+- Docker roda `prisma migrate deploy` + server, mas não executa seed.
+- Em banco novo, você fica sem usuários para entrar.
 
-### 1. `backend/prisma/migrations/migration_lock.toml`
+---
 
-Arquivo de controle que indica o provider do banco:
+## Plano de correção (sequência segura)
 
-```toml
-provider = "postgresql"
-```
+### Etapa 1 — Corrigir construção de URL da API (prioridade máxima)
+Arquivos:
+- `src/api/client.ts`
 
-### 2. `backend/prisma/migrations/0001_init/migration.sql`
+Ações:
+- Reescrever `buildUrl()` para:
+  - suportar endpoint absoluto (`https://...`) sem alteração;
+  - suportar base absoluta + endpoint relativo;
+  - suportar base relativa (`/api`) + endpoint relativo;
+  - evitar duplicação de prefixo (`/api` + `/api/...` => manter apenas um `/api`);
+  - usar `window.location.origin` ao criar URL relativa com segurança.
 
-SQL completo derivado do `schema.prisma` contendo:
+Resultado esperado:
+- Requests passam a sair para o caminho correto.
+- O frontend passa a alcançar o backend via proxy Nginx.
 
-- **14 enums**: AccountStatus, UserRole, UserStatus, ContactOrigin, TagType, ActorType, LeadTagSource, TagHistoryAction, SaleStatus, PaymentMethod, CalendarEventType, CalendarEventSource, CalendarEventStatus, AttendeeStatus
-- **16 tabelas**: accounts, users, refresh_tokens, contacts, funnels, tags, lead_tags, tag_history, products, sales, sale_items, lead_notes, events, calendar_events, calendar_attendees, google_calendar_tokens
-- Todos os indices, foreign keys, constraints de unicidade e valores default
+---
 
-## Sobre o Dominio no EasyPanel
+### Etapa 2 — Corrigir parse de resposta no auth backend
+Arquivos:
+- `src/contexts/AuthContext.backend.tsx`
 
-A configuracao de dominios no print esta correta:
-- `360.gleps.com.br` aponta para `frontend:80` (estrela amarela = primario)
-- O subdominio do EasyPanel aponta para o servico raiz
+Ações:
+- Em `login()` e `hydrateFromToken()`, extrair payload como:
+  - `const payload = response.data ?? response`
+- Ler `payload.user`, `payload.token`, `payload.refreshToken`, `payload.account`.
+- Manter fallback para formatos antigos (compatibilidade).
 
-Uma vez que as tabelas existam no banco, o backend respondera normalmente e o frontend podera se comunicar via `/api` (proxy nginx).
+Resultado esperado:
+- Login passa a funcionar com resposta real do backend.
+- Sessão persiste corretamente após autenticação.
 
-## Resultado Esperado
+---
 
-Apos o proximo deploy:
-1. `prisma migrate deploy` encontra `0001_init` e executa o SQL
-2. Todas as 16 tabelas sao criadas no PostgreSQL
-3. O backend inicia com `node dist/server.js` sem erros
-4. O sistema fica acessivel em `360.gleps.com.br`
+### Etapa 3 — Garantir usuário inicial no primeiro deploy (seed controlado)
+Arquivos:
+- `backend/src/prisma/seed.ts`
+- `backend/Dockerfile`
 
+Ações:
+1. Tornar seed “first-run safe”:
+   - no início do seed, checar `await prisma.user.count()`;
+   - se > 0, sair sem criar dados (evita duplicação em restart).
+2. Ajustar startup do container:
+   - executar migrate;
+   - executar seed;
+   - iniciar servidor.
+   - Exemplo de ordem: `migrate deploy -> seed -> node dist/server.js`.
+
+Resultado esperado:
+- Em banco novo, já existe usuário para login.
+- Em reinícios seguintes, não duplica dados.
+
+---
+
+### Etapa 4 — Observabilidade mínima para diagnóstico
+Arquivos:
+- `backend/src/server.ts` (ou middleware de logging)
+- opcional: `nginx.conf` (log dedicado de `/api`)
+
+Ações:
+- Adicionar log enxuto de requisições de autenticação (método + rota + status) em produção, sem dados sensíveis.
+- Manter foco em `/api/auth/*` para suporte rápido.
+
+Resultado esperado:
+- Próximos diagnósticos ficam imediatos (sem “backend silencioso”).
+
+---
+
+## Validação pós-correção (E2E obrigatório)
+
+1. Rebuild/deploy no EasyPanel.
+2. Confirmar logs de backend com sequência:
+   - migrations aplicadas;
+   - seed executado ou “seed skipped (users exist)”;
+   - server listening.
+3. Testar:
+   - `GET /api/health` => 200.
+4. Login E2E no domínio:
+   - `superadmin@sistema.com / Admin@123`
+   - e `carlos@clinicavidaplena.com / Admin@123`
+5. Verificar no Network do navegador:
+   - chamadas indo para `/api/auth/login` (sem `/api/api/...`).
+6. Verificar redirecionamento após login para painel.
+7. Smoke test básico de 2 telas internas para confirmar sessão/token.
+
+---
+
+## Riscos e mitigação
+
+- Risco: seed com senha padrão em produção.
+  - Mitigação: após primeiro acesso, trocar senha imediatamente.
+  - (Opcional técnico depois): mover credenciais iniciais para variáveis de ambiente e forçar troca no primeiro login.
+
+- Risco: impacto em chamadas antigas ao mudar URL builder.
+  - Mitigação: manter suporte a endpoint absoluto e a formato atual com normalização, sem quebrar integrações existentes.
+
+---
+
+## Entregável final esperado
+
+Após aplicar este plano, o sistema ficará acessível no domínio já configurado, com login funcional e fluxo estável de autenticação/API, eliminando o falso sintoma de “frontend ok, backend sem log” e removendo dependência de setup manual no primeiro deploy.
