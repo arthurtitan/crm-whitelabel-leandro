@@ -4,7 +4,15 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { useBackend } from "@/config/backend.config";
+
+// Auth providers
+import { AuthProvider as SupabaseAuthProvider, useAuth } from "@/contexts/AuthContext";
+import { BackendAuthProvider } from "@/contexts/AuthContext.backend";
+
+// Select the correct provider based on backend flag
+const AuthProvider = useBackend ? BackendAuthProvider : SupabaseAuthProvider;
+
 import { FinanceProvider } from "@/contexts/FinanceContext";
 import { TagProvider } from "@/contexts/TagContext";
 import { ProductProvider } from "@/contexts/ProductContext";
@@ -69,169 +77,24 @@ const App = () => (
             <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
             {/* Super Admin Routes */}
-            <Route
-              path="/super-admin"
-              element={
-                <ProtectedRoute requireSuperAdmin>
-                  <SuperAdminLayout>
-                    <SuperAdminDashboard />
-                  </SuperAdminLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/super-admin/accounts"
-              element={
-                <ProtectedRoute requireSuperAdmin>
-                  <SuperAdminLayout>
-                    <SuperAdminAccountsPage />
-                  </SuperAdminLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/super-admin/accounts/:accountId"
-              element={
-                <ProtectedRoute requireSuperAdmin>
-                  <SuperAdminLayout>
-                    <SuperAdminAccountDetailPage />
-                  </SuperAdminLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/super-admin/users"
-              element={
-                <ProtectedRoute requireSuperAdmin>
-                  <SuperAdminLayout>
-                    <SuperAdminUsersPage />
-                  </SuperAdminLayout>
-                </ProtectedRoute>
-              }
-            />
+            <Route path="/super-admin" element={<ProtectedRoute requireSuperAdmin><SuperAdminLayout><SuperAdminDashboard /></SuperAdminLayout></ProtectedRoute>} />
+            <Route path="/super-admin/accounts" element={<ProtectedRoute requireSuperAdmin><SuperAdminLayout><SuperAdminAccountsPage /></SuperAdminLayout></ProtectedRoute>} />
+            <Route path="/super-admin/accounts/:accountId" element={<ProtectedRoute requireSuperAdmin><SuperAdminLayout><SuperAdminAccountDetailPage /></SuperAdminLayout></ProtectedRoute>} />
+            <Route path="/super-admin/users" element={<ProtectedRoute requireSuperAdmin><SuperAdminLayout><SuperAdminUsersPage /></SuperAdminLayout></ProtectedRoute>} />
 
-            {/* Admin Routes - Wrapped with FinanceProvider */}
-            <Route
-              path="/admin"
-              element={
-                <ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}>
-                  <AdminFinanceWrapper>
-                    <AdminLayout>
-                      <AdminDashboard />
-                    </AdminLayout>
-                  </AdminFinanceWrapper>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/kanban"
-              element={
-                <ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}>
-                  <AdminFinanceWrapper>
-                    <AdminLayout>
-                      <AdminKanbanPage />
-                    </AdminLayout>
-                  </AdminFinanceWrapper>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/leads"
-              element={
-                <ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}>
-                  <AdminFinanceWrapper>
-                    <AdminLayout>
-                      <AdminLeadsPage />
-                    </AdminLayout>
-                  </AdminFinanceWrapper>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/sales"
-              element={
-                <ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}>
-                  <AdminFinanceWrapper>
-                    <AdminLayout>
-                      <AdminSalesPage />
-                    </AdminLayout>
-                  </AdminFinanceWrapper>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/events"
-              element={
-                <ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}>
-                  <AdminFinanceWrapper>
-                    <AdminLayout>
-                      <AdminEventsPage />
-                    </AdminLayout>
-                  </AdminFinanceWrapper>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/finance"
-              element={
-                <ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}>
-                  <AdminFinanceWrapper>
-                    <AdminLayout>
-                      <AdminFinancePage />
-                    </AdminLayout>
-                  </AdminFinanceWrapper>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/products"
-              element={
-                <ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}>
-                  <AdminFinanceWrapper>
-                    <AdminLayout>
-                      <AdminProductsPage />
-                    </AdminLayout>
-                  </AdminFinanceWrapper>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/agenda"
-              element={
-                <ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}>
-                  <AdminFinanceWrapper>
-                    <AdminLayout>
-                      <AdminAgendaPage />
-                    </AdminLayout>
-                  </AdminFinanceWrapper>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/insights"
-              element={
-                <ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}>
-                  <AdminFinanceWrapper>
-                    <AdminLayout>
-                      <AdminInsightsPage />
-                    </AdminLayout>
-                  </AdminFinanceWrapper>
-                </ProtectedRoute>
-              }
-            />
+            {/* Admin Routes */}
+            <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}><AdminFinanceWrapper><AdminLayout><AdminDashboard /></AdminLayout></AdminFinanceWrapper></ProtectedRoute>} />
+            <Route path="/admin/kanban" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}><AdminFinanceWrapper><AdminLayout><AdminKanbanPage /></AdminLayout></AdminFinanceWrapper></ProtectedRoute>} />
+            <Route path="/admin/leads" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}><AdminFinanceWrapper><AdminLayout><AdminLeadsPage /></AdminLayout></AdminFinanceWrapper></ProtectedRoute>} />
+            <Route path="/admin/sales" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}><AdminFinanceWrapper><AdminLayout><AdminSalesPage /></AdminLayout></AdminFinanceWrapper></ProtectedRoute>} />
+            <Route path="/admin/events" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}><AdminFinanceWrapper><AdminLayout><AdminEventsPage /></AdminLayout></AdminFinanceWrapper></ProtectedRoute>} />
+            <Route path="/admin/finance" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}><AdminFinanceWrapper><AdminLayout><AdminFinancePage /></AdminLayout></AdminFinanceWrapper></ProtectedRoute>} />
+            <Route path="/admin/products" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}><AdminFinanceWrapper><AdminLayout><AdminProductsPage /></AdminLayout></AdminFinanceWrapper></ProtectedRoute>} />
+            <Route path="/admin/agenda" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}><AdminFinanceWrapper><AdminLayout><AdminAgendaPage /></AdminLayout></AdminFinanceWrapper></ProtectedRoute>} />
+            <Route path="/admin/insights" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}><AdminFinanceWrapper><AdminLayout><AdminInsightsPage /></AdminLayout></AdminFinanceWrapper></ProtectedRoute>} />
+            
             {/* Agent Routes */}
-            <Route
-              path="/agent"
-              element={
-                <ProtectedRoute allowedRoles={['agent', 'admin', 'super_admin']}>
-                  <AdminFinanceWrapper>
-                    <AdminLayout>
-                      <AdminKanbanPage />
-                    </AdminLayout>
-                  </AdminFinanceWrapper>
-                </ProtectedRoute>
-              }
-            />
+            <Route path="/agent" element={<ProtectedRoute allowedRoles={['agent', 'admin', 'super_admin']}><AdminFinanceWrapper><AdminLayout><AdminKanbanPage /></AdminLayout></AdminFinanceWrapper></ProtectedRoute>} />
 
             {/* Default redirect */}
             <Route path="/" element={<Navigate to="/login" replace />} />

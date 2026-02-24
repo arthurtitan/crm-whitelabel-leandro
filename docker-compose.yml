@@ -66,7 +66,8 @@ services:
       context: .
       dockerfile: Dockerfile.frontend
       args:
-        VITE_API_URL: ${API_URL:-http://localhost:3000}
+        VITE_API_URL: /api
+        VITE_USE_BACKEND: "true"
     container_name: gleps_frontend
     restart: unless-stopped
     ports:

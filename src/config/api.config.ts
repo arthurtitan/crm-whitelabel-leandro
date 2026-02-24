@@ -43,8 +43,8 @@ export const apiConfig: ApiConfig = {
 
 // Feature flags for API behavior
 export const apiFeatures = {
-  // Enable MSW mocking in development
-  useMocks: isDevelopment && import.meta.env.VITE_USE_MOCKS !== 'false',
+  // Enable MSW mocking in development (disabled when using backend)
+  useMocks: isDevelopment && import.meta.env.VITE_USE_MOCKS !== 'false' && import.meta.env.VITE_USE_BACKEND !== 'true',
   
   // Enable request logging in development
   enableLogging: isDevelopment,

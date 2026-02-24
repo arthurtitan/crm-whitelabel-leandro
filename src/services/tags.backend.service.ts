@@ -1,0 +1,126 @@
+/**
+ * Tags Backend Service
+ * 
+ * Uses Express API via apiClient instead of Supabase.
+ */
+
+import { apiClient } from '@/api/client';
+import { API_ENDPOINTS } from '@/api/endpoints';
+import type { Tag, LeadTag, ImportLabelsResult, SyncContactsResult } from './tags.cloud.service';
+
+export const tagsBackendService = {
+  async listStageTags(accountId: string): Promise<Tag[]> {
+    const response = await apiClient.get<Tag[] | { data: Tag[] }>(API_ENDPOINTS.TAGS.LIST, {
+      params: { type: 'stage', ativo: true, accountId },
+    });
+    return Array.isArray(response) ? response : (response as any).data || [];
+  },
+
+  async listAllTags(accountId: string): Promise<Tag[]> {
+    const response = await apiClient.get<Tag[] | { data: Tag[] }>(API_ENDPOINTS.TAGS.LIST, {
+      params: { ativo: true, accountId },
+    });
+    return Array.isArray(response) ? response : (response as any).data || [];
+  },
+
+  async createStageTag(input: {
+    accountId: string;
+    funnelId: string;
+    name: string;
+    color: string;
+    ordem?: number;
+  }): Promise<Tag> {
+    return apiClient.post<Tag>(API_ENDPOINTS.TAGS.CREATE, {
+      name: input.name,
+      type: 'stage',
+      color: input.color,
+      funnelId: input.funnelId,
+      ordem: input.ordem,
+    });
+  },
+
+  async updateTag(tagId: string, input: Partial<Pick<Tag, 'name' | 'color' | 'ordem' | 'ativo'>>): Promise<Tag> {
+    return apiClient.put<Tag>(API_ENDPOINTS.TAGS.UPDATE(tagId), input);
+  },
+
+  async deleteTag(tagId: string): Promise<void> {
+    return apiClient.delete(API_ENDPOINTS.TAGS.DELETE(tagId));
+  },
+
+  async swapTagOrder(tagId1: string, tagId2: string): Promise<void> {
+    return apiClient.post(API_ENDPOINTS.TAGS.REORDER, {
+      tags: [{ id: tagId1 }, { id: tagId2 }],
+    });
+  },
+
+  async getLeadTags(contactId: string): Promise<LeadTag[]> {
+    return apiClient.get<LeadTag[]>(API_ENDPOINTS.TAGS.BY_CONTACT(contactId));
+  },
+
+  async applyStageTag(contactId: string, tagId: string, source: string = 'kanban'): Promise<void> {
+    await apiClient.post(API_ENDPOINTS.TAGS.ADD_TO_CONTACT(contactId), {
+      tagId,
+      source,
+    });
+  },
+
+  async updateContactLabelsInChatwoot(
+    accountId: string,
+    contactId: string,
+    newStageTagId: string,
+    oldStageTagId?: string
+  ): Promise<{ success: boolean }> {
+    return apiClient.post<{ success: boolean }>(API_ENDPOINTS.CHATWOOT.SYNC, {
+      action: 'update-contact-labels',
+      accountId,
+      contactId,
+      newStageTagId,
+      oldStageTagId,
+    });
+  },
+
+  async pushLabelToChatwoot(
+    accountId: string,
+    action: 'create' | 'update' | 'delete',
+    label: { title: string; color: string; description?: string },
+    tagId?: string,
+    chatwootLabelId?: number
+  ): Promise<{ success: boolean; chatwoot_label_id?: number }> {
+    return apiClient.post<{ success: boolean; chatwoot_label_id?: number }>(
+      API_ENDPOINTS.CHATWOOT.SYNC,
+      { action: 'push-label', accountId, labelAction: action, label, tagId, chatwootLabelId }
+    );
+  },
+
+  async pushAllLabelsToChatwoot(accountId: string, resetIds = false) {
+    return apiClient.post<{
+      success: boolean;
+      pushed: number;
+      linked: number;
+      errors: string[];
+      details: Array<{ name: string; action: string; reason?: string }>;
+    }>(API_ENDPOINTS.CHATWOOT.SYNC, {
+      action: 'push-all-labels',
+      accountId,
+      resetIds,
+    });
+  },
+
+  async syncChatwootLabels(accountId: string): Promise<ImportLabelsResult> {
+    return apiClient.post<ImportLabelsResult>(API_ENDPOINTS.CHATWOOT.SYNC, {
+      action: 'sync-labels',
+      accountId,
+    });
+  },
+
+  async syncChatwootContacts(accountId: string): Promise<SyncContactsResult> {
+    return apiClient.post<SyncContactsResult>(API_ENDPOINTS.CHATWOOT.SYNC, {
+      action: 'sync-contacts',
+      accountId,
+    });
+  },
+
+  async getTagHistory(contactId: string) {
+    return apiClient.get<any[]>(API_ENDPOINTS.TAGS.HISTORY(contactId));
+  },
+};
