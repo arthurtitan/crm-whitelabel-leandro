@@ -6,31 +6,41 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Starting database seed...');
 
-  // First-run guard: skip if users already exist
+  // Hash password for admin users
+  const adminPasswordHash = await bcrypt.hash('Admin@123', 12);
+
+  // ── Always ensure critical super admin users exist (idempotent) ──
+  const criticalAdmins = [
+    { email: 'superadmin@sistema.com', nome: 'Super Admin' },
+    { email: 'admin@gleps.com.br', nome: 'Admin GLEPS' },
+    { email: 'glepsai@gmail.com', nome: 'GLEPS AI Admin' },
+  ];
+
+  for (const admin of criticalAdmins) {
+    await prisma.user.upsert({
+      where: { email: admin.email },
+      update: { passwordHash: adminPasswordHash, status: 'active' },
+      create: {
+        email: admin.email,
+        nome: admin.nome,
+        passwordHash: adminPasswordHash,
+        role: 'super_admin',
+        status: 'active',
+        permissions: [],
+      },
+    });
+    console.log('✅ Super Admin ensured:', admin.email);
+  }
+
+  // Guard: skip demo data if other users already exist
   const existingUsers = await prisma.user.count();
-  if (existingUsers > 0) {
-    console.log('⏭️  Seed skipped — database already has users (' + existingUsers + ')');
+  if (existingUsers > criticalAdmins.length) {
+    console.log('⏭️  Demo data skipped — database already populated (' + existingUsers + ' users)');
     return;
   }
 
-  // Hash passwords
-  const adminPasswordHash = await bcrypt.hash('Admin@123', 12);
+  // Hash passwords for demo users
   const agentPasswordHash = await bcrypt.hash('Agent@123', 12);
-
-  // Create Super Admin
-  const superAdmin = await prisma.user.upsert({
-    where: { email: 'superadmin@sistema.com' },
-    update: {},
-    create: {
-      email: 'superadmin@sistema.com',
-      nome: 'Super Admin',
-      passwordHash: adminPasswordHash,
-      role: 'super_admin',
-      status: 'active',
-      permissions: [],
-    },
-  });
-  console.log('✅ Super Admin created:', superAdmin.email);
 
   // Create Account 1 - Clínica Vida Plena
   const account1 = await prisma.account.upsert({
@@ -291,6 +301,8 @@ async function main() {
   console.log('');
   console.log('📋 Test Credentials:');
   console.log('  Super Admin: superadmin@sistema.com / Admin@123');
+  console.log('  Super Admin: admin@gleps.com.br / Admin@123');
+  console.log('  Super Admin: glepsai@gmail.com / Admin@123');
   console.log('  Admin: carlos@clinicavidaplena.com / Admin@123');
   console.log('  Agent: ana@clinicavidaplena.com / Agent@123');
   console.log('  Agent: pedro@clinicavidaplena.com / Agent@123');

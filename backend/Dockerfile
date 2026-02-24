@@ -67,5 +67,5 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD wget --spider -q http://localhost:3000/api/health || exit 1
 
-# Start command (runs migrations, seed, then starts the app)
-CMD ["sh", "-c", "npx prisma migrate deploy && node -e \"require('./dist/prisma/seed.js')\" 2>/dev/null || echo 'Seed script not found or failed, continuing...' && node dist/server.js"]
+# Start command (runs migrations, seed, then starts the app — fail-fast)
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/prisma/seed.js && node dist/server.js"]

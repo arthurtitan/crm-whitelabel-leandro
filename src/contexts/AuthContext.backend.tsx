@@ -174,8 +174,9 @@ export function BackendAuthProvider({ children }: { children: ReactNode }) {
 
       return { success: true };
     } catch (error: any) {
-      setAuthState(prev => ({ ...prev, isLoading: false }));
-      return { success: false, error: error?.message || 'Erro ao fazer login' };
+      const errorMessage = error?.message || error?.error?.message || 'Erro ao fazer login';
+      setAuthState(prev => ({ ...prev, isLoading: false, authError: errorMessage }));
+      return { success: false, error: errorMessage };
     }
   }, []);
 
