@@ -1,101 +1,61 @@
 
 
-# Adaptar docker-compose.yml para EasyPanel
+# Limpeza do Repositorio para Producao
 
-## Problema
-O EasyPanel reportou 7 problemas no `docker-compose.yml`:
-- `container_name` em todos os servicos causa conflito (EasyPanel nomeia automaticamente)
-- `ports` em todos os servicos causa conflito (EasyPanel gerencia portas/dominios)
-- `version` esta obsoleto
+## Objetivo
+Remover apenas codigo morto (nunca importado), mantendo tudo que e necessario para o deploy em producao com PostgreSQL, Express/Prisma e Docker.
 
-## Solucao
+## O que sera REMOVIDO (confirmado sem nenhum import no projeto)
 
-Remover do `docker-compose.yml`:
-1. A linha `version: '3.8'` (obsoleta)
-2. Todos os `container_name` (EasyPanel atribui nomes proprios)
-3. Todos os `ports` (EasyPanel gerencia exposicao via Dominios)
-4. O bloco `networks` e todas as referencias `networks:` nos servicos (EasyPanel gerencia rede interna)
-
-O restante (volumes, healthchecks, depends_on, environment, build) permanece igual.
-
-## Resultado esperado
-
-```yaml
-services:
-  postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${DB_USER:-gleps}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-gleps_secret}
-      POSTGRES_DB: ${DB_NAME:-gleps_crm}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-gleps} -d ${DB_NAME:-gleps_crm}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    environment:
-      NODE_ENV: ${NODE_ENV:-production}
-      PORT: 3000
-      API_URL: ${API_URL:-http://localhost:3000}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
-      DATABASE_URL: postgresql://${DB_USER:-gleps}:${DB_PASSWORD:-gleps_secret}@postgres:5432/${DB_NAME:-gleps_crm}?schema=public
-      JWT_SECRET: ${JWT_SECRET:-your-production-jwt-secret-min-32-characters}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
-      REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET:-your-production-refresh-secret-min-32}
-      REFRESH_TOKEN_EXPIRES_IN: ${REFRESH_TOKEN_EXPIRES_IN:-7d}
-      BCRYPT_SALT_ROUNDS: ${BCRYPT_SALT_ROUNDS:-12}
-      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-900000}
-      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-100}
-      CHATWOOT_WEBHOOK_SECRET: ${CHATWOOT_WEBHOOK_SECRET:-}
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
-      LOG_LEVEL: ${LOG_LEVEL:-info}
-    depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile.frontend
-      args:
-        VITE_API_URL: /api
-        VITE_USE_BACKEND: "true"
-    restart: unless-stopped
-    depends_on:
-      - backend
-
-volumes:
-  postgres_data:
-```
-
-## O que foi removido e por que
-
-| Item removido | Motivo |
+| Arquivo/Pasta | Motivo da remocao |
 |---|---|
-| `version: '3.8'` | Obsoleto no Docker Compose moderno |
-| `container_name` (x3) | EasyPanel gerencia nomes automaticamente |
-| `ports` (x3) | EasyPanel expoe servicos via aba Dominios |
-| `networks` (bloco + refs) | EasyPanel gerencia rede interna entre containers |
+| `microservices/` (pasta inteira, ~50 arquivos) | Arquitetura alternativa nunca integrada ao frontend |
+| `src/pages/Index.tsx` | Pagina placeholder, nao esta em nenhuma rota |
+| `src/pages/NotFound.tsx` | Nunca importada em nenhum lugar |
+| `src/services/chatwootMetricsApi.ts` | Nunca importada por nenhum arquivo |
+| `src/test/example.test.ts` | Teste placeholder (`true === true`) |
+| `docs/BACKEND_SPEC.md` | Documentacao de especificacao, nao afeta build |
+| `docs/N8N_CHATWOOT_INTEGRATION.md` | Documentacao de integracao, nao afeta build |
+| `DEPLOY.md` | Guia de deploy substituido pela configuracao EasyPanel |
 
-## Apos o deploy
+## O que sera MANTIDO (essencial para producao)
 
-1. Na aba **Dominios** do EasyPanel, apontar seu dominio para o servico **frontend** na porta **80**
-2. O frontend ja faz proxy de `/api` para o backend via nginx.conf
-3. Executar seed inicial no terminal do container **backend**: `npm run db:seed`
+| Arquivo/Pasta | Motivo |
+|---|---|
+| `backend/` (inteiro) | Express API + Prisma + controllers + services + migrations |
+| `backend/prisma/schema.prisma` | Schema do PostgreSQL de producao |
+| `backend/Dockerfile` | Build do container backend |
+| `docker-compose.yml` | Orquestracao no EasyPanel (postgres + backend + frontend) |
+| `Dockerfile.frontend` | Build do container frontend |
+| `nginx.conf` | Proxy reverso do frontend para backend |
+| `.env.production` | Template de variaveis de ambiente para producao |
+| `backend/.env.example` | Referencia de configuracao do backend |
+| `backend/scripts/migrate.sh` | Script de migracao do banco |
+| `src/contexts/AuthContext.backend.tsx` | Autenticacao via JWT para modo backend |
+| `src/services/*.backend.service.ts` | Services que conectam ao Express API |
+| `src/config/backend.config.ts` | Flag `VITE_USE_BACKEND` |
+| `src/data/mock*.ts` e `src/mocks/` | Fallback de dados usado por componentes ativos |
+| `src/test/setup.ts` | Infraestrutura de testes (Vitest) |
+| Todas as edge functions (`supabase/functions/`) | Funcionalidades ativas no Cloud |
+| `README.md` | Documentacao do projeto |
+
+## Detalhes Tecnicos
+
+### Verificacao realizada
+- Busca por `import.*from.*microservices` no `src/`: 0 resultados
+- Busca por `import.*from.*NotFound`: 0 resultados
+- Busca por `import.*from.*Index` (pagina): 0 resultados
+- Busca por `import.*from.*chatwootMetricsApi`: 0 resultados
+- `App.tsx` nao referencia `Index.tsx` nem `NotFound.tsx` em nenhuma rota
+
+### Impacto
+- Zero impacto no build ou deploy
+- O `docker-compose.yml` nao referencia nada da pasta `microservices/`
+- O frontend continua funcionando identicamente em ambos os modos (Cloud e Backend)
+
+### Ordem de execucao
+1. Deletar pasta `microservices/` inteira
+2. Deletar arquivos individuais listados acima
+3. Commit e push para o GitHub
+4. Re-deploy no EasyPanel (automatico se conectado ao Git)
 
