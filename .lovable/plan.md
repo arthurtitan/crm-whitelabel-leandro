@@ -1,97 +1,98 @@
 
 
-## O que falta para subir na VPS com Docker
+## Verificacao Completa -- Dependencias Supabase Restantes
 
-### Status Atual: 85% pronto
-
-A infraestrutura de deploy (Docker, nginx, Prisma, seed, Dockerfile) esta **pronta**. O que falta sao ajustes no frontend para que todas as paginas funcionem sem Supabase quando `VITE_USE_BACKEND=true`.
+Apos auditoria completa do codigo, identifiquei **5 problemas pendentes** que impedem o deploy 100% independente do Supabase quando `VITE_USE_BACKEND=true`.
 
 ---
 
-### Pendencias Identificadas (7 itens)
+### Problemas Encontrados
 
-#### 1. SuperAdminDashboard -- KPIs ainda chamam Edge Function
+#### 1. AdminKanbanPage -- Usa `supabase.from('lead_tags')` e `tagsCloudService` diretamente
 
-O arquivo `src/pages/super-admin/SuperAdminDashboard.tsx` (linha 96) faz:
-```
-supabase.functions.invoke('super-admin-kpis')
-```
+**Arquivo**: `src/pages/admin/AdminKanbanPage.tsx`
 
-Precisa de um `if (useBackend)` que chame `apiClient.get('/api/dashboard/kpis')` no lugar. O endpoint ja existe no backend Express.
+- Linha 58: Importa `tagsCloudService` (que usa Supabase internamente)
+- Linha 124: Faz `supabase.from('lead_tags').select('*')` diretamente
+- Linhas 120, 172, 300, 322, 334, 395, 420, 601: Chama `tagsCloudService.*` (que internamente usa Supabase SDK)
 
-#### 2. useChatwootMetrics -- Chama Edge Function diretamente
+**Correcao**: Adicionar `if (useBackend)` que usa `tagsBackendService` + `apiClient` para buscar lead_tags.
 
-O hook `src/hooks/useChatwootMetrics.ts` usa `supabase.auth.getSession()` e faz fetch direto para a URL da Edge Function `fetch-chatwoot-metrics`. Precisa de versao backend que chame `apiClient.get('/api/chatwoot/metrics')` -- o endpoint ja existe no backend.
+#### 2. AdminLeadsPage -- Usa `supabase.from()` e `contactsCloudService` diretamente
 
-#### 3. AdminInsightsPage -- Import direto do supabase
+**Arquivo**: `src/pages/admin/AdminLeadsPage.tsx`
 
-O arquivo `src/pages/admin/AdminInsightsPage.tsx` (linha 24) importa `supabase` diretamente. Mesmo que os dados venham dos contextos (Finance, Calendar), o import esta la e pode ser usado em algum trecho. Precisa ser revisado e, se usado, substituido por chamadas via servico.
+- Linha 103: `supabase.from('funnels').select('id')` -- busca funnel default
+- Linha 111: `supabase.from('tags').select('*')` -- busca etapas do funnel
+- Linha 213: `contactsCloudService.deleteLead()` -- chama cloud service que usa Edge Function
 
-#### 4. contacts.cloud.service -- Edge Functions restantes
+**Correcao**: Adicionar `if (useBackend)` que usa `tagsBackendService.listStageTags()` para tags e `contactsBackendService.deleteLead()` para deletar.
 
-O `contacts.cloud.service.ts` chama 2 Edge Functions:
-- `create-chatwoot-contact` (linha 109)
-- `delete-lead` (linha 226)
+#### 3. CalendarContext -- `loadEvents` ainda usa `supabase.from('calendar_events')` no else
 
-O `contacts.backend.service.ts` ja existe mas precisa ter equivalentes para essas operacoes chamando o backend Express (que ja tem os endpoints em `/api/chatwoot/` e `/api/contacts/:id`).
+**Arquivo**: `src/contexts/CalendarContext.tsx`
 
-#### 5. tags.cloud.service -- Edge Functions e queries Supabase
+- Linhas 109-126: Quando `useBackend` e false, faz `supabase.from('calendar_events').select('*')` diretamente
+- Linhas 184, 258, 345: `supabase.auth.getSession()` no branch cloud
 
-O `tags.cloud.service.ts` ainda faz:
-- `supabase.from('tags').update(...)` (linhas 332-333)
-- `supabase.functions.invoke('update-chatwoot-contact-labels')` (linha 438)
-- `supabase.auth.getSession()` em multiplos locais
+**Status**: Ja tem branches `if (useBackend)` corretas. O codigo Supabase so executa quando `useBackend=false`. **OK -- nao bloqueia deploy VPS**.
 
-O `tags.backend.service.ts` ja existe mas precisa cobrir todos esses casos (reordenar tags, sync labels Chatwoot).
+#### 4. FinanceContext -- Import do supabase mas sem uso direto
 
-#### 6. users.cloud.service -- Edge Functions
+**Arquivo**: `src/contexts/FinanceContext.tsx`
 
-O `users.cloud.service.ts` faz:
-- `supabase.from('profiles').select(...)` (linha 32)
-- `supabase.functions.invoke` para criar/deletar usuarios via Edge Functions
-- `supabase.auth.getSession()` para obter token
+- Linha 6: Importa `supabase` mas busca mostrou zero chamadas `supabase.` no arquivo.
 
-O `users.backend.service.ts` ja existe -- precisa verificar se cobre create/delete com as mesmas funcionalidades.
+**Status**: O import existe mas nao e usado (ja foi migrado para `financeBackendService`). **OK -- nao bloqueia, mas o import morto deve ser removido quando `useBackend=true`**.
 
-#### 7. CalendarContext -- Edge Functions do Google OAuth
+#### 5. accounts.cloud.service -- `testChatwootConnection` usa Edge Function
 
-O `CalendarContext.tsx` ainda chama Edge Functions diretamente quando `useBackend` e false:
-- `google-calendar-status` (linha 190)
-- `google-calendar-sync` (linha 261)
-- `google-calendar-auth-url` (linha 287)
-- `google-calendar-disconnect` (linha 315)
+**Arquivo**: `src/services/accounts.cloud.service.ts`
 
-Ja tem o branch `useBackend` em alguns desses metodos, mas precisa garantir cobertura completa de todos os 4 endpoints.
+- Linha 222-249: `supabase.auth.getSession()` + fetch direto a `test-chatwoot-connection` Edge Function
+
+**Correcao**: O `accounts.backend.service.ts` precisa ter um metodo `testChatwootConnection` que chame `/api/chatwoot/test-connection` (ou similar) via apiClient. Verificar se o endpoint existe no backend Express.
 
 ---
 
-### O que sera feito
+### Resumo de Acoes Necessarias
 
-| Arquivo | Mudanca |
-|---------|---------|
-| `src/pages/super-admin/SuperAdminDashboard.tsx` | Adicionar condicional `useBackend` para KPIs via apiClient |
-| `src/hooks/useChatwootMetrics.ts` | Adicionar branch backend que chama `/api/chatwoot/metrics` via apiClient |
-| `src/pages/admin/AdminInsightsPage.tsx` | Remover import `supabase` desnecessario ou substituir por chamada backend |
-| `src/services/contacts.backend.service.ts` | Adicionar metodos `createChatwootContact` e `deleteLead` |
-| `src/services/tags.backend.service.ts` | Adicionar `reorderTags` e `syncChatwootLabels` |
-| `src/services/users.backend.service.ts` | Verificar/completar `create` e `delete` com confirmacao de senha |
-| `src/contexts/CalendarContext.tsx` | Garantir que todos os 4 metodos Google OAuth usem backend service quando flag ativa |
+| # | Arquivo | Problema | Acao |
+|---|---------|----------|------|
+| 1 | `AdminKanbanPage.tsx` | Usa `tagsCloudService` e `supabase.from('lead_tags')` | Adicionar branch `useBackend` usando `tagsBackendService` e `apiClient` |
+| 2 | `AdminLeadsPage.tsx` | Usa `supabase.from('funnels/tags')` e `contactsCloudService` | Adicionar branch `useBackend` usando backend services |
+| 3 | `CalendarContext.tsx` | Branch cloud usa Supabase | Sem acao -- branch `useBackend` ja esta correto |
+| 4 | `FinanceContext.tsx` | Import morto do supabase | Limpar import (nao critico) |
+| 5 | `accounts.cloud.service.ts` | `testChatwootConnection` usa Edge Function | Adicionar ao `accounts.backend.service.ts` |
 
-### O que ja esta pronto (nao precisa mexer)
+### Verificacoes Positivas (OK)
 
-- Docker Compose, Dockerfiles, nginx.conf
-- Backend Express completo (auth, CRUD, chatwoot, calendar, dashboard, insights)
-- Prisma schema + seed com dados de teste
-- AuthContext.backend.tsx com JWT
-- Flag `VITE_USE_BACKEND` + config
-- Services backend de accounts, users, contacts, tags, finance, calendar
-- `.env.production` template
-- `DEPLOY.md` com guia passo-a-passo
+- `SuperAdminDashboard.tsx` -- branch `useBackend` implementada corretamente
+- `useChatwootMetrics.ts` -- branch `useBackend` implementada corretamente
+- `AdminInsightsPage.tsx` -- branch `useBackend` implementada corretamente
+- `AuthContext.tsx` / `AuthContext.backend.tsx` -- separacao correta
+- `contacts.backend.service.ts` -- tem `createContactWithChatwoot` e `deleteLead`
+- `tags.backend.service.ts` -- tem todos os metodos necessarios (swap, sync, push labels)
+- `users.backend.service.ts` -- tem create/delete
+- `finance.backend.service.ts` -- tem fetchSales/Products/Contacts
+- `calendar.backend.service.ts` -- tem todos os metodos Google OAuth
+- `API_ENDPOINTS` -- todos os endpoints definidos
+- `Dockerfile.frontend` -- aceita `VITE_USE_BACKEND` como build arg
+- `docker-compose.yml` -- configurado para build com flag
 
-### Resultado
+### Detalhes Tecnicos da Implementacao
 
-Apos essas 7 correcoes, basta:
-1. Clonar o repo na VPS
-2. Copiar `.env.production` para `.env`
-3. Rodar `docker compose up -d --build`
-4. O sistema sobe com PostgreSQL proprio, backend Express e frontend Nginx -- sem nenhuma dependencia do Supabase
+**AdminKanbanPage.tsx** (maior mudanca):
+- Importar `useBackend`, `tagsBackendService`, `apiClient`, `API_ENDPOINTS`
+- No `fetchTagsData`: se `useBackend`, usar `tagsBackendService.listStageTags()` e `apiClient.get(API_ENDPOINTS.TAGS.BY_CONTACT(...))` para lead_tags
+- Em cada chamada `tagsCloudService.xxx()`: trocar por condicional que escolhe entre cloud e backend service
+
+**AdminLeadsPage.tsx**:
+- Importar `useBackend`, `tagsBackendService`, `contactsBackendService`
+- No `loadData`: se `useBackend`, usar `tagsBackendService.listStageTags()` em vez de queries Supabase
+- No `handleDeleteLead`: se `useBackend`, usar `contactsBackendService.deleteLead()`
+
+**accounts.backend.service.ts**:
+- Adicionar metodo `testChatwootConnection(baseUrl, accountId, apiKey)` que faz `apiClient.post('/api/chatwoot/test-connection', {...})`
+
+Apos essas 3 correcoes (2 paginas + 1 service), o sistema estara 100% pronto para deploy VPS sem Supabase.
