@@ -66,7 +66,36 @@ interface RequestOptions extends RequestInit {
 // Build URL with query params
 function buildUrl(endpoint: string, params?: object): string {
   const baseUrl = apiConfig.baseUrl;
-  const url = new URL(endpoint.startsWith('http') ? endpoint : `${baseUrl}${endpoint}`);
+  
+  let fullPath: string;
+  
+  if (endpoint.startsWith('http')) {
+    // Absolute URL — use as-is
+    fullPath = endpoint;
+  } else {
+    // Normalize: avoid /api/api duplication
+    // baseUrl is typically "/api" and endpoints already start with "/api/..."
+    let normalizedEndpoint = endpoint;
+    if (baseUrl && !baseUrl.startsWith('http')) {
+      // Relative base (e.g. "/api") — strip duplicate prefix from endpoint
+      const prefix = baseUrl.replace(/\/+$/, ''); // "/api"
+      if (normalizedEndpoint.startsWith(prefix + '/')) {
+        normalizedEndpoint = normalizedEndpoint.slice(prefix.length);
+      }
+      fullPath = `${window.location.origin}${prefix}${normalizedEndpoint}`;
+    } else if (baseUrl && baseUrl.startsWith('http')) {
+      // Absolute base URL
+      const prefix = new URL(baseUrl).pathname.replace(/\/+$/, '');
+      if (prefix && normalizedEndpoint.startsWith(prefix + '/')) {
+        normalizedEndpoint = normalizedEndpoint.slice(prefix.length);
+      }
+      fullPath = `${baseUrl.replace(/\/+$/, '')}${normalizedEndpoint}`;
+    } else {
+      fullPath = `${window.location.origin}${normalizedEndpoint}`;
+    }
+  }
+  
+  const url = new URL(fullPath);
   
   if (params) {
     Object.entries(params).forEach(([key, value]) => {

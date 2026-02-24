@@ -6,6 +6,13 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Starting database seed...');
 
+  // First-run guard: skip if users already exist
+  const existingUsers = await prisma.user.count();
+  if (existingUsers > 0) {
+    console.log('⏭️  Seed skipped — database already has users (' + existingUsers + ')');
+    return;
+  }
+
   // Hash passwords
   const adminPasswordHash = await bcrypt.hash('Admin@123', 12);
   const agentPasswordHash = await bcrypt.hash('Agent@123', 12);
