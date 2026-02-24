@@ -160,16 +160,24 @@ export default function SuperAdminAccountDetailPage() {
   const handleTestConnection = async () => {
     setConnectionStatus('loading');
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    // Mock validation - check if all fields are filled
-    if (editFormData.chatwootBaseUrl && editFormData.chatwootAccountId && editFormData.chatwootApiKey) {
-      setConnectionStatus('success');
-      toast.success('Conexão verificada com sucesso!');
-    } else {
+    try {
+      const result = await accountsCloudOrBackend.testChatwootConnection(
+        editFormData.chatwootBaseUrl,
+        editFormData.chatwootAccountId,
+        editFormData.chatwootApiKey
+      );
+      
+      if (result.success) {
+        setConnectionStatus('success');
+        const agentCount = result.agents?.length || 0;
+        toast.success(`Conexão verificada! ${agentCount} agente(s) encontrado(s).`);
+      } else {
+        setConnectionStatus('error');
+        toast.error(result.message || 'Falha na conexão com Chatwoot');
+      }
+    } catch (e: any) {
       setConnectionStatus('error');
-      toast.error('Preencha todos os campos da integração');
+      toast.error(e?.message || 'Erro inesperado ao testar conexão');
     }
   };
 

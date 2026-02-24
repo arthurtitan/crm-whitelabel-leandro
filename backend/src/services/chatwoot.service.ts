@@ -140,7 +140,13 @@ class ChatwootService {
     baseUrl: string,
     chatwootAccountId: string,
     apiKey: string
-  ): Promise<{ success: boolean; message: string }> {
+  ): Promise<{
+    success: boolean;
+    message: string;
+    agents?: any[];
+    inboxes?: any[];
+    labels?: any[];
+  }> {
     const config: ChatwootAccountConfig = {
       baseUrl: baseUrl.replace(/\/$/, ''),
       accountId: chatwootAccountId,
@@ -148,10 +154,42 @@ class ChatwootService {
     };
 
     try {
-      await this.makeRequest(config, '/agents');
+      // Primary validation: fetch agents
+      const agents = await this.makeRequest<any[]>(config, '/agents');
+      const mappedAgents = (Array.isArray(agents) ? agents : []).map((a: any) => ({
+        id: a.id,
+        name: a.name,
+        email: a.email,
+        role: a.role,
+        availability_status: a.availability_status,
+      }));
+
+      // Secondary: fetch inboxes and labels (best effort)
+      let inboxes: any[] = [];
+      let labels: any[] = [];
+
+      try {
+        const inboxesData = await this.makeRequest<{ payload?: any[] } | any[]>(config, '/inboxes');
+        const raw = Array.isArray(inboxesData) ? inboxesData : (inboxesData as any).payload || [];
+        inboxes = raw.map((i: any) => ({ id: i.id, name: i.name, channel_type: i.channel_type }));
+      } catch (e) {
+        logger.warn('Failed to fetch inboxes during connection test', { error: e });
+      }
+
+      try {
+        const labelsData = await this.makeRequest<{ payload?: any[] } | any[]>(config, '/labels');
+        const raw = Array.isArray(labelsData) ? labelsData : (labelsData as any).payload || [];
+        labels = raw.map((l: any) => ({ id: l.id, title: l.title, color: l.color }));
+      } catch (e) {
+        logger.warn('Failed to fetch labels during connection test', { error: e });
+      }
+
       return {
         success: true,
-        message: 'Conexão com Chatwoot estabelecida com sucesso!',
+        message: `Conexão com Chatwoot estabelecida com sucesso! ${mappedAgents.length} agente(s) encontrado(s).`,
+        agents: mappedAgents,
+        inboxes,
+        labels,
       };
     } catch (error) {
       if (error instanceof ChatwootApiError) {
