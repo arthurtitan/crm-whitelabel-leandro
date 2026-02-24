@@ -1,40 +1,110 @@
 
 
-## Criar Vendas de Teste para Validar Cards de Melhor/Menor Dia
+## Metricas Reais de Servidor no Dashboard Super Admin
 
-### Objetivo
-Inserir 5 vendas adicionais no banco de dados em datas diferentes (espalhadas nos ultimos 10 dias) com valores variados, para que os cards "Melhor Dia" e "Menor Dia" no painel de Insights mostrem resultados distintos.
+### O Que Existe Hoje
 
-### Dados a Inserir
+- `mockData.ts` define interfaces `ServerResources` (CPU, RAM, disco, rede) e `ServerConsumption` (historico por hora) com dados **falsos hardcoded**
+- O backend Express ja tem endpoints `/admin/server-resources` e `/admin/consumption-history` mas retornam `Math.random()` e `process.memoryUsage()` -- dados simulados
+- O `SuperAdminDashboard.tsx` **nao exibe nada disso** -- mostra apenas KPIs de negocio
 
-Todas as vendas usarao:
-- `account_id`: `5f2e617d-6d43-4a78-8f26-da5843855caf`
-- `product_id`: `a8c6121a-8872-4f61-a971-7fb4bbb95071` (Consulta Premium)
-- `responsavel_id`: `eda770a4-79e4-4656-94df-42a23e433f31`
-- `status`: `paid`
+### O Que Sera Feito
 
-| # | Contato | Valor | Metodo | Data (created_at / paid_at) |
-|---|---------|-------|--------|-----------------------------|
-| 1 | CNSLC | R$ 750,00 | credito | 2026-02-14 10:00 |
-| 2 | TRANSITAR | R$ 120,00 | dinheiro | 2026-02-16 14:30 |
-| 3 | SARAMAGO | R$ 1.500,00 | credito | 2026-02-18 09:15 |
-| 4 | Principios | R$ 80,00 | pix | 2026-02-20 16:45 |
-| 5 | Walace | R$ 500,00 | boleto | 2026-02-21 11:00 |
+Implementar coleta **real** de metricas do servidor no backend Express (que rodara na VPS) e exibir no painel Super Admin. Quando o sistema estiver rodando no Docker na sua VPS, os dados serao reais do servidor.
 
-### Resultado Esperado
+---
 
-Apos as insercoes:
-- **Melhor Dia**: 18/02 com R$ 1.500,00
-- **Menor Dia**: 20/02 com R$ 80,00
-- **Melhor Dia da Semana**: Quarta-feira (media mais alta)
-- **Horario de Pico**: Distribuido entre varios horarios
-- O grafico de Area mostrara uma curva com variacao real ao longo de ~10 dias
+### Mudancas
 
-### Passos Tecnicos
+#### 1. Atualizar `backend/src/services/dashboard.service.ts` -- Metricas Reais
 
-1. Inserir 5 registros na tabela `sales` com datas retroativas via `INSERT`
-2. Inserir 5 registros correspondentes na tabela `sale_items` vinculando cada venda ao produto
-3. Navegar ate a pagina de Insights e verificar visualmente que os cards mostram valores distintos
+Substituir os metodos `getServerResources()` e `getConsumptionHistory()` por implementacoes reais usando:
 
-Nao sera necessario alterar nenhum codigo -- a logica do `AdminInsightsPage.tsx` ja agrupa por dia e identifica max/min corretamente. O problema atual e apenas falta de dados variados.
+- **`os` (Node.js nativo)**: CPU cores, total RAM, free RAM, uptime do sistema
+- **`process.memoryUsage()`**: Memoria do processo Node.js
+- **`child_process.execSync`**: Executar `df -h` para disco e `cat /proc/stat` / `cat /proc/net/dev` para CPU detalhado e rede (Linux)
+- **Historico em memoria**: Array circular que armazena snapshots a cada 5 minutos (ultimas 24h = 288 pontos), persistido enquanto o processo roda
+
+Metricas retornadas:
+
+| Metrica | Fonte | Descricao |
+|---------|-------|-----------|
+| CPU % | `os.loadavg()` + `os.cpus()` | Uso medio de CPU |
+| RAM usada/total | `os.totalmem()` / `os.freemem()` | Memoria do servidor |
+| Disco usado/total | `df` command | Espaco em disco |
+| Rede in/out | `/proc/net/dev` | Trafego de rede (Linux) |
+| Uptime | `os.uptime()` | Tempo ativo do servidor |
+| Node.js heap | `process.memoryUsage()` | Memoria do backend |
+
+O historico de consumo sera coletado automaticamente com um `setInterval` a cada 5 minutos, armazenando em um array circular na memoria do processo.
+
+#### 2. Criar `backend/src/services/metrics-collector.ts` -- Coletor Autonomo
+
+Classe singleton que:
+- Inicia com o servidor (`bootstrap()`)
+- Coleta snapshot de CPU/RAM/disco/rede a cada 5 minutos
+- Armazena ultimas 24h em array circular (288 pontos)
+- Expoe metodos `getCurrentResources()` e `getHistory(period)`
+- Funciona em Linux (VPS) com fallback para macOS/Windows (desenvolvimento)
+
+#### 3. Atualizar `SuperAdminDashboard.tsx` -- Exibir Metricas
+
+Adicionar secao "Monitoramento do Servidor" abaixo dos KPIs de negocio:
+
+**Cards de recursos (tempo real):**
+- CPU: barra de progresso com % de uso
+- RAM: usado/total em GB com barra
+- Disco: usado/total em GB com barra
+- Rede: bandwidth in/out em MB/s
+- Uptime: dias/horas ativo
+
+**Grafico de historico (Recharts AreaChart):**
+- Linhas de CPU e RAM nas ultimas 24h
+- Toggle para alternar entre 24h / 7d / 30d
+- Auto-refresh a cada 60 segundos
+
+**Consumo semanal (BarChart):**
+- Barras com media de CPU/RAM por dia da semana
+
+#### 4. Criar componentes de UI
+
+- `src/components/dashboard/ServerResourceCard.tsx` -- Card individual com barra de progresso
+- `src/components/dashboard/ServerConsumptionChart.tsx` -- Grafico de historico com Recharts
+- `src/components/dashboard/WeeklyConsumptionChart.tsx` -- Consumo semanal
+
+#### 5. Conectar frontend ao backend
+
+O `SuperAdminDashboard.tsx` chamara o backend Express diretamente (nao Edge Function) via `apiClient`:
+- `GET /api/admin/server-resources` -- metricas atuais
+- `GET /api/admin/consumption-history?period=24h` -- historico
+
+Com auto-refresh de 60 segundos via `setInterval` no `useEffect`.
+
+#### 6. Limpar mocks em `src/data/mockData.ts`
+
+Remover:
+- Interface `ServerConsumption`
+- Interface `ServerResources`
+- `mockServerConsumptionHistory`
+- `getServerResources()`
+- `mockWeeklyConsumption`
+
+---
+
+### Como Funcionara
+
+Enquanto o sistema roda no Lovable Cloud, as metricas mostrarao dados do processo Node.js (limitados). Quando voce subir no Docker na VPS (Hostinger, AWS, etc.), as metricas serao **reais do servidor** -- CPU, RAM, disco e rede da sua maquina.
+
+### Arquivos Modificados/Criados
+
+| Arquivo | Acao |
+|---------|------|
+| `backend/src/services/metrics-collector.ts` | Criar -- coletor autonomo de metricas do OS |
+| `backend/src/services/dashboard.service.ts` | Modificar -- usar metrics-collector real |
+| `backend/src/server.ts` | Modificar -- iniciar metrics-collector no bootstrap |
+| `src/components/dashboard/ServerResourceCard.tsx` | Criar -- card com barra de progresso |
+| `src/components/dashboard/ServerConsumptionChart.tsx` | Criar -- grafico de historico |
+| `src/components/dashboard/WeeklyConsumptionChart.tsx` | Criar -- consumo semanal |
+| `src/pages/super-admin/SuperAdminDashboard.tsx` | Modificar -- adicionar secao de monitoramento |
+| `src/data/mockData.ts` | Modificar -- remover mocks de servidor |
 
