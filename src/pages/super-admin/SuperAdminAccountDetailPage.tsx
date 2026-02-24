@@ -1,6 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { accountsCloudService, Account as CloudAccount } from '@/services/accounts.cloud.service';
+import { accountsCloudOrBackend } from '@/services';
+import type { Account as CloudAccount } from '@/services/accounts.cloud.service';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -97,7 +98,7 @@ export default function SuperAdminAccountDetailPage() {
 
       try {
         setIsLoading(true);
-        const accountData = await accountsCloudService.getById(accountId);
+        const accountData = await accountsCloudOrBackend.getById(accountId);
         setAccount(accountData);
         setError(null);
       } catch (err: any) {
