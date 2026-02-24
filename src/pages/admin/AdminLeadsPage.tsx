@@ -60,8 +60,11 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { useBackend } from '@/config/backend.config';
 import type { Tag as CloudTag } from '@/services/tags.cloud.service';
+import { tagsBackendService } from '@/services/tags.backend.service';
 import { contactsCloudService } from '@/services/contacts.cloud.service';
+import { contactsBackendService } from '@/services/contacts.backend.service';
 
 export default function AdminLeadsPage() {
   const { account, user } = useAuth();
@@ -99,25 +102,35 @@ export default function AdminLeadsPage() {
         !!account?.chatwoot_account_id
       );
 
-      // Load stages from default funnel
-      const { data: funnelData } = await supabase
-        .from('funnels')
-        .select('id')
-        .eq('account_id', accountId)
-        .eq('is_default', true)
-        .maybeSingle();
+      if (useBackend) {
+        // Backend: fetch stage tags via backend service
+        try {
+          const tags = await tagsBackendService.listStageTags(accountId);
+          if (tags) setStages(tags as CloudTag[]);
+        } catch (err) {
+          console.error('Error loading stages via backend:', err);
+        }
+      } else {
+        // Cloud: use Supabase directly
+        const { data: funnelData } = await supabase
+          .from('funnels')
+          .select('id')
+          .eq('account_id', accountId)
+          .eq('is_default', true)
+          .maybeSingle();
 
-      if (funnelData?.id) {
-        const { data: tagsData } = await supabase
-          .from('tags')
-          .select('*')
-          .eq('funnel_id', funnelData.id)
-          .eq('type', 'stage')
-          .eq('ativo', true)
-          .order('ordem', { ascending: true });
+        if (funnelData?.id) {
+          const { data: tagsData } = await supabase
+            .from('tags')
+            .select('*')
+            .eq('funnel_id', funnelData.id)
+            .eq('type', 'stage')
+            .eq('ativo', true)
+            .order('ordem', { ascending: true });
 
-        if (tagsData) {
-          setStages(tagsData as CloudTag[]);
+          if (tagsData) {
+            setStages(tagsData as CloudTag[]);
+          }
         }
       }
     };
@@ -210,13 +223,16 @@ export default function AdminLeadsPage() {
       return;
     }
 
-    const result = await contactsCloudService.deleteLead(contactId);
+    const result = useBackend
+      ? await contactsBackendService.deleteLead(contactId)
+      : await contactsCloudService.deleteLead(contactId);
+
     if (!result.success) {
       toast.error(result.error || 'Erro ao remover lead');
       return;
     }
 
-    if (result.chatwoot_attempted && result.chatwoot_deleted === false) {
+    if ('chatwoot_attempted' in result && result.chatwoot_attempted && result.chatwoot_deleted === false) {
       toast.warning(`Lead removido do CRM, mas não consegui remover no Chatwoot: ${result.chatwoot_error || 'erro desconhecido'}`);
     } else {
       toast.success('Lead removido com sucesso!');
