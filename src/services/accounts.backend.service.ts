@@ -68,8 +68,10 @@ export const accountsBackendService = {
     return mapAccount(raw);
   },
 
-  async delete(id: string): Promise<void> {
-    await apiClient.delete(API_ENDPOINTS.ACCOUNTS.DELETE(id));
+  async delete(id: string, password?: string): Promise<void> {
+    await apiClient.delete(API_ENDPOINTS.ACCOUNTS.DELETE(id), {
+      headers: password ? { 'x-confirm-password': password } : undefined,
+    });
   },
 
   async getUsers(accountId: string) {

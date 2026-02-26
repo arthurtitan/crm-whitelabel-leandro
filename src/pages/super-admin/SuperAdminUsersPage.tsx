@@ -299,7 +299,7 @@ export default function SuperAdminUsersPage() {
     return baseValid && accountValid && permissionsValid;
   };
 
-  const handleUpdate = () => {
+  const handleUpdate = async () => {
     if (!editingUser) return;
     
     if (editFormData.password && editFormData.password !== editFormData.confirmPassword) {
@@ -311,30 +311,50 @@ export default function SuperAdminUsersPage() {
       return;
     }
     
-    const updatedUser: UserWithRole = {
-      ...editingUser,
-      nome: editFormData.nome,
-      email: editFormData.email,
-      role: editFormData.role,
-      account_id: editFormData.role === 'super_admin' ? null : editFormData.account_id || null,
-      status: editFormData.status,
-      permissions: editFormData.role === 'agent' ? editFormData.permissions : undefined,
-      updated_at: new Date().toISOString(),
-    };
-    
-    setUsers(users.map((u) => u.id === editingUser.id ? updatedUser : u));
-    setEditingUser(null);
-    setEditFormData({
-      nome: '',
-      email: '',
-      role: 'agent',
-      account_id: '',
-      status: 'active',
-      password: '',
-      confirmPassword: '',
-      permissions: [],
-    });
-    toast.success('Usuário atualizado com sucesso!');
+    try {
+      const updatePayload: any = {
+        nome: editFormData.nome,
+        email: editFormData.email,
+        role: editFormData.role,
+        account_id: editFormData.role === 'super_admin' ? null : editFormData.account_id || null,
+        status: editFormData.status,
+        permissions: editFormData.role === 'agent' ? editFormData.permissions : undefined,
+      };
+      if (editFormData.password) {
+        updatePayload.password = editFormData.password;
+      }
+
+      await usersCloudOrBackend.update(editingUser.user_id || editingUser.id, updatePayload);
+      
+      const updatedUser: UserWithRole = {
+        ...editingUser,
+        ...updatePayload,
+        updated_at: new Date().toISOString(),
+      };
+      
+      setUsers(users.map((u) => u.id === editingUser.id ? updatedUser : u));
+      setEditingUser(null);
+      setEditFormData({
+        nome: '',
+        email: '',
+        role: 'agent',
+        account_id: '',
+        status: 'active',
+        password: '',
+        confirmPassword: '',
+        permissions: [],
+      });
+      toast.success('Usuário atualizado com sucesso!');
+    } catch (error: any) {
+      if (error?.status === 404) {
+        // User doesn't exist in DB - remove from local state
+        setUsers(users.filter((u) => u.id !== editingUser.id));
+        setEditingUser(null);
+        toast.error('Usuário não encontrado no banco de dados. Removido da lista.');
+      } else {
+        toast.error(error.message || 'Erro ao atualizar usuário');
+      }
+    }
   };
 
   // Opens delete confirmation modal

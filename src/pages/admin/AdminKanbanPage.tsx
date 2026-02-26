@@ -625,11 +625,13 @@ export default function AdminKanbanPage() {
                       { name: 'Perdido', color: '#EF4444', ordem: 6 },
                     ];
                     // Get or create default funnel
-                    const funnels = await apiClient.get<any[]>(API_ENDPOINTS.FUNNELS.LIST, { params: { accountId } });
-                    let funnelId = funnels.find((f: any) => f.is_default)?.id;
+                    const funnelsResponse = await apiClient.get<any>(API_ENDPOINTS.FUNNELS.LIST, { params: { accountId } });
+                    const funnelsList = Array.isArray(funnelsResponse) ? funnelsResponse : (funnelsResponse?.data || []);
+                    let funnelId = funnelsList.find((f: any) => f.is_default || f.isDefault)?.id;
                     if (!funnelId) {
                       const newFunnel = await apiClient.post<any>(API_ENDPOINTS.FUNNELS.CREATE, { name: 'Funil Principal', accountId, isDefault: true });
-                      funnelId = newFunnel.id;
+                      const created = newFunnel?.data ?? newFunnel;
+                      funnelId = created.id;
                     }
                     for (const s of defaultStages) {
                       await tagsBackendService.createStageTag({ accountId, funnelId, name: s.name, color: s.color, ordem: s.ordem });

@@ -18,7 +18,7 @@ export const API_ENDPOINTS = {
     ME: '/api/auth/me',
     FORGOT_PASSWORD: '/api/auth/forgot-password',
     RESET_PASSWORD: '/api/auth/reset-password',
-    IMPERSONATE: (userId: string) => `/api/auth/impersonate/${userId}`,
+    IMPERSONATE: (userId: string) => `/api/users/${userId}/impersonate`,
     EXIT_IMPERSONATION: '/api/auth/exit-impersonation',
   },
 

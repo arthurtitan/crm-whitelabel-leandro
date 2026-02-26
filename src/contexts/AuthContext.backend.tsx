@@ -204,19 +204,21 @@ export function BackendAuthProvider({ children }: { children: ReactNode }) {
     if (authState.user?.role !== 'super_admin') return;
 
     try {
-      const response = await apiClient.post<{ user: any; account: any }>(
+      const raw = await apiClient.post<any>(
         API_ENDPOINTS.AUTH.IMPERSONATE(userId)
       );
+      // Support envelope { data: { user, account } }
+      const response = raw?.data ?? raw;
 
       const targetUser: User = {
         id: response.user.id,
         email: response.user.email,
         nome: response.user.nome,
         role: response.user.role,
-        account_id: response.user.account_id,
+        account_id: response.user.account_id || response.user.accountId,
         permissions: response.user.permissions || ['dashboard'],
         status: response.user.status,
-        chatwoot_agent_id: response.user.chatwoot_agent_id,
+        chatwoot_agent_id: response.user.chatwoot_agent_id || response.user.chatwootAgentId,
       };
 
       setOriginalUser(authState.user);
