@@ -1,109 +1,143 @@
 
-Objetivo
-- Fazer a integração Chatwoot funcionar de verdade em produção (com agentes reais), eliminando o falso “Conexão estabelecida” com “0 agentes” quando existem agentes na conta.
 
-Diagnóstico confirmado
-1) Contrato inconsistente entre modos Cloud x Backend
-- No fluxo de produção (modo backend), a tela “Criar Nova Conta” chama `accountsCloudOrBackend.testChatwootConnection(...)`.
-- Em backend mode isso vai para `src/services/accounts.backend.service.ts` → `POST /api/chatwoot/test-connection`.
-- Esse endpoint (`backend/src/controllers/chatwoot.controller.ts` + `backend/src/services/chatwoot.service.ts`) hoje retorna apenas `{ success, message }` sem `agents`.
-- A UI em `src/pages/super-admin/SuperAdminAccountsPage.tsx` monta `agents` a partir de `result.agents || []`, então acaba sempre em 0 mesmo com conexão válida.
+# Correcao de 10 Erros de Producao
 
-2) Evidência visual bate com o código
-- O print mostra exatamente: sucesso + 0 agentes.
-- Isso é o comportamento esperado do bug atual (não da API externa).
+## Resumo
 
-3) Problema secundário de confiabilidade
-- `src/pages/super-admin/SuperAdminAccountDetailPage.tsx` ainda tem teste de conexão simulado (mock local) e pode dar feedback falso.
-- Isso não é a origem do print atual, mas mantém inconsistência operacional em produção.
+Correcoes cirurgicas nos arquivos do frontend e backend para resolver 10 erros reais que ocorrem em producao (modo backend/VPS). Todas as alteracoes respeitam o padrao hibrido Cloud/Backend existente.
 
-Implementação proposta (rápida e segura)
-1) Padronizar resposta do backend para teste de conexão
-- Arquivos:
-  - `backend/src/services/chatwoot.service.ts`
-  - `backend/src/controllers/chatwoot.controller.ts`
-- Ajuste:
-  - Fazer `testConnectionWithCredentials` retornar payload completo:
-    - `success`
-    - `message`
-    - `agents`
-    - `inboxes` (quando disponível)
-    - `labels` (quando disponível)
-  - Estratégia:
-    - `agents` = validação primária (se falhar, `success: false`)
-    - `inboxes/labels` = best effort (não derruba sucesso principal, igual comportamento tolerante já usado em Cloud)
-  - Benefício:
-    - Mesmo contrato no backend e no Cloud, evitando divergência entre ambientes.
+---
 
-2) Corrigir camada frontend do backend service
-- Arquivo:
-  - `src/services/accounts.backend.service.ts`
-- Ajuste:
-  - Consumir e normalizar o novo payload completo.
-  - Garantir `agents` vindo corretamente para a tela.
-  - Atualizar `fetchChatwootAgents` para usar endpoint apropriado (`/api/chatwoot/agents/fetch`) como fallback de compatibilidade, caso backend antigo esteja rodando temporariamente.
-- Benefício:
-  - Evita 0 agentes por falta de campo na resposta e reduz risco em deploy parcial.
+## Erro 1: Usuario duplicado redireciona para login (409)
 
-3) Remover falso positivo no detalhe da conta (hardening de produção)
-- Arquivo:
-  - `src/pages/super-admin/SuperAdminAccountDetailPage.tsx`
-- Ajuste:
-  - Trocar teste simulado por chamada real `accountsCloudOrBackend.testChatwootConnection(...)`.
-  - Exibir resultado real (sucesso/erro e contagem de agentes).
-- Benefício:
-  - Operação consistente para suporte e administração (sem “sucesso fake”).
+**Arquivo:** `src/pages/super-admin/SuperAdminAccountsPage.tsx` (linha ~327)
+**Problema:** `handleUserCreated` nao trata erro 409 (email duplicado). O toast generico confunde o usuario.
+**Correcao:** No catch do `handleUserCreated`, verificar `error.status === 409` e mostrar mensagem especifica ("Este email ja esta cadastrado") + permitir pular o agente em vez de travar.
 
-4) Mensagens e UX de validação
-- Arquivo:
-  - `src/pages/super-admin/SuperAdminAccountsPage.tsx`
-- Ajuste:
-  - Manter UI existente, mas garantir que:
-    - Se `success=true` e `agents.length>0`, exiba quantidade correta e libere passo de importação.
-    - Se `success=true` e `agents.length===0`, mostrar aviso de “credenciais válidas, sem agentes na conta” (estado real, não erro técnico).
-    - Se `success=false`, exibir mensagem de erro técnica retornada pelo backend.
-- Benefício:
-  - Feedback claro para usuário final e menos ambiguidade operacional.
+---
 
-Plano de validação (fim a fim)
-1) Teste funcional principal (produção)
-- Abrir “Criar Nova Conta” com:
-  - URL: `https://atendimento.gleps.com.br`
-  - Account ID: `1`
-  - token novo informado
-- Resultado esperado:
-  - “Conexão estabelecida!”
-  - contagem > 0 agentes
-  - botão muda para “Próximo: Importar Agentes”
-  - lista de agentes aparece na etapa seguinte
+## Erro 2: "Erro ao assumir identidade"
 
-2) Teste de erro controlado
-- Trocar token por inválido.
-- Resultado esperado:
-  - `success=false`
-  - mensagem “API Key inválida ou sem permissões” (ou equivalente)
-  - nenhum falso “conectado”
+**Arquivos:**
+- `src/api/endpoints.ts` (linha 21)
+- `src/contexts/AuthContext.backend.tsx` (funcao `impersonate`)
 
-3) Regressão rápida
-- Login e listagem de contas continuam funcionando.
-- Criação de conta sem Chatwoot continua intacta.
-- Endpoint `/api/health` e frontend `/health` continuam OK.
+**Problema:** Frontend chama `POST /api/auth/impersonate/:id` mas a rota real e `POST /api/users/:id/impersonate` (definida em `user.routes.ts` linha 17).
+**Correcao:**
+- Alterar `API_ENDPOINTS.AUTH.IMPERSONATE` para usar o path correto: `` `/api/users/${userId}/impersonate` ``
+- No `impersonate` do `BackendAuthProvider`, extrair `response.data` corretamente (padrao envelope do backend)
 
-Sequência de execução
-1. Backend: ajustar serviço/controlador do Chatwoot.
-2. Frontend service: ajustar normalização em `accounts.backend.service.ts`.
-3. UI hardening: remover mock em `SuperAdminAccountDetailPage.tsx`.
-4. QA E2E no fluxo de criação/importação de agentes.
-5. Publicar.
+---
 
-Riscos e mitigação
-- Risco: deploy parcial (frontend novo com backend antigo).
-  - Mitigação: fallback em `accounts.backend.service.ts` para buscar agentes via `/api/chatwoot/agents/fetch`.
-- Risco: inboxes/labels variam entre instâncias Chatwoot.
-  - Mitigação: tratar como opcional, sem impedir sucesso quando agentes são válidos.
+## Erro 3: "Referencia de registro inexistente" ao atualizar usuario
 
-Critérios de aceite
-- O fluxo de criação de conta em produção deixa de mostrar falso “0 agentes” quando há agentes reais.
-- O wizard avança para importação com dados reais.
-- Erros de token/credenciais são mostrados corretamente.
-- Tela de detalhe de conta também usa teste real (sem simulação).
+**Arquivo:** `src/pages/super-admin/SuperAdminUsersPage.tsx` (linhas 302-338)
+**Problema:** `handleUpdate` atualiza apenas estado local, nunca chama a API real. Usuarios "fantasma" (mock) nao existem no banco.
+**Correcao:** Tornar `handleUpdate` async e chamar `usersCloudOrBackend.update()`. Tratar erro 404 removendo da lista local.
+
+---
+
+## Erro 4: "Configuracao de senha requerida" ao excluir conta
+
+**Arquivos:**
+- `src/services/accounts.backend.service.ts` (linha 71-73)
+- `src/pages/super-admin/SuperAdminAccountsPage.tsx` (linhas 388-406)
+
+**Problema:** Backend exige header `x-confirm-password` para DELETE de conta, mas o frontend: (a) valida senha localmente contra string fixa `'Admin@123'` e (b) nao envia a senha no header.
+**Correcao:**
+- Alterar `accountsBackendService.delete(id)` para aceitar `password` e enviar como header `x-confirm-password`
+- Alterar `handleDelete` para remover validacao local fixa e passar `deletePassword` para o service
+
+---
+
+## Erro 5: "Chatwoot nao configurado" ao acessar conta
+
+**Arquivo:** `backend/src/middlewares/auth.middleware.ts` (linhas 74-81)
+**Problema:** `req.account` no middleware de autenticacao omite campos Chatwoot (`chatwootBaseUrl`, `chatwootAccountId`, `chatwootApiKey`). O endpoint `/api/auth/me` retorna dados incompletos.
+**Correcao:** Adicionar os 3 campos Chatwoot ao objeto `req.account` no middleware. O `authService.getMe()` ja retorna esses campos, mas o middleware que alimenta `req.account` nao.
+
+---
+
+## Erro 6: "(intermediate value).find is not a function" no template Kanban
+
+**Arquivo:** `src/pages/admin/AdminKanbanPage.tsx` (linha 628-629)
+**Problema:** `apiClient.get('/api/funnels')` retorna `{ data: [...], meta: {} }` mas o codigo faz `.find()` direto no resultado.
+**Correcao:** Normalizar resposta: `const items = Array.isArray(funnels) ? funnels : (funnels?.data || []); let funnelId = items.find(...)?.id;`
+
+---
+
+## Erro 7: "Erro ao obter funil" ao criar etapa manual
+
+**Arquivo:** `src/components/kanban/CreateStageDialog.tsx` (linhas 74-95)
+**Problema:** Sempre usa `tagsCloudService` (Supabase direto), que falha em modo backend por falta de sessao Supabase.
+**Correcao:**
+- Importar `useBackend` e `tagsBackendService`
+- Adicionar metodos `getDefaultFunnel` e `createDefaultFunnel` ao `tagsBackendService`
+- No `handleSubmit`, usar servico backend quando `useBackend=true`
+
+**Arquivo adicional:** `src/services/tags.backend.service.ts`
+- Adicionar `getDefaultFunnel(accountId)` que chama `GET /api/funnels?accountId=...`
+- Adicionar `createDefaultFunnel(accountId)` que chama `POST /api/funnels`
+
+---
+
+## Erro 8: "new row violates RLS policy for contacts"
+
+**Arquivo:** `src/contexts/FinanceContext.tsx` (linhas 440-466)
+**Problema:** `createContact` cria contato apenas em estado local (mock). Em modo backend, deveria chamar a API.
+**Correcao:** Quando `useBackend=true`, chamar `contactsBackendService.createContact()` e usar o ID retornado pelo backend.
+
+---
+
+## Erro 9: Google Calendar "Erro interno do servidor"
+
+**Arquivo:** `supabase/functions/google-calendar-auth-url/index.ts`
+**Problema:** A edge function usa `supabase.auth.getUser()` que depende de sessao Supabase Auth. Em modo backend (JWT proprio), nao ha sessao Supabase valida.
+**Observacao:** Este erro requer investigacao adicional sobre se o Google Calendar deve ser portado para o backend Express ou se os secrets (`GOOGLE_CLIENT_ID`, `GOOGLE_REDIRECT_URI`) estao configurados. Por ora, adicionaremos tratamento de erro melhorado e documentaremos a limitacao.
+
+---
+
+## Erro 10: Produtos nao persistem
+
+**Arquivo:** `src/contexts/ProductContext.tsx`
+**Problema:** Todo o contexto opera com estado local e mock data. Nunca chama a API real.
+**Correcao:** Integrar com `productsService` existente:
+- `useEffect` no mount para buscar via `productsService.list()`
+- `createProduct` chama `productsService.create()`
+- `updateProduct` chama `productsService.update()`
+- `deleteProduct` chama `productsService.delete()`
+- `toggleProductStatus` chama `productsService.toggleStatus()`
+
+---
+
+## Secao Tecnica: Ordem de Execucao
+
+1. `backend/src/middlewares/auth.middleware.ts` - Adicionar campos Chatwoot (Erro 5)
+2. `src/api/endpoints.ts` - Corrigir path impersonate (Erro 2)
+3. `src/contexts/AuthContext.backend.tsx` - Normalizar response impersonate (Erro 2)
+4. `src/services/accounts.backend.service.ts` - Delete com senha (Erro 4)
+5. `src/pages/super-admin/SuperAdminAccountsPage.tsx` - Delete + tratamento 409 (Erros 1, 4)
+6. `src/pages/super-admin/SuperAdminUsersPage.tsx` - Update via API real (Erro 3)
+7. `src/pages/admin/AdminKanbanPage.tsx` - Normalizar funnels (Erro 6)
+8. `src/services/tags.backend.service.ts` - Adicionar getDefaultFunnel/createDefaultFunnel (Erro 7)
+9. `src/components/kanban/CreateStageDialog.tsx` - Usar backend service (Erro 7)
+10. `src/contexts/FinanceContext.tsx` - createContact backend mode (Erro 8)
+11. `src/contexts/ProductContext.tsx` - Integrar com API real (Erro 10)
+12. Google Calendar - Investigar e documentar limitacao (Erro 9)
+
+## Arquivos Modificados
+
+| Arquivo | Erros |
+|---------|-------|
+| `backend/src/middlewares/auth.middleware.ts` | 5 |
+| `src/api/endpoints.ts` | 2 |
+| `src/contexts/AuthContext.backend.tsx` | 2 |
+| `src/services/accounts.backend.service.ts` | 4 |
+| `src/pages/super-admin/SuperAdminAccountsPage.tsx` | 1, 4 |
+| `src/pages/super-admin/SuperAdminUsersPage.tsx` | 3 |
+| `src/pages/admin/AdminKanbanPage.tsx` | 6 |
+| `src/services/tags.backend.service.ts` | 7 |
+| `src/components/kanban/CreateStageDialog.tsx` | 7 |
+| `src/contexts/FinanceContext.tsx` | 8 |
+| `src/contexts/ProductContext.tsx` | 10 |
+
