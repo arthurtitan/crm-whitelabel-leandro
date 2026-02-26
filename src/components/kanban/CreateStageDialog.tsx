@@ -15,6 +15,8 @@ import {
 import { Plus, Palette, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { tagsCloudService } from '@/services/tags.cloud.service';
+import { tagsBackendService } from '@/services/tags.backend.service';
+import { useBackend } from '@/config/backend.config';
 
 const PRESET_COLORS = [
   '#0EA5E9', // Sky blue
@@ -72,12 +74,14 @@ export function CreateStageDialog({ trigger, onStageCreated }: CreateStageDialog
     setIsSubmitting(true);
 
     try {
+      const service = useBackend ? tagsBackendService : tagsCloudService;
+      
       // Get or create default funnel
-      let funnel = await tagsCloudService.getDefaultFunnel(accountId);
+      let funnel = await service.getDefaultFunnel(accountId);
       
       if (!funnel) {
         // Create a default funnel if it doesn't exist
-        funnel = await tagsCloudService.createDefaultFunnel(accountId);
+        funnel = await service.createDefaultFunnel(accountId);
       }
 
       if (!funnel) {
@@ -87,7 +91,7 @@ export function CreateStageDialog({ trigger, onStageCreated }: CreateStageDialog
       }
 
       // Create the stage tag
-      await tagsCloudService.createStageTag({
+      await service.createStageTag({
         accountId,
         funnelId: funnel.id,
         name: name.trim(),

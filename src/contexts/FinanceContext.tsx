@@ -5,6 +5,7 @@ import { useTagContext } from '@/contexts/TagContext';
 import { useBackend } from '@/config/backend.config';
 import { supabase } from '@/integrations/supabase/client';
 import { financeBackendService } from '@/services/finance.backend.service';
+import { contactsBackendService } from '@/services/contacts.backend.service';
 import { mergeContacts } from '@/utils/dataSync';
 import { 
   mockLeadFunnelStates, 
@@ -439,6 +440,45 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
   // Create contact
   const createContact = useCallback(
     (data: CreateContactData): { success: boolean; error?: string; contactId?: string } => {
+      if (useBackend) {
+        // In backend mode, create via API asynchronously but return sync-compatible result
+        const tempId = `contact-${Date.now()}`;
+        // Optimistic local update
+        const newContact: Contact = {
+          id: tempId,
+          account_id: accountId,
+          nome: data.nome,
+          telefone: data.telefone,
+          email: data.email,
+          origem: data.origem as ContactOrigin,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        setContacts((prev) => [newContact, ...prev]);
+
+        // Fire API call in background and update with real ID
+        (async () => {
+          try {
+            const result = await contactsBackendService.createContact({
+              nome: data.nome,
+              telefone: data.telefone,
+              email: data.email,
+              origem: data.origem as ContactOrigin,
+              account_id: accountId,
+            });
+            if (result.contact_id) {
+              setContacts((prev) =>
+                prev.map((c) => (c.id === tempId ? { ...c, id: result.contact_id! } : c))
+              );
+            }
+          } catch (err: any) {
+            console.error('Error creating contact via backend:', err);
+          }
+        })();
+
+        return { success: true, contactId: tempId };
+      }
+
       const newContact: Contact = {
         id: `contact-${Date.now()}`,
         account_id: accountId,

@@ -77,6 +77,9 @@ export async function authenticate(
         nome: user.account.nome,
         status: user.account.status,
         timezone: user.account.timezone,
+        chatwootBaseUrl: (user.account as any).chatwootBaseUrl ?? null,
+        chatwootAccountId: (user.account as any).chatwootAccountId ?? null,
+        chatwootApiKey: (user.account as any).chatwootApiKey ?? null,
       };
     }
 

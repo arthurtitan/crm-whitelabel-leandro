@@ -148,7 +148,7 @@ export const accountsCloudService = {
   /**
    * Delete an account
    */
-  async delete(id: string): Promise<void> {
+  async delete(id: string, _password?: string): Promise<void> {
     const { error } = await supabase
       .from('accounts')
       .delete()

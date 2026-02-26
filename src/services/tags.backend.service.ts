@@ -123,4 +123,19 @@ export const tagsBackendService = {
   async getTagHistory(contactId: string) {
     return apiClient.get<any[]>(API_ENDPOINTS.TAGS.HISTORY(contactId));
   },
+
+  async getDefaultFunnel(accountId: string) {
+    const response = await apiClient.get<any>(API_ENDPOINTS.FUNNELS.LIST, { params: { accountId } });
+    const funnels = Array.isArray(response) ? response : (response?.data || []);
+    return funnels.find((f: any) => f.is_default || f.isDefault) || funnels[0] || null;
+  },
+
+  async createDefaultFunnel(accountId: string) {
+    const response = await apiClient.post<any>(API_ENDPOINTS.FUNNELS.CREATE, {
+      name: 'Funil Principal',
+      accountId,
+      isDefault: true,
+    });
+    return response?.data ?? response;
+  },
 };

@@ -325,6 +325,12 @@ export default function SuperAdminAccountsPage() {
         closeAndReset();
       }
     } catch (error: any) {
+      const status = error?.status || error?.response?.status;
+      if (status === 409) {
+        toast.warning('Este email já está cadastrado. Pulando para o próximo agente.');
+        handleSkipCurrentAgent();
+        return;
+      }
       toast.error(`Erro ao criar usuário: ${error.message}`);
     }
   };
@@ -386,14 +392,14 @@ export default function SuperAdminAccountsPage() {
   };
 
   const handleDelete = async () => {
-    if (!deleteAccount || deletePassword !== 'Admin@123') {
-      toast.error('Senha incorreta!');
+    if (!deleteAccount || !deletePassword) {
+      toast.error('Digite sua senha para confirmar!');
       return;
     }
 
     try {
       setIsSaving(true);
-      await accountsCloudOrBackend.delete(deleteAccount.id);
+      await accountsCloudOrBackend.delete(deleteAccount.id, deletePassword);
       await loadAccounts();
       setDeleteAccount(null);
       setDeletePassword('');
