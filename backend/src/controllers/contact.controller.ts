@@ -230,6 +230,21 @@ export class ContactController {
       next(error);
     }
   }
+
+  /**
+   * GET /lead-tags
+   * List all lead_tags for the account (used by Kanban)
+   */
+  async listLeadTags(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const accountId = req.user!.accountId!;
+      const result = await contactService.listLeadTags(accountId);
+
+      res.json({ data: result });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export const contactController = new ContactController();

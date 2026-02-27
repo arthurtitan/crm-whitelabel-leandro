@@ -57,5 +57,6 @@ router.get('/conversations', (req, res, next) => chatwootController.getConversat
 // Sync
 // ============================================
 router.post('/sync-labels', requireRole('admin', 'super_admin'), (req, res, next) => chatwootController.syncLabels(req, res, next));
+router.post('/sync', (req, res, next) => chatwootController.handleSync(req, res, next));
 
 export default router;

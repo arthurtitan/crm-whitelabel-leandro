@@ -12,6 +12,9 @@ import insightsRoutes from './insights.routes';
 import calendarRoutes from './calendar.routes';
 import eventRoutes from './event.routes';
 import chatwootRoutes from './chatwoot.routes';
+import { Router as LeadTagRouter } from 'express';
+import { contactController } from '../controllers/contact.controller';
+import { authenticate, requirePermission, requireAccountId } from '../middlewares/auth.middleware';
 
 const router = Router();
 
@@ -23,6 +26,12 @@ router.get('/health', (req, res) => {
     uptime: process.uptime(),
   });
 });
+
+// Lead-tags endpoint (used by Kanban)
+const leadTagRouter = LeadTagRouter();
+leadTagRouter.use(authenticate);
+leadTagRouter.use(requireAccountId);
+leadTagRouter.get('/', requirePermission('leads', 'kanban'), (req, res, next) => contactController.listLeadTags(req, res, next));
 
 // API routes
 router.use('/auth', authRoutes);
@@ -40,5 +49,6 @@ router.use('/insights', insightsRoutes);
 router.use('/calendar', calendarRoutes);
 router.use('/events', eventRoutes);
 router.use('/chatwoot', chatwootRoutes);
+router.use('/lead-tags', leadTagRouter);
 
 export default router;

@@ -371,6 +371,70 @@ class ChatwootController {
       next(error);
     }
   }
+  /**
+   * POST /api/chatwoot/sync
+   * Dispatch sync actions (sync-contacts, push-label, push-all-labels, sync-labels, update-contact-labels)
+   */
+  async handleSync(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const accountId = req.user!.accountId!;
+      const { action, ...params } = req.body;
+
+      if (!action) {
+        return res.status(400).json({ error: 'action é obrigatório' });
+      }
+
+      switch (action) {
+        case 'sync-contacts': {
+          const result = await chatwootService.syncContacts(accountId);
+          return res.json({ success: true, ...result });
+        }
+
+        case 'push-label': {
+          const { tagId } = params;
+          if (!tagId) return res.status(400).json({ error: 'tagId é obrigatório' });
+          const labelId = await chatwootService.syncTagToLabel(tagId, accountId);
+          return res.json({ success: true, labelId });
+        }
+
+        case 'push-all-labels': {
+          const tags = await prisma.tag.findMany({
+            where: { accountId, type: 'stage', ativo: true },
+          });
+          const results = await Promise.all(
+            tags.map(async (tag) => {
+              const labelId = await chatwootService.syncTagToLabel(tag.id, accountId);
+              return { tagId: tag.id, tagName: tag.name, labelId, synced: !!labelId };
+            })
+          );
+          return res.json({ success: true, results });
+        }
+
+        case 'sync-labels': {
+          const labels = await chatwootService.getLabels(accountId);
+          return res.json({ success: true, labels });
+        }
+
+        case 'update-contact-labels': {
+          const { contactId, labels } = params;
+          if (!contactId || !labels) return res.status(400).json({ error: 'contactId e labels são obrigatórios' });
+          const contact = await prisma.contact.findFirst({
+            where: { id: contactId, accountId },
+          });
+          if (!contact?.chatwootConversationId) {
+            return res.json({ success: false, reason: 'Contact has no Chatwoot conversation' });
+          }
+          await chatwootService.updateConversationLabels(accountId, contact.chatwootConversationId, labels);
+          return res.json({ success: true });
+        }
+
+        default:
+          return res.status(400).json({ error: `Ação desconhecida: ${action}` });
+      }
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 // ============================================

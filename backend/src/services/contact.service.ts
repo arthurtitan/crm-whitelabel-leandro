@@ -537,6 +537,32 @@ class ContactService {
       _count: undefined,
     }));
   }
+  }
+
+  /**
+   * List all lead_tags for an account (for Kanban mapping)
+   */
+  async listLeadTags(accountId: string) {
+    const leadTags = await prisma.leadTag.findMany({
+      where: {
+        contact: {
+          accountId,
+        },
+      },
+      include: {
+        tag: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+            type: true,
+          },
+        },
+      },
+    });
+
+    return leadTags;
+  }
 }
 
 export const contactService = new ContactService();

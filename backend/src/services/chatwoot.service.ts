@@ -665,6 +665,154 @@ class ChatwootService {
 
     return contact.id;
   }
+  // ============================================
+  // Contact Sync
+  // ============================================
+
+  /**
+   * Sync contacts from Chatwoot conversations into the database
+   */
+  async syncContacts(accountId: string): Promise<{
+    contacts_created: number;
+    contacts_updated: number;
+    contacts_deleted: number;
+  }> {
+    const config = await this.getAccountConfig(accountId);
+    let created = 0;
+    let updated = 0;
+    let deleted = 0;
+
+    // Get all stage tags for label matching
+    const stageTags = await prisma.tag.findMany({
+      where: { accountId, type: 'stage', ativo: true },
+    });
+    const tagBySlug = new Map(stageTags.map(t => [t.slug, t]));
+    const tagByName = new Map(stageTags.map(t => [t.name.toLowerCase(), t]));
+
+    // Fetch all conversations (paginated)
+    const seenChatwootContactIds = new Set<number>();
+    let page = 1;
+    const maxPages = 50;
+
+    while (page <= maxPages) {
+      let conversations: any[];
+      try {
+        const response = await this.makeRequest<any>(config, `/conversations?page=${page}`);
+        conversations = response?.data?.payload || [];
+      } catch (error) {
+        logger.error('[SyncContacts] Failed to fetch conversations page', { page, error });
+        break;
+      }
+
+      if (conversations.length === 0) break;
+
+      for (const conv of conversations) {
+        const sender = conv.meta?.sender;
+        if (!sender?.id) continue;
+
+        seenChatwootContactIds.add(sender.id);
+
+        // Find or create contact
+        let contact = await prisma.contact.findFirst({
+          where: { accountId, chatwootContactId: sender.id },
+        });
+
+        if (!contact) {
+          contact = await prisma.contact.create({
+            data: {
+              accountId,
+              chatwootContactId: sender.id,
+              chatwootConversationId: conv.id,
+              nome: sender.name || null,
+              telefone: sender.phone_number || null,
+              email: sender.email?.toLowerCase() || null,
+              origem: 'whatsapp',
+            },
+          });
+          created++;
+        } else {
+          // Update if data changed
+          const updates: any = {};
+          if (sender.name && sender.name !== contact.nome) updates.nome = sender.name;
+          if (sender.phone_number && sender.phone_number !== contact.telefone) updates.telefone = sender.phone_number;
+          if (sender.email && sender.email.toLowerCase() !== contact.email) updates.email = sender.email.toLowerCase();
+          if (conv.id && conv.id !== contact.chatwootConversationId) updates.chatwootConversationId = conv.id;
+
+          if (Object.keys(updates).length > 0) {
+            await prisma.contact.update({
+              where: { id: contact.id },
+              data: updates,
+            });
+            updated++;
+          }
+        }
+
+        // Match conversation labels to stage tags
+        const labels: string[] = conv.labels || [];
+        if (labels.length > 0) {
+          for (const label of labels) {
+            const matchedTag = tagBySlug.get(label) || tagByName.get(label.toLowerCase());
+            if (matchedTag) {
+              // Check if already has this tag
+              const existing = await prisma.leadTag.findUnique({
+                where: { contactId_tagId: { contactId: contact.id, tagId: matchedTag.id } },
+              });
+              if (!existing) {
+                // Remove other stage tags first
+                await prisma.leadTag.deleteMany({
+                  where: {
+                    contactId: contact.id,
+                    tag: { type: 'stage' },
+                  },
+                });
+                await prisma.leadTag.create({
+                  data: {
+                    contactId: contact.id,
+                    tagId: matchedTag.id,
+                    appliedByType: 'system',
+                    source: 'chatwoot',
+                  },
+                });
+              }
+              break; // Only one stage tag
+            }
+          }
+        }
+      }
+
+      page++;
+    }
+
+    // Delete orphan contacts (created > 5 min ago, not seen in Chatwoot)
+    if (seenChatwootContactIds.size > 0) {
+      const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+      const orphans = await prisma.contact.findMany({
+        where: {
+          accountId,
+          chatwootContactId: { notIn: Array.from(seenChatwootContactIds) },
+          createdAt: { lt: fiveMinAgo },
+        },
+        select: { id: true },
+      });
+
+      for (const orphan of orphans) {
+        // Only delete if no sales
+        const salesCount = await prisma.sale.count({ where: { contactId: orphan.id } });
+        if (salesCount === 0) {
+          await prisma.contact.delete({ where: { id: orphan.id } });
+          deleted++;
+        }
+      }
+    }
+
+    logger.info('[SyncContacts] Completed', { accountId, created, updated, deleted });
+
+    return {
+      contacts_created: created,
+      contacts_updated: updated,
+      contacts_deleted: deleted,
+    };
+  }
 }
 
 export const chatwootService = new ChatwootService();
