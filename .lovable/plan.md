@@ -1,93 +1,90 @@
 
-Objetivo: corrigir de forma definitiva o problema de “dados não carregando corretamente ao logar”, com foco no dashboard que aparece com alerta “Chatwoot não configurado” + skeleton infinito, mesmo com backend saudável.
 
-Diagnóstico consolidado (com base no código e nos logs):
-1) Backend está subindo corretamente após recovery de migration:
-- Logs confirmam `✅ Migrations aplicadas com sucesso após recovery`, seed e servidor ativo.
-- Endpoints principais respondem 200 (`/api/auth/login`, `/api/contacts`, `/api/products`, `/api/sales`, `/api/chatwoot/metrics` em alguns fluxos).
+# Correcao: Metricas de Resolucao zeradas no Backend Express
 
-2) O problema principal atual é de estado no frontend após login em modo backend:
-- Em `src/contexts/AuthContext.backend.tsx`, no método `login`, o mapeamento da conta usa apenas snake_case:
-  - `response.account.chatwoot_base_url`
-  - `response.account.chatwoot_account_id`
-  - `response.account.chatwoot_api_key`
-- Porém o backend retorna camelCase (`chatwootBaseUrl`, `chatwootAccountId`, `chatwootApiKey`) no payload de login.
-- Resultado: `account.chatwoot_*` fica `undefined` logo após login direto, e o app conclui (errado) que Chatwoot não está configurado.
+## Problema Identificado
 
-3) Há um segundo bug de UX que agrava:
-- Em `src/hooks/useChatwootMetrics.ts`, `isLoading = query.isPending`.
-- Quando a query está `enabled: false` (porque `isConfigured` caiu para false), o dashboard pode continuar em estado visual de loading (skeleton) mesmo sem requisição.
-- Isso explica a tela da imagem: alerta de não configurado + skeleton persistente.
+Comparando a resposta da Edge Function (dados corretos) com o que o dashboard exibe (via backend Express):
 
-4) Indício forte no log:
-- No primeiro fluxo (com impersonação) houve `POST /api/chatwoot/metrics 200`.
-- No login “real” posterior, não aparece chamada de métricas no trecho enviado, compatível com `isConfigured` falso no frontend.
+| Metrica | Edge Function (correto) | Backend/Dashboard (errado) |
+|---|---|---|
+| Resolucao IA | 9 (60%) | 0 (0%) |
+| Resolucao Humano | 6 (40%) | 3 (100%) |
+| Transbordo | 6 (40%) | 3 (100%) |
+| Eficiencia IA | 60% | 0% |
 
-Correção definitiva proposta (arquivos e mudanças):
-1) Normalizar o parsing do payload de auth no provider backend
-Arquivo: `src/contexts/AuthContext.backend.tsx`
+A causa raiz: as migrations 0002 e 0003 foram marcadas como `rolled-back`, entao a tabela `resolution_logs` **nao existe** no banco PostgreSQL do VPS. O backend detecta isso corretamente (linhas 416-420) e pula a query, mas o fallback simplesmente retorna zeros em vez de calcular as resolucoes a partir dos dados brutos das conversas do Chatwoot.
 
-Implementar helper(s) internos para normalizar campos snake/camel, e reutilizar em:
-- `hydrateFromToken`
-- `login`
-- `impersonate`
+A Edge Function nao tem esse problema porque ela calcula tudo a partir dos dados da API do Chatwoot diretamente.
 
-Exemplo de estratégia:
-- `normalizeAccount(rawAccount)`:
-  - `chatwoot_base_url = raw.chatwoot_base_url ?? raw.chatwootBaseUrl ?? undefined`
-  - `chatwoot_account_id = raw.chatwoot_account_id ?? raw.chatwootAccountId ?? undefined`
-  - `chatwoot_api_key = raw.chatwoot_api_key ?? raw.chatwootApiKey ?? undefined`
-- `normalizeUser(rawUser)` com fallback para `chatwoot_agent_id/chatwootAgentId`, `account_id/accountId`.
+## Solucao
 
-E aplicar no `login` (ponto crítico), que hoje está inconsistente.
+**Arquivo:** `backend/src/services/chatwoot-metrics.service.ts`
 
-2) Corrigir o estado de loading do hook de métricas
-Arquivo: `src/hooks/useChatwootMetrics.ts`
+Adicionar um fallback que computa `historicoResolucoes` diretamente das conversas resolvidas usando `classifyResolver()` (funcao que ja existe no arquivo mas nunca e usada como fallback).
 
-Ajustar:
-- `isLoading` para não ficar true quando a query está desabilitada:
-  - `const isLoading = isConfigured ? query.isPending : false;`
+### Mudanca especifica:
 
-Também ajustar `isConfigured` para modo backend sem depender estritamente de `chatwoot_api_key` no cliente:
-- Em backend, o servidor já lê credenciais no banco; o frontend não deve bloquear métricas por ausência de key local.
-- Regra:
-  - Backend mode: exigir `chatwoot_base_url` + `chatwoot_account_id`.
-  - Cloud mode: manter regra atual com `chatwoot_api_key`.
+Apos o bloco de query da `resolution_logs` (linha ~522), adicionar logica de fallback:
 
-3) Alinhar checks de “Chatwoot configurado” nas páginas administrativas
-Arquivos:
-- `src/pages/admin/AdminKanbanPage.tsx`
-- `src/pages/admin/AdminLeadsPage.tsx`
+```typescript
+// Se resolution_logs nao disponivel OU retornou vazio, 
+// calcular a partir dos dados brutos do Chatwoot
+if (historicoResolucoes.totalIA === 0 && historicoResolucoes.totalHumano === 0) {
+  const resolvedConversations = finalConversations.filter(
+    (c: any) => c.status === 'resolved'
+  );
+  
+  let fallbackIA = 0;
+  let fallbackHumano = 0;
+  let fallbackTransbordo = 0;
+  
+  for (const conv of resolvedConversations) {
+    const result = classifyResolver(conv);
+    if (result.type === 'ai') fallbackIA++;
+    else if (result.type === 'human') {
+      fallbackHumano++;
+      // Transbordo: humano resolveu mas IA participou
+      const custom = conv.custom_attributes || {};
+      const additional = conv.additional_attributes || {};
+      const aiResponded = custom.ai_responded === true || additional.ai_responded === true;
+      if (aiResponded) fallbackTransbordo++;
+    }
+  }
+  
+  const fallbackTotal = fallbackIA + fallbackHumano;
+  historicoResolucoes = {
+    totalIA: fallbackIA,
+    totalHumano: fallbackHumano,
+    transbordoCount: fallbackTransbordo,
+    percentualIA: fallbackTotal > 0 ? Math.round((fallbackIA / fallbackTotal) * 100) : 0,
+    percentualHumano: fallbackTotal > 0 ? Math.round((fallbackHumano / fallbackTotal) * 100) : 0,
+  };
+  
+  logger.info('[Metrics] Used Chatwoot API fallback for resolution data', {
+    ia: fallbackIA, humano: fallbackHumano, transbordo: fallbackTransbordo
+  });
+}
+```
 
-Atualizar `hasChatwootConfig` para ser backend-aware (mesma regra do hook), evitando falso negativo em telas que hoje exigem api_key no cliente.
+### Por que isso resolve:
 
-4) (Opcional de robustez, baixo risco) consolidar regra de configuração em util compartilhado
-Novo util (ou função local em hook/contexto) para não repetir lógica divergente entre dashboard/kanban/leads.
-Evita regressão futura.
+1. A funcao `classifyResolver()` ja implementa toda a logica de classificacao (explicit via `resolved_by`, bot nativo, inferencia via `ai_responded`, fallback por assignee) — identica a Edge Function.
+2. Quando `resolution_logs` nao existe ou esta vazio, o sistema calcula automaticamente a partir dos dados do Chatwoot.
+3. Quando `resolution_logs` voltar a funcionar (apos re-aplicar migrations), os dados persistidos terao prioridade.
 
-Sequência de implementação:
-1. Refatorar `AuthContext.backend.tsx` com normalização única de payload (snake/camel), aplicando no `login` primeiro.
-2. Ajustar `useChatwootMetrics.ts`:
-   - `isConfigured` por modo (backend/cloud)
-   - `isLoading` condicionado a `isConfigured`.
-3. Ajustar checks de `hasChatwootConfig` em Kanban e Leads para regra coerente.
-4. Revisão rápida de tipagem para garantir compatibilidade sem `any` desnecessário.
-5. Validar manualmente fluxo de login direto (sem impersonação).
+### Resultado esperado apos correcao:
 
-Critérios de aceite (validação prática):
-1) Login direto com usuário real:
-- Dashboard não deve ficar em skeleton infinito.
-- Se conta tiver integração ativa: deve disparar `POST /api/chatwoot/metrics` e renderizar KPIs.
-- Se conta não tiver integração: alerta pode aparecer, mas cards devem sair de loading (mostrar estado estável, sem skeleton eterno).
+- Resolucao IA: 9 (60%) — igual a Edge Function
+- Resolucao Humano: 6 (40%) — igual a Edge Function  
+- Transbordo: 6 (40%) — igual a Edge Function
+- Eficiencia IA: 60% — igual a Edge Function
 
-2) Fluxos administrativos:
-- Kanban/Leads não devem exibir falso “Chatwoot não configurado” quando a conta está configurada no backend.
-- Ações que só precisam base URL + accountId devem seguir funcionando.
+## Arquivos afetados
 
-3) Logs esperados:
-- Sem loop de erro relacionado a configuração falsa após login.
-- Métricas chamadas de forma consistente no login real.
+- `backend/src/services/chatwoot-metrics.service.ts` — unico arquivo, adicao de ~25 linhas de fallback
 
-Observações importantes:
-- Os erros antigos de `contacts.first_resolved_at` / `resolution_logs` nos logs parecem históricos do período antes do recovery; o foco atual é estado de autenticação/configuração no frontend pós-login.
-- Os `400` antes da impersonação são coerentes com rota de conta exigindo `accountId` enquanto ainda era super_admin sem contexto de conta; não são a causa principal da tela final após login real.
+## Observacoes
+
+- As demais metricas (Total de Leads, Atendimento ao Vivo, Backlog, Performance de Agentes, Qualidade) ja estao corretas e alinhadas entre Edge Function e Backend.
+- A correcao e retrocompativel: quando as migrations forem re-aplicadas e `resolution_logs` tiver dados, eles terao prioridade sobre o fallback.
