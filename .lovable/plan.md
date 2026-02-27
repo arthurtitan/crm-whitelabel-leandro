@@ -1,104 +1,92 @@
 
+# Solucao Definitiva: Backend de Metricas Chatwoot
 
-# Correcao Definitiva: accountId null e Chatwoot 404
+## Diagnostico Real (sem suposicoes)
 
-## Diagnostico
+O problema NAO e formato de timestamp nem versao de API. O problema e **arquitetural**:
 
-Ha dois problemas distintos nos logs:
+1. **Edge Function (funciona)**: Busca conversas, agentes e inboxes diretamente da API do Chatwoot, depois calcula TUDO localmente (~700 linhas de logica de negocio). Nunca chama `/reports/summary`. Tambem consulta `resolution_logs` no banco para metricas persistentes de resolucao.
 
-### Problema 1: Chatwoot API retorna 404
-A URL chamada e:
-```text
-/reports/summary?type=account&since=2026-02-20T04:57:08.310Z&until=2026-02-27T04:57:08.310Z
-```
-A API do Chatwoot espera **timestamps Unix em segundos** (ex: `1740009428`), nao strings ISO. O formato errado faz o Chatwoot retornar 404 ("The page you were looking for doesn't exist").
+2. **Backend Express (quebrado)**: Chama `GET /reports/summary` que **nao existe** na sua instancia Chatwoot (retorna 404). Alem disso, mesmo que existisse, retornaria dados crus do Chatwoot — nao o formato `DashboardMetrics` que o frontend espera (atendimento, resolucao, taxas, backlog, agentes, etc.).
 
-### Problema 2: accountId null em multiplos controllers
-Todos os controllers usam `req.user!.accountId!` (non-null assertion) sem validacao. Se o JWT do Super Admin e usado (antes do rebuild com a correcao de impersonacao), o accountId e null e o Prisma crasha. Precisamos de uma guarda defensiva para que, mesmo em caso de falha, o sistema retorne um erro claro (400) em vez de crashar (500).
+**A solucao e portar a logica da Edge Function para o backend Express.**
 
-## Solucao
+## Plano de Implementacao
 
-### 1. Converter datas ISO para Unix epoch no controller do Chatwoot
+### 1. Criar servico dedicado de metricas no backend
 
-**Arquivo:** `backend/src/controllers/chatwoot.controller.ts`
+**Arquivo novo:** `backend/src/services/chatwoot-metrics.service.ts`
 
-No metodo `getMetrics`, converter as strings ISO para timestamps Unix (segundos):
+Portar a logica completa da Edge Function para o backend Express:
+- `fetchAllConversations()` — busca paginada de conversas (max 500)
+- `fetchAgents()` — lista agentes
+- `fetchInboxes()` — lista canais
+- `classifyCurrentHandler()` — classificacao tempo real (IA/humano/nenhum)
+- `classifyResolver()` — classificacao historica de resolucao
+- Calculo de metricas: atendimento, resolucao, taxas, backlog, pico por hora, performance de agentes, conversas por canal
+- Consulta a tabela `resolution_logs` via Prisma para metricas persistentes de resolucao
+- Retorno no formato exato `DashboardMetrics` que o frontend espera
 
-```typescript
-const dateRange = {
-  since: dateFrom ? String(Math.floor(new Date(dateFrom as string).getTime() / 1000)) : undefined,
-  until: dateTo ? String(Math.floor(new Date(dateTo as string).getTime() / 1000)) : undefined,
-};
-```
-
-Isso garante que a URL final seja algo como:
-```text
-/reports/summary?type=account&since=1740009428&until=1740614228
-```
-
-### 2. Criar middleware de validacao de accountId
-
-**Arquivo:** `backend/src/middlewares/auth.middleware.ts`
-
-Adicionar uma funcao `requireAccountId` que valida se o usuario tem accountId antes de permitir acesso a rotas de conta:
-
-```typescript
-export function requireAccountId(
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction
-): void {
-  if (!req.user) {
-    return next(new UnauthorizedError());
-  }
-  if (!req.user.accountId) {
-    res.status(400).json({
-      error: {
-        code: 'ACCOUNT_REQUIRED',
-        message: 'Esta operacao requer uma conta vinculada.',
-      },
-    });
-    return;
-  }
-  next();
-}
-```
-
-### 3. Aplicar middleware nas rotas que exigem accountId
-
-**Arquivos de rotas afetados:**
-- `backend/src/routes/product.routes.ts`
-- `backend/src/routes/sale.routes.ts`
-- `backend/src/routes/contact.routes.ts`
-- `backend/src/routes/chatwoot.routes.ts` (exceto webhook)
-- `backend/src/routes/calendar.routes.ts`
-- `backend/src/routes/dashboard.routes.ts` (exceto rotas super-admin)
-
-Adicionar `requireAccountId` apos `authenticate` nestas rotas:
-
-```typescript
-import { authenticate, requireAccountId } from '../middlewares/auth.middleware';
-router.use(authenticate);
-router.use(requireAccountId);
-```
-
-### 4. Tambem aplicar correcao de datas no getAgentMetrics e getConversationMetrics
+### 2. Atualizar o controller de metricas
 
 **Arquivo:** `backend/src/controllers/chatwoot.controller.ts`
 
-Garantir que os endpoints `/metrics/agents` e `/metrics/conversations` tambem convertam datas para epoch seconds.
+Substituir a chamada a `chatwootService.getAccountMetrics()` (que usa `/reports/summary`) pela nova logica do servico de metricas dedicado. Recebe `dateFrom`, `dateTo`, `inboxId`, `agentId` do body e retorna `{ success: true, data: DashboardMetrics }`.
 
-## Resultado esperado
+### 3. Manter o servico original para outras operacoes
 
-- Chatwoot `/reports/summary` recebe timestamps Unix e retorna 200 com metricas reais
-- Qualquer rota que exija accountId retorna 400 com mensagem clara em vez de 500 (crash do Prisma)
-- O dashboard exibe metricas corretamente durante impersonacao
-- O sistema nao crasha mesmo que o rebuild da impersonacao nao tenha sido feito ainda
+**Arquivo:** `backend/src/services/chatwoot.service.ts`
 
-## Sequencia de implementacao
+O metodo `getAccountMetrics` sera deprecado/removido. As demais funcoes (agents, labels, conversations, inboxes, webhooks) permanecem intactas — usam `/api/v1/` corretamente e funcionam.
 
-1. `backend/src/middlewares/auth.middleware.ts` - adicionar `requireAccountId`
-2. `backend/src/controllers/chatwoot.controller.ts` - converter datas para epoch
-3. Rotas: product, sale, contact, chatwoot, calendar, dashboard - aplicar middleware
+### 4. Adicionar modelo Prisma para resolution_logs (se necessario)
+
+Verificar se o schema Prisma ja inclui a tabela `resolution_logs`. Se nao, adicionar o model para que o servico possa consultar resolucoes persistentes.
+
+## Detalhes Tecnicos
+
+### Fluxo de dados do novo servico
+
+```text
+Frontend POST /api/chatwoot/metrics
+  { dateFrom, dateTo, inboxId, agentId }
+       |
+       v
+Backend Controller
+       |
+       v
+chatwoot-metrics.service.ts
+       |
+       +---> Chatwoot API: GET /conversations (paginado)
+       +---> Chatwoot API: GET /agents
+       +---> Chatwoot API: GET /inboxes
+       +---> Prisma: SELECT resolution_logs WHERE account_id AND resolved_at IN range
+       |
+       v
+Calculo local de metricas
+       |
+       v
+{ success: true, data: DashboardMetrics }
+```
+
+### Metricas calculadas localmente (identico a Edge Function)
+
+- **Camada 1 (Tempo Real)**: Conversas abertas classificadas por handler (IA/humano/sem assignee), backlog por faixa de tempo
+- **Camada 2 (Historico)**: Resolucoes do `resolution_logs` (IA vs humano), taxas de transbordo, eficiencia
+- **Performance**: Agentes com atendimentos assumidos, resolvidos, tempo medio de resposta
+- **Distribuicao**: Conversas por canal (inbox), pico por hora (timezone Sao Paulo)
+- **Qualidade**: Conversas sem resposta, novos leads no periodo
+
+### Vantagens desta abordagem
+
+- **Funciona com qualquer versao do Chatwoot** — nao depende de `/reports/summary`
+- **Formato identico ao que o frontend ja consome** — zero mudancas no frontend
+- **Metricas persistentes** — resolucoes vem do `resolution_logs`, nao desaparecem
+- **Logica testada** — a Edge Function ja roda em producao com esta mesma logica
+
+## Sequencia de Execucao
+
+1. Verificar schema Prisma para `resolution_logs`
+2. Criar `backend/src/services/chatwoot-metrics.service.ts` (portar logica da Edge Function)
+3. Atualizar `backend/src/controllers/chatwoot.controller.ts` para usar novo servico
 4. Rebuild no EasyPanel
-
