@@ -1,143 +1,107 @@
 
+Objetivo imediato
+- Corrigir definitivamente o erro na exclusão de contas em produção (sem logout forçado do super admin), tratando a causa raiz de transporte/validação de senha e endurecendo o fluxo de autenticação para não derrubar sessão por erro operacional.
 
-# Correcao de 10 Erros de Producao
+Diagnóstico consolidado (com base nos logs + código atual)
+- O backend recebe `DELETE /api/accounts/:id` sem `x-confirm-password` e retorna `401 Confirmação de senha requerida`.
+- O frontend, em `src/api/client.ts`, atualmente faz logout global em qualquer `401` (`auth:unauthorized`), então um erro de validação operacional vira deslogar usuário.
+- Existe ruído adicional no backend:
+  - `GET /api/calendar/events` com `accountId null` (super_admin sem account vinculada) causando erro Prisma.
+  - `POST /api/calendar/google/connect` falhando por configuração ausente de Google Calendar no servidor.
+- Há inconsistência importante no painel de detalhe da conta (`SuperAdminAccountDetailPage.tsx`): ainda usa fluxo mock/local de senha/edição/exclusão, fora do backend real.
 
-## Resumo
+Do I know what the issue is?
+- Sim. São 2 causas principais acopladas:
+  1) confirmação de senha não chegando de forma confiável ao backend no delete;
+  2) política de logout global agressiva para qualquer 401.
 
-Correcoes cirurgicas nos arquivos do frontend e backend para resolver 10 erros reais que ocorrem em producao (modo backend/VPS). Todas as alteracoes respeitam o padrao hibrido Cloud/Backend existente.
+Plano estratégico de correção (sem depender de Supabase em produção)
 
----
+Fase 1 — Hotfix de segurança/estabilidade (bloqueia logout indevido)
+1) Ajustar validação de senha sensível no backend
+- Arquivo: `backend/src/middlewares/auth.middleware.ts`
+- Ação:
+  - `verifyPassword` aceitar senha por `x-confirm-password` e fallback por `req.body.password`.
+  - Se senha ausente: retornar erro de validação (400), não 401.
+  - Se senha incorreta: retornar 403 (ou 400 de negócio), não 401.
+- Resultado: falha de confirmação não derruba sessão.
 
-## Erro 1: Usuario duplicado redireciona para login (409)
+2) Refinar regra de auto-logout no frontend
+- Arquivo: `src/api/client.ts`
+- Ação:
+  - Logout automático apenas para 401 de sessão/token (expirado/inválido/ausente).
+  - Não disparar `auth:unauthorized` para erros operacionais de rota protegida.
+- Resultado: super admin permanece logado ao errar senha em ação crítica.
 
-**Arquivo:** `src/pages/super-admin/SuperAdminAccountsPage.tsx` (linha ~327)
-**Problema:** `handleUserCreated` nao trata erro 409 (email duplicado). O toast generico confunde o usuario.
-**Correcao:** No catch do `handleUserCreated`, verificar `error.status === 409` e mostrar mensagem especifica ("Este email ja esta cadastrado") + permitir pular o agente em vez de travar.
+Fase 2 — Garantia de envio de senha no delete de conta
+3) Blindar requisição de exclusão no frontend
+- Arquivo: `src/services/accounts.backend.service.ts`
+- Ação:
+  - Enviar confirmação em header e fallback em body.
+  - Normalizar trim da senha e falhar cedo com mensagem amigável se vazio.
+- Resultado: compatibilidade com proxy/intermediário e maior robustez no transporte.
 
----
+4) Revisar fluxo da tela de contas
+- Arquivo: `src/pages/super-admin/SuperAdminAccountsPage.tsx`
+- Ação:
+  - Manter exigência de senha obrigatória.
+  - Exibir mensagens distintas para: senha ausente, senha inválida, falha técnica.
+  - Garantir reset de estado do modal após sucesso/erro.
+- Resultado: UX previsível e sem estados quebrados.
 
-## Erro 2: "Erro ao assumir identidade"
+Fase 3 — Eliminar inconsistências que continuam gerando erro em produção
+5) Remover lógica mock da tela de detalhe de conta
+- Arquivo: `src/pages/super-admin/SuperAdminAccountDetailPage.tsx`
+- Ação:
+  - Substituir `VALID_PASSWORDS` e operações locais por chamadas reais `accountsCloudOrBackend.update/delete(...)`.
+- Resultado: comportamento consistente entre “lista de contas” e “detalhe da conta”.
 
-**Arquivos:**
-- `src/api/endpoints.ts` (linha 21)
-- `src/contexts/AuthContext.backend.tsx` (funcao `impersonate`)
+6) Corrigir erro de calendário com super admin sem accountId
+- Arquivos: `backend/src/controllers/calendar.controller.ts` (e, se necessário, roteamento/permissão)
+- Ação:
+  - Se `req.user.accountId` for nulo, retornar erro de domínio claro (400/403) antes de chamar Prisma.
+  - Evitar invocação com `accountId null`.
+- Resultado: remove erro Prisma de produção e evita cascata de falhas.
 
-**Problema:** Frontend chama `POST /api/auth/impersonate/:id` mas a rota real e `POST /api/users/:id/impersonate` (definida em `user.routes.ts` linha 17).
-**Correcao:**
-- Alterar `API_ENDPOINTS.AUTH.IMPERSONATE` para usar o path correto: `` `/api/users/${userId}/impersonate` ``
-- No `impersonate` do `BackendAuthProvider`, extrair `response.data` corretamente (padrao envelope do backend)
+7) Tratar Google Calendar como configuração de ambiente
+- Arquivo: backend env/config (sem alteração funcional obrigatória)
+- Ação:
+  - Validar variáveis `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` no servidor.
+  - Melhorar mensagem operacional ao admin quando ausente.
+- Resultado: erro deixa de ser “interno” e vira diagnóstico objetivo.
 
----
+Plano de validação (produção, ponta a ponta)
+- Cenário A: excluir conta com senha correta
+  - Esperado: 200, conta marcada como cancelada, usuário continua autenticado.
+- Cenário B: excluir com senha errada
+  - Esperado: erro de validação/permissão (não 401 de sessão), sem logout.
+- Cenário C: excluir sem senha
+  - Esperado: bloqueio no frontend + backend retorna 400 se chegar.
+- Cenário D: repetir operação em aba anônima e aba normal
+  - Esperado: mesmo comportamento (descarta cache antigo).
+- Cenário E: navegar após falha de exclusão
+  - Esperado: sessão do super admin intacta.
+- Cenário F (regressão): usuários/sales delete com confirmação de senha continuam funcionando.
 
-## Erro 3: "Referencia de registro inexistente" ao atualizar usuario
+Risco e mitigação
+- Risco: frontend antigo em cache/rollout parcial.
+- Mitigação:
+  - deploy coordenado frontend+backend;
+  - invalidação de cache do index e confirmação do novo bundle;
+  - checagem de headers no request real durante teste.
 
-**Arquivo:** `src/pages/super-admin/SuperAdminUsersPage.tsx` (linhas 302-338)
-**Problema:** `handleUpdate` atualiza apenas estado local, nunca chama a API real. Usuarios "fantasma" (mock) nao existem no banco.
-**Correcao:** Tornar `handleUpdate` async e chamar `usersCloudOrBackend.update()`. Tratar erro 404 removendo da lista local.
+Sequência de execução recomendada
+1) Backend `verifyPassword` (status codes + fallback body/header)
+2) Frontend `apiClient` (logout seletivo por token/session)
+3) Frontend `accounts.backend.service` (envio robusto da senha)
+4) Frontend `SuperAdminAccountsPage` (UX e mensagens)
+5) Frontend `SuperAdminAccountDetailPage` (remover mock)
+6) Backend `CalendarController` (guard accountId nulo)
+7) Validar ambiente Google Calendar
+8) Teste E2E completo em produção
 
----
-
-## Erro 4: "Configuracao de senha requerida" ao excluir conta
-
-**Arquivos:**
-- `src/services/accounts.backend.service.ts` (linha 71-73)
-- `src/pages/super-admin/SuperAdminAccountsPage.tsx` (linhas 388-406)
-
-**Problema:** Backend exige header `x-confirm-password` para DELETE de conta, mas o frontend: (a) valida senha localmente contra string fixa `'Admin@123'` e (b) nao envia a senha no header.
-**Correcao:**
-- Alterar `accountsBackendService.delete(id)` para aceitar `password` e enviar como header `x-confirm-password`
-- Alterar `handleDelete` para remover validacao local fixa e passar `deletePassword` para o service
-
----
-
-## Erro 5: "Chatwoot nao configurado" ao acessar conta
-
-**Arquivo:** `backend/src/middlewares/auth.middleware.ts` (linhas 74-81)
-**Problema:** `req.account` no middleware de autenticacao omite campos Chatwoot (`chatwootBaseUrl`, `chatwootAccountId`, `chatwootApiKey`). O endpoint `/api/auth/me` retorna dados incompletos.
-**Correcao:** Adicionar os 3 campos Chatwoot ao objeto `req.account` no middleware. O `authService.getMe()` ja retorna esses campos, mas o middleware que alimenta `req.account` nao.
-
----
-
-## Erro 6: "(intermediate value).find is not a function" no template Kanban
-
-**Arquivo:** `src/pages/admin/AdminKanbanPage.tsx` (linha 628-629)
-**Problema:** `apiClient.get('/api/funnels')` retorna `{ data: [...], meta: {} }` mas o codigo faz `.find()` direto no resultado.
-**Correcao:** Normalizar resposta: `const items = Array.isArray(funnels) ? funnels : (funnels?.data || []); let funnelId = items.find(...)?.id;`
-
----
-
-## Erro 7: "Erro ao obter funil" ao criar etapa manual
-
-**Arquivo:** `src/components/kanban/CreateStageDialog.tsx` (linhas 74-95)
-**Problema:** Sempre usa `tagsCloudService` (Supabase direto), que falha em modo backend por falta de sessao Supabase.
-**Correcao:**
-- Importar `useBackend` e `tagsBackendService`
-- Adicionar metodos `getDefaultFunnel` e `createDefaultFunnel` ao `tagsBackendService`
-- No `handleSubmit`, usar servico backend quando `useBackend=true`
-
-**Arquivo adicional:** `src/services/tags.backend.service.ts`
-- Adicionar `getDefaultFunnel(accountId)` que chama `GET /api/funnels?accountId=...`
-- Adicionar `createDefaultFunnel(accountId)` que chama `POST /api/funnels`
-
----
-
-## Erro 8: "new row violates RLS policy for contacts"
-
-**Arquivo:** `src/contexts/FinanceContext.tsx` (linhas 440-466)
-**Problema:** `createContact` cria contato apenas em estado local (mock). Em modo backend, deveria chamar a API.
-**Correcao:** Quando `useBackend=true`, chamar `contactsBackendService.createContact()` e usar o ID retornado pelo backend.
-
----
-
-## Erro 9: Google Calendar "Erro interno do servidor"
-
-**Arquivo:** `supabase/functions/google-calendar-auth-url/index.ts`
-**Problema:** A edge function usa `supabase.auth.getUser()` que depende de sessao Supabase Auth. Em modo backend (JWT proprio), nao ha sessao Supabase valida.
-**Observacao:** Este erro requer investigacao adicional sobre se o Google Calendar deve ser portado para o backend Express ou se os secrets (`GOOGLE_CLIENT_ID`, `GOOGLE_REDIRECT_URI`) estao configurados. Por ora, adicionaremos tratamento de erro melhorado e documentaremos a limitacao.
-
----
-
-## Erro 10: Produtos nao persistem
-
-**Arquivo:** `src/contexts/ProductContext.tsx`
-**Problema:** Todo o contexto opera com estado local e mock data. Nunca chama a API real.
-**Correcao:** Integrar com `productsService` existente:
-- `useEffect` no mount para buscar via `productsService.list()`
-- `createProduct` chama `productsService.create()`
-- `updateProduct` chama `productsService.update()`
-- `deleteProduct` chama `productsService.delete()`
-- `toggleProductStatus` chama `productsService.toggleStatus()`
-
----
-
-## Secao Tecnica: Ordem de Execucao
-
-1. `backend/src/middlewares/auth.middleware.ts` - Adicionar campos Chatwoot (Erro 5)
-2. `src/api/endpoints.ts` - Corrigir path impersonate (Erro 2)
-3. `src/contexts/AuthContext.backend.tsx` - Normalizar response impersonate (Erro 2)
-4. `src/services/accounts.backend.service.ts` - Delete com senha (Erro 4)
-5. `src/pages/super-admin/SuperAdminAccountsPage.tsx` - Delete + tratamento 409 (Erros 1, 4)
-6. `src/pages/super-admin/SuperAdminUsersPage.tsx` - Update via API real (Erro 3)
-7. `src/pages/admin/AdminKanbanPage.tsx` - Normalizar funnels (Erro 6)
-8. `src/services/tags.backend.service.ts` - Adicionar getDefaultFunnel/createDefaultFunnel (Erro 7)
-9. `src/components/kanban/CreateStageDialog.tsx` - Usar backend service (Erro 7)
-10. `src/contexts/FinanceContext.tsx` - createContact backend mode (Erro 8)
-11. `src/contexts/ProductContext.tsx` - Integrar com API real (Erro 10)
-12. Google Calendar - Investigar e documentar limitacao (Erro 9)
-
-## Arquivos Modificados
-
-| Arquivo | Erros |
-|---------|-------|
-| `backend/src/middlewares/auth.middleware.ts` | 5 |
-| `src/api/endpoints.ts` | 2 |
-| `src/contexts/AuthContext.backend.tsx` | 2 |
-| `src/services/accounts.backend.service.ts` | 4 |
-| `src/pages/super-admin/SuperAdminAccountsPage.tsx` | 1, 4 |
-| `src/pages/super-admin/SuperAdminUsersPage.tsx` | 3 |
-| `src/pages/admin/AdminKanbanPage.tsx` | 6 |
-| `src/services/tags.backend.service.ts` | 7 |
-| `src/components/kanban/CreateStageDialog.tsx` | 7 |
-| `src/contexts/FinanceContext.tsx` | 8 |
-| `src/contexts/ProductContext.tsx` | 10 |
-
+Critério de aceite
+- Não ocorre mais deslogar super admin ao tentar excluir conta.
+- Exclusão de conta funciona com senha correta.
+- Erros de senha retornam feedback correto, sem quebrar sessão.
+- Logs deixam de mostrar `Argument accountId must not be null` no calendário.
