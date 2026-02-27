@@ -456,7 +456,7 @@ class ChatwootMetricsService {
           }
         }
       } catch (syncErr) {
-        logger.warn('[Metrics] resolution_logs sync error (non-fatal):', syncErr);
+        logger.warn('[Metrics] resolution_logs sync error (non-fatal):', syncErr as any);
       }
     }
 
@@ -517,7 +517,7 @@ class ChatwootMetricsService {
           };
         }
       } catch (dbErr) {
-        logger.warn('[Metrics] resolution_logs query error (non-fatal):', dbErr);
+        logger.warn('[Metrics] resolution_logs query error (non-fatal):', dbErr as any);
       }
     }
 
