@@ -204,11 +204,22 @@ export function BackendAuthProvider({ children }: { children: ReactNode }) {
     if (authState.user?.role !== 'super_admin') return;
 
     try {
+      // Save original token before swapping
+      const originalToken = tokenManager.getToken();
+      if (originalToken) {
+        localStorage.setItem('original_token', originalToken);
+      }
+
       const raw = await apiClient.post<any>(
         API_ENDPOINTS.AUTH.IMPERSONATE(userId)
       );
       // Support envelope { data: { user, account } }
       const response = raw?.data ?? raw;
+
+      // Use the new JWT for the target user
+      if (response.token) {
+        tokenManager.setToken(response.token);
+      }
 
       const targetUser: User = {
         id: response.user.id,
@@ -221,17 +232,38 @@ export function BackendAuthProvider({ children }: { children: ReactNode }) {
         chatwoot_agent_id: response.user.chatwoot_agent_id || response.user.chatwootAgentId,
       };
 
+      const targetAccount: Account | null = response.account ? {
+        id: response.account.id,
+        nome: response.account.nome,
+        status: response.account.status,
+        chatwoot_base_url: response.account.chatwoot_base_url || response.account.chatwootBaseUrl,
+        chatwoot_account_id: response.account.chatwoot_account_id || response.account.chatwootAccountId,
+        chatwoot_api_key: response.account.chatwoot_api_key || response.account.chatwootApiKey,
+      } : null;
+
       setOriginalUser(authState.user);
       setIsImpersonating(true);
-      setAuthState(prev => ({ ...prev, user: targetUser, account: response.account || null }));
+      setAuthState(prev => ({ ...prev, user: targetUser, account: targetAccount }));
       toast.success(`Assumindo identidade de ${targetUser.nome}`);
     } catch {
+      // Restore original token on failure
+      const originalToken = localStorage.getItem('original_token');
+      if (originalToken) {
+        tokenManager.setToken(originalToken);
+        localStorage.removeItem('original_token');
+      }
       toast.error('Erro ao assumir identidade');
     }
   }, [authState.user]);
 
   const exitImpersonation = useCallback(() => {
     if (!originalUser) return;
+    // Restore original super admin token
+    const originalToken = localStorage.getItem('original_token');
+    if (originalToken) {
+      tokenManager.setToken(originalToken);
+      localStorage.removeItem('original_token');
+    }
     setAuthState(prev => ({ ...prev, user: originalUser, account: null }));
     setOriginalUser(null);
     setIsImpersonating(false);

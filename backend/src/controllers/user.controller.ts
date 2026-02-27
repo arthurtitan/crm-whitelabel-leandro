@@ -1,7 +1,9 @@
 import { Response, NextFunction } from 'express';
 import { z } from 'zod';
+import jwt from 'jsonwebtoken';
 import { userService } from '../services/user.service';
 import { authService } from '../services/auth.service';
+import { env } from '../config/env';
 import { AuthenticatedRequest } from '../types';
 import { getPaginationParams } from '../utils/helpers';
 
@@ -206,14 +208,27 @@ export class UserController {
 
       const result = await userService.impersonate(id, req.user!.id);
 
-      // Generate new token for the target user
-      const loginResult = {
-        ...result,
-        isImpersonating: true,
-        originalUserId: req.user!.id,
-      };
+      // Generate a real JWT for the target user with their accountId
+      const token = jwt.sign(
+        {
+          sub: result.user.id,
+          email: result.user.email,
+          role: result.user.role,
+          accountId: result.user.accountId,
+          permissions: result.user.permissions,
+        },
+        env.JWT_SECRET,
+        { expiresIn: env.JWT_EXPIRES_IN as any }
+      );
 
-      res.json({ data: loginResult });
+      res.json({
+        data: {
+          ...result,
+          token,
+          isImpersonating: true,
+          originalUserId: req.user!.id,
+        },
+      });
     } catch (error) {
       next(error);
     }
