@@ -69,8 +69,13 @@ export const accountsBackendService = {
   },
 
   async delete(id: string, password?: string): Promise<void> {
+    if (!password || !password.trim()) {
+      throw { message: 'Senha de confirmação é obrigatória', status: 400 };
+    }
+    // Send password in both header and body for proxy compatibility
     await apiClient.delete(API_ENDPOINTS.ACCOUNTS.DELETE(id), {
-      headers: password ? { 'x-confirm-password': password } : undefined,
+      headers: { 'x-confirm-password': password.trim() },
+      body: JSON.stringify({ password: password.trim() }),
     });
   },
 

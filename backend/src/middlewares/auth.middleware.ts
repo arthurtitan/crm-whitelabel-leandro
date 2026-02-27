@@ -178,10 +178,15 @@ export async function verifyPassword(
   next: NextFunction
 ): Promise<void> {
   try {
-    const password = req.headers['x-confirm-password'] as string;
+    // Accept password from header (primary) or body (fallback)
+    const password = (req.headers['x-confirm-password'] as string) || (req.body?.password as string);
 
-    if (!password) {
-      throw new UnauthorizedError('Confirmação de senha requerida');
+    if (!password || !password.trim()) {
+      // Use 400 (Bad Request) instead of 401 to avoid triggering global logout
+      res.status(400).json({
+        error: { code: 'PASSWORD_REQUIRED', message: 'Confirmação de senha requerida' },
+      });
+      return;
     }
 
     const bcrypt = await import('bcryptjs');
@@ -192,13 +197,20 @@ export async function verifyPassword(
     });
 
     if (!user) {
-      throw new UnauthorizedError();
+      res.status(400).json({
+        error: { code: 'USER_NOT_FOUND', message: 'Usuário não encontrado' },
+      });
+      return;
     }
 
-    const isValid = await bcrypt.compare(password, user.passwordHash);
+    const isValid = await bcrypt.compare(password.trim(), user.passwordHash);
 
     if (!isValid) {
-      throw new UnauthorizedError(ErrorCodes.PASSWORD_INVALID);
+      // Use 403 (Forbidden) instead of 401 to avoid triggering global logout
+      res.status(403).json({
+        error: { code: 'PASSWORD_INVALID', message: 'Senha incorreta' },
+      });
+      return;
     }
 
     next();

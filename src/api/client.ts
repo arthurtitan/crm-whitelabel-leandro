@@ -135,10 +135,14 @@ async function handleResponse<T>(response: Response, skipAuth = false): Promise<
       };
     }
 
-    // Handle 401 Unauthorized — only trigger global logout for authenticated routes
+    // Handle 401 Unauthorized — only trigger global logout for token/session errors
+    // Do NOT logout for operational errors (password validation, etc.)
     if (response.status === 401 && !skipAuth) {
-      tokenManager.clearTokens();
-      window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+      const isSessionError = !errorData.code || ['TOKEN_EXPIRED', 'TOKEN_INVALID', 'USER_NOT_FOUND', 'USER_SUSPENDED', 'USER_INACTIVE', 'ACCOUNT_PAUSED'].includes(errorData.code);
+      if (isSessionError) {
+        tokenManager.clearTokens();
+        window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+      }
     }
     
     throw errorData;
