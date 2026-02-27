@@ -439,14 +439,25 @@ class ChatwootService {
   /**
    * Get account overview metrics
    */
-  async getAccountMetrics(accountId: string): Promise<ChatwootAccountMetrics> {
+  async getAccountMetrics(
+    accountId: string,
+    dateRange?: DateRange,
+    inboxId?: number,
+    agentId?: number,
+  ): Promise<ChatwootAccountMetrics> {
     const config = await this.getAccountConfig(accountId);
-    
+
+    const queryParams = new URLSearchParams({ type: 'account' });
+    if (dateRange?.since) queryParams.set('since', dateRange.since);
+    if (dateRange?.until) queryParams.set('until', dateRange.until);
+    if (inboxId) queryParams.set('inbox_id', String(inboxId));
+    if (agentId) queryParams.set('agent_id', String(agentId));
+
     const response = await this.makeRequest<ChatwootAccountMetrics>(
       config,
-      '/reports/summary'
+      `/reports/summary?${queryParams.toString()}`
     );
-    
+
     return response;
   }
 

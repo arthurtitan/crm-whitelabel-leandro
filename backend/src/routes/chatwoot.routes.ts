@@ -43,6 +43,7 @@ router.delete('/labels/:labelId', requireRole('admin', 'super_admin'), (req, res
 // Metrics
 // ============================================
 router.get('/metrics', (req, res, next) => chatwootController.getMetrics(req, res, next));
+router.post('/metrics', (req, res, next) => chatwootController.getMetrics(req, res, next));
 router.get('/metrics/agents', requireRole('admin', 'super_admin'), (req, res, next) => chatwootController.getAgentMetrics(req, res, next));
 router.get('/metrics/conversations', (req, res, next) => chatwootController.getConversationMetrics(req, res, next));
 
