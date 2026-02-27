@@ -220,6 +220,29 @@ export async function verifyPassword(
 }
 
 /**
+ * Middleware to require accountId (blocks Super Admin without impersonation)
+ */
+export function requireAccountId(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): void {
+  if (!req.user) {
+    return next(new UnauthorizedError());
+  }
+  if (!req.user.accountId) {
+    res.status(400).json({
+      error: {
+        code: 'ACCOUNT_REQUIRED',
+        message: 'Esta operação requer uma conta vinculada.',
+      },
+    });
+    return;
+  }
+  next();
+}
+
+/**
  * Middleware to ensure user can only access their own account's data
  */
 export function requireSameAccount(

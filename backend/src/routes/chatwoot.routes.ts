@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { chatwootController } from '../controllers/chatwoot.controller';
-import { authenticate, requireRole } from '../middlewares/auth.middleware';
+import { authenticate, requireRole, requireAccountId } from '../middlewares/auth.middleware';
 
 const router = Router();
 
@@ -10,9 +10,10 @@ const router = Router();
 router.post('/webhook', (req, res, next) => chatwootController.handleWebhook(req, res, next));
 
 // ============================================
-// All other routes require authentication
+// All other routes require authentication + accountId
 // ============================================
 router.use(authenticate);
+router.use(requireAccountId);
 
 // ============================================
 // Connection Testing
