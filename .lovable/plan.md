@@ -1,101 +1,96 @@
 
 
-# Correcao: Total de Leads, Novos Leads, Retornos e Taxa de Transbordo
+# Fix: Automatic JWT Token Refresh
 
-## Regras de Negocio (conforme documentacao do sistema)
+## Problem
 
-| Metrica | Definicao Correta |
-|---|---|
-| **Total de Leads** | Contatos **unicos** com atividade no periodo (nao conversas) |
-| **Novos Leads** | Contatos cuja `first_resolved_at` e NULL ou caiu dentro do periodo |
-| **Retornos no Periodo** | `Total de Leads - Novos Leads` |
-| **Taxa de Transbordo** | `resolucoes_humanas / (resolucoes_ia + resolucoes_humanas) * 100` (toda resolucao humana = transbordo) |
+The JWT access token expires after 1 hour (`JWT_EXPIRES_IN=1h`). The dashboard polls Chatwoot metrics every 30 seconds. When the token expires mid-session, the API returns 401 "Token expirado", triggering a global logout via `auth:unauthorized`. The user sees the error banner and loses their session.
 
-## Bugs Encontrados
+The backend already has a fully functional `/api/auth/refresh` endpoint that accepts the refresh token (stored in localStorage) and returns a new access token. However, the frontend `apiClient` never calls it.
 
-### Bug 1: Total de Leads conta conversas, nao contatos unicos
+## Solution
 
-**Ambos os arquivos** retornam `totalLeads: finalConversations.length`, que conta o numero de conversas. Um mesmo contato pode ter multiplas conversas, inflando o numero.
+Add transparent token refresh to `src/api/client.ts`:
 
-**Correcao:** Contar contatos unicos via `conv.meta?.sender?.id`:
+1. When a request gets a 401 with code `TOKEN_EXPIRED`, instead of immediately logging out:
+   - Attempt to call `/api/auth/refresh` with the stored refresh token
+   - If successful, save the new access token and retry the original request
+   - If refresh also fails, then proceed with logout
 
-```typescript
-const uniqueContactIds = new Set(
-  finalConversations
-    .map((c: any) => c.meta?.sender?.id)
-    .filter(Boolean)
-);
-const totalLeadsUnicos = uniqueContactIds.size;
-```
+2. Use a mutex/flag to prevent multiple concurrent refresh attempts (the 30s polling could trigger several 401s simultaneously).
 
-### Bug 2: Fallback de Transbordo inconsistente com regra de negocio
+## Implementation Details
 
-A regra diz: "Toda resolucao humana e automaticamente um transbordo" (IA sempre inicia o atendimento).
+**File: `src/api/client.ts`**
 
-No **sync** para o banco, o codigo ja faz isso corretamente: `ai_participated: true` (hardcoded).
-
-Porem no **fallback** (quando resolution_logs esta vazio), o codigo verifica `ai_responded === true` nos custom_attributes, o que pode retornar `false` para conversas antigas onde a IA nunca respondeu. Isso causa divergencia entre o fallback e o banco.
-
-**Correcao:** No fallback, toda resolucao humana deve contar como transbordo (sem verificar `ai_responded`):
+Add a refresh mechanism:
 
 ```typescript
-// ANTES (incorreto no fallback):
-if (aiResponded) fallbackTransbordo++;
+let isRefreshing = false;
+let refreshPromise: Promise<boolean> | null = null;
 
-// DEPOIS (alinhado com regra de negocio):
-fallbackTransbordo++; // Toda resolucao humana = transbordo
-```
-
-### Bug 3: Novos Leads no fallback do backend
-
-No backend Express (linha 429), quando `firstResolvedAtAvailable` e `false`, o fallback e `novosLeads = leadsInPeriod`. Porem `leadsInPeriod` conta conversas **criadas** no periodo, nao contatos unicos. Deveria contar contatos unicos criados no periodo.
-
-## Arquivos Afetados
-
-### 1. `supabase/functions/fetch-chatwoot-metrics/index.ts`
-- **Linha 879**: Mudar `totalLeads` para contagem de contatos unicos
-- **Linhas 814-817**: Remover check de `ai_responded` no fallback de transbordo — toda resolucao humana = transbordo
-
-### 2. `backend/src/services/chatwoot-metrics.service.ts`
-- **Linha 657**: Mudar `totalLeads` para contagem de contatos unicos
-- **Linhas 562-565**: Mesma correcao do fallback de transbordo
-- **Linha 429**: Corrigir fallback de `novosLeads` para contar contatos unicos
-
-## Detalhes da Implementacao
-
-Em ambos os arquivos, adicionar antes do bloco de resposta:
-
-```typescript
-// Contagem de contatos UNICOS (nao conversas)
-const uniqueContactIds = new Set(
-  finalConversations
-    .map((c: any) => c.meta?.sender?.id)
-    .filter(Boolean)
-);
-const totalLeadsUnicos = uniqueContactIds.size;
-```
-
-E no response:
-```typescript
-totalLeads: totalLeadsUnicos,
-// conversasAtivas permanece = novosLeads (correto)
-retornosNoPeriodo: Math.max(0, totalLeadsUnicos - novosLeads),
-```
-
-No fallback de transbordo (ambos os arquivos):
-```typescript
-} else if (result.type === 'human') {
-  fallbackHumano++;
-  fallbackTransbordo++; // Regra: toda resolucao humana = transbordo
+async function tryRefreshToken(): Promise<boolean> {
+  const refreshToken = tokenManager.getRefreshToken();
+  if (!refreshToken) return false;
+  
+  try {
+    const response = await fetch(buildUrl('/api/auth/refresh'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    });
+    
+    if (!response.ok) return false;
+    
+    const result = await response.json();
+    const data = result?.data ?? result;
+    if (data?.token) {
+      tokenManager.setToken(data.token);
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
 }
 ```
 
-## Resultado Esperado
+Modify `handleResponse` to intercept `TOKEN_EXPIRED` and retry:
 
-| Cenario | Antes (errado) | Depois (correto) |
-|---|---|---|
-| 10 conversas de 5 contatos | Total Leads = 10 | Total Leads = 5 |
-| 5 contatos unicos, 3 novos | Retornos = 10-3 = 7 | Retornos = 5-3 = 2 |
-| Fallback: humano resolveu sem ai_responded | Nao conta transbordo | Conta como transbordo |
-| Taxa transbordo com fallback | Subestimada | Alinhada com regra de negocio |
+- On 401 with `TOKEN_EXPIRED` code, call `tryRefreshToken()` (deduplicated via the mutex)
+- If refresh succeeds, retry the original fetch with the new token
+- If refresh fails, proceed with current logout behavior
 
+The retry needs access to the original request parameters, so the refresh+retry logic will be integrated into the `request()` function rather than `handleResponse()`.
+
+## Architecture
+
+```text
+Request fails with 401 TOKEN_EXPIRED
+        |
+        v
+  Is refresh in progress?
+   /            \
+  YES            NO
+   |              |
+   v              v
+ Wait for      Start refresh
+ existing      POST /api/auth/refresh
+ promise         |
+   |         Success?
+   |        /       \
+   v      YES        NO
+ Retry    Save      Clear tokens
+ with     new       Dispatch logout
+ new      token
+ token      |
+            v
+          Retry original request
+```
+
+## Result
+
+- Users stay logged in as long as the refresh token is valid (7 days)
+- Dashboard polling continues seamlessly across token renewals
+- No more "Token expirado" errors during normal usage
+- Multiple simultaneous 401s are deduplicated into a single refresh call
