@@ -1,101 +1,104 @@
 
 
-# Fix: Rota POST /api/chatwoot/metrics retornando 404
+# Correcao Definitiva: accountId null e Chatwoot 404
 
-## Problema
+## Diagnostico
 
-O frontend envia `POST /api/chatwoot/metrics` com parametros no body (`dateFrom`, `dateTo`, `inboxId`, `agentId`), mas o backend registra apenas `GET /api/chatwoot/metrics`. Resultado: 404 em todas as chamadas de metricas do dashboard.
+Ha dois problemas distintos nos logs:
 
-## Causa raiz
+### Problema 1: Chatwoot API retorna 404
+A URL chamada e:
+```text
+/reports/summary?type=account&since=2026-02-20T04:57:08.310Z&until=2026-02-27T04:57:08.310Z
+```
+A API do Chatwoot espera **timestamps Unix em segundos** (ex: `1740009428`), nao strings ISO. O formato errado faz o Chatwoot retornar 404 ("The page you were looking for doesn't exist").
 
-Incompatibilidade de metodo HTTP:
-- **Frontend** (`useChatwootMetrics.ts` linha 149): `apiClient.post(API_ENDPOINTS.CHATWOOT.METRICS, { dateFrom, dateTo, inboxId, agentId })`
-- **Backend** (`chatwoot.routes.ts` linha 45): `router.get('/metrics', ...)`
-
-Alem disso, o controller `getMetrics` nao le os parametros de data/filtro do body — apenas chama `getAccountMetrics(accountId)` sem repassar datas.
+### Problema 2: accountId null em multiplos controllers
+Todos os controllers usam `req.user!.accountId!` (non-null assertion) sem validacao. Se o JWT do Super Admin e usado (antes do rebuild com a correcao de impersonacao), o accountId e null e o Prisma crasha. Precisamos de uma guarda defensiva para que, mesmo em caso de falha, o sistema retorne um erro claro (400) em vez de crashar (500).
 
 ## Solucao
 
-### 1. Backend Route: Adicionar POST /metrics
-
-**Arquivo:** `backend/src/routes/chatwoot.routes.ts`
-
-Adicionar rota POST ao lado da GET existente (mantendo retrocompatibilidade):
-
-```typescript
-router.post('/metrics', (req, res, next) => chatwootController.getMetrics(req, res, next));
-```
-
-### 2. Backend Controller: Ler parametros do body e passar para o servico
+### 1. Converter datas ISO para Unix epoch no controller do Chatwoot
 
 **Arquivo:** `backend/src/controllers/chatwoot.controller.ts`
 
-Atualizar `getMetrics` para extrair `dateFrom`, `dateTo`, `inboxId`, `agentId` do body (POST) ou query (GET) e repassar ao servico:
+No metodo `getMetrics`, converter as strings ISO para timestamps Unix (segundos):
 
 ```typescript
-async getMetrics(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-  try {
-    const accountId = req.user!.accountId!;
-    const { dateFrom, dateTo, inboxId, agentId } = { ...req.query, ...req.body };
-    
-    const dateRange = {
-      since: dateFrom as string | undefined,
-      until: dateTo as string | undefined,
-    };
-    
-    const metrics = await chatwootService.getAccountMetrics(accountId, dateRange, inboxId, agentId);
-    res.json({ success: true, data: metrics });
-  } catch (error) {
-    next(error);
+const dateRange = {
+  since: dateFrom ? String(Math.floor(new Date(dateFrom as string).getTime() / 1000)) : undefined,
+  until: dateTo ? String(Math.floor(new Date(dateTo as string).getTime() / 1000)) : undefined,
+};
+```
+
+Isso garante que a URL final seja algo como:
+```text
+/reports/summary?type=account&since=1740009428&until=1740614228
+```
+
+### 2. Criar middleware de validacao de accountId
+
+**Arquivo:** `backend/src/middlewares/auth.middleware.ts`
+
+Adicionar uma funcao `requireAccountId` que valida se o usuario tem accountId antes de permitir acesso a rotas de conta:
+
+```typescript
+export function requireAccountId(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): void {
+  if (!req.user) {
+    return next(new UnauthorizedError());
   }
+  if (!req.user.accountId) {
+    res.status(400).json({
+      error: {
+        code: 'ACCOUNT_REQUIRED',
+        message: 'Esta operacao requer uma conta vinculada.',
+      },
+    });
+    return;
+  }
+  next();
 }
 ```
 
-### 3. Backend Service: Aceitar parametros de data e filtro
+### 3. Aplicar middleware nas rotas que exigem accountId
 
-**Arquivo:** `backend/src/services/chatwoot.service.ts`
+**Arquivos de rotas afetados:**
+- `backend/src/routes/product.routes.ts`
+- `backend/src/routes/sale.routes.ts`
+- `backend/src/routes/contact.routes.ts`
+- `backend/src/routes/chatwoot.routes.ts` (exceto webhook)
+- `backend/src/routes/calendar.routes.ts`
+- `backend/src/routes/dashboard.routes.ts` (exceto rotas super-admin)
 
-Atualizar `getAccountMetrics` para aceitar e repassar `dateRange`, `inboxId` e `agentId` na chamada ao Chatwoot:
+Adicionar `requireAccountId` apos `authenticate` nestas rotas:
 
 ```typescript
-async getAccountMetrics(
-  accountId: string,
-  dateRange?: DateRange,
-  inboxId?: number,
-  agentId?: number
-): Promise<ChatwootAccountMetrics> {
-  const config = await this.getAccountConfig(accountId);
-  const queryParams = new URLSearchParams({ type: 'account' });
-  if (dateRange?.since) queryParams.set('since', dateRange.since);
-  if (dateRange?.until) queryParams.set('until', dateRange.until);
-  if (inboxId) queryParams.set('inbox_id', String(inboxId));
-  if (agentId) queryParams.set('agent_id', String(agentId));
-  
-  const response = await this.makeRequest<ChatwootAccountMetrics>(
-    config,
-    `/reports/summary?${queryParams.toString()}`
-  );
-  return response;
-}
+import { authenticate, requireAccountId } from '../middlewares/auth.middleware';
+router.use(authenticate);
+router.use(requireAccountId);
 ```
 
-### 4. Frontend: Tratar resposta envelope `{ success, data }`
+### 4. Tambem aplicar correcao de datas no getAgentMetrics e getConversationMetrics
 
-**Arquivo:** `src/hooks/useChatwootMetrics.ts`
+**Arquivo:** `backend/src/controllers/chatwoot.controller.ts`
 
-A funcao `fetchChatwootMetricsViaBackend` ja trata o envelope — nenhuma alteracao necessaria.
+Garantir que os endpoints `/metrics/agents` e `/metrics/conversations` tambem convertam datas para epoch seconds.
 
 ## Resultado esperado
 
-- `POST /api/chatwoot/metrics` retorna 200 com metricas reais do Chatwoot
-- O dashboard exibe dados em vez do erro "Rota nao encontrada"
-- Filtros de data, canal e agente funcionam corretamente
-- Retrocompatibilidade mantida com GET
+- Chatwoot `/reports/summary` recebe timestamps Unix e retorna 200 com metricas reais
+- Qualquer rota que exija accountId retorna 400 com mensagem clara em vez de 500 (crash do Prisma)
+- O dashboard exibe metricas corretamente durante impersonacao
+- O sistema nao crasha mesmo que o rebuild da impersonacao nao tenha sido feito ainda
 
-## Sequencia
+## Sequencia de implementacao
 
-1. `backend/src/routes/chatwoot.routes.ts` — adicionar `router.post`
-2. `backend/src/controllers/chatwoot.controller.ts` — ler body params
-3. `backend/src/services/chatwoot.service.ts` — aceitar dateRange/filters
+1. `backend/src/middlewares/auth.middleware.ts` - adicionar `requireAccountId`
+2. `backend/src/controllers/chatwoot.controller.ts` - converter datas para epoch
+3. Rotas: product, sale, contact, chatwoot, calendar, dashboard - aplicar middleware
 4. Rebuild no EasyPanel
 
