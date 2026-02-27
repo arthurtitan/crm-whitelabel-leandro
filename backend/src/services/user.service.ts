@@ -374,14 +374,19 @@ class UserService {
         nome: targetUser.nome,
         email: targetUser.email,
         role: targetUser.role,
+        accountId: targetUser.accountId,
         permissions: targetUser.permissions,
         status: targetUser.status,
+        chatwootAgentId: targetUser.chatwootAgentId,
       },
       account: targetUser.account ? {
         id: targetUser.account.id,
         nome: targetUser.account.nome,
         status: targetUser.account.status,
         timezone: targetUser.account.timezone,
+        chatwootBaseUrl: targetUser.account.chatwootBaseUrl,
+        chatwootAccountId: targetUser.account.chatwootAccountId,
+        chatwootApiKey: targetUser.account.chatwootApiKey,
       } : null,
     };
   }
