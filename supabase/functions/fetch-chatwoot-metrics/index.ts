@@ -811,10 +811,7 @@ serve(async (req) => {
           fallbackIA++;
         } else if (result.type === 'human') {
           fallbackHumano++;
-          const custom = conv.custom_attributes || {};
-          const additional = conv.additional_attributes || {};
-          const aiResponded = custom.ai_responded === true || additional.ai_responded === true;
-          if (aiResponded) fallbackTransbordo++;
+          fallbackTransbordo++; // Regra: toda resolução humana = transbordo (IA sempre inicia)
         }
       }
 
@@ -876,9 +873,17 @@ serve(async (req) => {
       success: true,
       data: {
         // KPIs básicos
-        totalLeads: finalConversations.length,
+        // Contagem de contatos ÚNICOS (não conversas)
+        totalLeads: (() => {
+          const ids = new Set(finalConversations.map((c: any) => c.meta?.sender?.id).filter(Boolean));
+          return ids.size || finalConversations.length; // fallback se sender.id indisponível
+        })(),
         conversasAtivas: novosLeads,
-        retornosNoPeriodo: Math.max(0, finalConversations.length - novosLeads),
+        retornosNoPeriodo: (() => {
+          const ids = new Set(finalConversations.map((c: any) => c.meta?.sender?.id).filter(Boolean));
+          const total = ids.size || finalConversations.length;
+          return Math.max(0, total - novosLeads);
+        })(),
         conversasResolvidas: resolvedCount,
         conversasPendentes: pendingCount,
         conversasSemResposta: unattendedCount,

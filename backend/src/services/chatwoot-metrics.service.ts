@@ -426,7 +426,16 @@ class ChatwootMetricsService {
     // RESOLUTION LOGS: Sync + Query via Prisma
     // ========================================================================
     let historicoResolucoes = { totalIA: 0, totalHumano: 0, transbordoCount: 0, percentualIA: 0, percentualHumano: 0 };
-    let novosLeads = leadsInPeriod; // fallback: use Chatwoot count
+    // Fallback: contar contatos únicos criados no período
+    let novosLeads = (() => {
+      const createdInPeriod = finalConversations.filter((c: any) => {
+        const raw = c.created_at;
+        const ms = typeof raw === 'number' ? raw * 1000 : new Date(raw).getTime();
+        return ms >= dateFromParsed.getTime() && ms <= dateToParsed.getTime();
+      });
+      const uniqueIds = new Set(createdInPeriod.map((c: any) => c.meta?.sender?.id).filter(Boolean));
+      return uniqueIds.size || leadsInPeriod;
+    })();
 
     // --- Check if resolution_logs table exists (avoid flood of errors) ---
     let resolutionLogsAvailable = false;
@@ -559,10 +568,7 @@ class ChatwootMetricsService {
           fallbackIA++;
         } else if (result.type === 'human') {
           fallbackHumano++;
-          const custom = conv.custom_attributes || {};
-          const additional = conv.additional_attributes || {};
-          const aiResponded = custom.ai_responded === true || additional.ai_responded === true;
-          if (aiResponded) fallbackTransbordo++;
+          fallbackTransbordo++; // Regra: toda resolução humana = transbordo (IA sempre inicia)
         }
       }
 
@@ -654,9 +660,17 @@ class ChatwootMetricsService {
     // RESPONSE (exact same shape as Edge Function)
     // ========================================================================
     return {
-      totalLeads: finalConversations.length,
+      // Contagem de contatos ÚNICOS (não conversas)
+      totalLeads: (() => {
+        const ids = new Set(finalConversations.map((c: any) => c.meta?.sender?.id).filter(Boolean));
+        return ids.size || finalConversations.length;
+      })(),
       conversasAtivas: novosLeads,
-      retornosNoPeriodo: Math.max(0, finalConversations.length - novosLeads),
+      retornosNoPeriodo: (() => {
+        const ids = new Set(finalConversations.map((c: any) => c.meta?.sender?.id).filter(Boolean));
+        const total = ids.size || finalConversations.length;
+        return Math.max(0, total - novosLeads);
+      })(),
       conversasResolvidas: resolvedCount,
       conversasPendentes: pendingCount,
       conversasSemResposta: unattendedCount,
