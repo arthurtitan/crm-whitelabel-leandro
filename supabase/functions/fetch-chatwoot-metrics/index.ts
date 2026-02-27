@@ -764,6 +764,41 @@ serve(async (req) => {
           // Não fatal — fallback para 0
         }
 
+        // FALLBACK: Se DB não tem contacts sincronizados, inferir novosLeads via allConversations
+        if (novosLeads === 0) {
+          const contactIdsInPeriod = [...new Set(
+            finalConversations
+              .map((c: any) => c.meta?.sender?.id)
+              .filter(Boolean)
+          )] as number[];
+
+          if (contactIdsInPeriod.length > 0) {
+            const convsBySender = new Map<number, any[]>();
+            for (const conv of allConversations) {
+              const sid = conv.meta?.sender?.id;
+              if (!sid) continue;
+              if (!convsBySender.has(sid)) convsBySender.set(sid, []);
+              convsBySender.get(sid)!.push(conv);
+            }
+
+            const dateFromParsed = new Date(dateFrom);
+            let fallbackNovos = 0;
+            for (const contactId of contactIdsInPeriod) {
+              const allConvs = convsBySender.get(contactId) || [];
+              if (allConvs.length === 0) { fallbackNovos++; continue; }
+              const earliestMs = Math.min(...allConvs.map((c: any) => {
+                const raw = c.created_at;
+                return typeof raw === 'number' ? raw * 1000 : new Date(raw).getTime();
+              }));
+              if (earliestMs >= dateFromParsed.getTime()) {
+                fallbackNovos++;
+              }
+            }
+            novosLeads = fallbackNovos;
+            console.log('[Metrics] Used allConversations fallback for novosLeads:', fallbackNovos);
+          }
+        }
+
         // ====================================================================
         // CONSULTA: Totais históricos filtrados por período
         // ====================================================================
@@ -795,7 +830,7 @@ serve(async (req) => {
       console.error('[Resolution Logs] DB error (non-fatal):', dbErr);
     }
 
-    // FALLBACK: Se resolution_logs vazio, calcular via dados brutos do Chatwoot
+    // FALLBACK TOTAL: Se resolution_logs vazio, calcular tudo via dados brutos do Chatwoot
     if (historicoResolucoes.totalIA === 0 && historicoResolucoes.totalHumano === 0) {
       const resolvedConversations = finalConversations.filter(
         (c: any) => c.status === 'resolved'
@@ -811,7 +846,7 @@ serve(async (req) => {
           fallbackIA++;
         } else if (result.type === 'human') {
           fallbackHumano++;
-          fallbackTransbordo++; // Regra: toda resolução humana = transbordo (IA sempre inicia)
+          fallbackTransbordo++;
         }
       }
 
@@ -824,9 +859,30 @@ serve(async (req) => {
         percentualHumano: fallbackTotal > 0 ? Math.round((fallbackHumano / fallbackTotal) * 100) : 0,
       };
 
-      console.log('[Metrics] Used Chatwoot API fallback for resolution data', {
+      console.log('[Metrics] Used Chatwoot API FULL fallback for resolution data', {
         ia: fallbackIA, humano: fallbackHumano, transbordo: fallbackTransbordo
       });
+    }
+    // FALLBACK PARCIAL IA: DB tem resoluções humanas mas não tem IA — suplementar via Chatwoot
+    else if (historicoResolucoes.totalIA === 0 && historicoResolucoes.totalHumano > 0) {
+      const resolvedConversations = finalConversations.filter(
+        (c: any) => c.status === 'resolved'
+      );
+
+      let fallbackIA = 0;
+      for (const conv of resolvedConversations) {
+        const result = classifyResolver(conv);
+        if (result.type === 'ai') fallbackIA++;
+      }
+
+      if (fallbackIA > 0) {
+        historicoResolucoes.totalIA = fallbackIA;
+        const total = historicoResolucoes.totalIA + historicoResolucoes.totalHumano;
+        historicoResolucoes.percentualIA = Math.round((fallbackIA / total) * 100);
+        historicoResolucoes.percentualHumano = 100 - historicoResolucoes.percentualIA;
+
+        console.log('[Metrics] Used Chatwoot API PARTIAL fallback for IA resolutions:', fallbackIA);
+      }
     }
 
     // ========================================================================
