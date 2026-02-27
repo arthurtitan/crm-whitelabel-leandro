@@ -11,3 +11,4 @@ export { financeService } from './finance.service';
 export { insightsService } from './insights.service';
 export { calendarService } from './calendar.service';
 export { chatwootService } from './chatwoot.service';
+export { chatwootMetricsService } from './chatwoot-metrics.service';

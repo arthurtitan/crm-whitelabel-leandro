@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import { chatwootService } from '../services/chatwoot.service';
+import { chatwootMetricsService } from '../services/chatwoot-metrics.service';
 import { contactService } from '../services/contact.service';
 import { eventService } from '../services/event.service';
 import { prisma } from '../config/database';
@@ -257,14 +258,20 @@ class ChatwootController {
       const accountId = req.user!.accountId!;
       const { dateFrom, dateTo, inboxId, agentId } = { ...req.query, ...req.body };
 
-      const dateRange = {
-        since: dateFrom ? String(Math.floor(new Date(dateFrom as string).getTime() / 1000)) : undefined,
-        until: dateTo ? String(Math.floor(new Date(dateTo as string).getTime() / 1000)) : undefined,
-      };
+      if (!dateFrom || !dateTo) {
+        return res.status(400).json({ success: false, error: 'dateFrom e dateTo são obrigatórios' });
+      }
 
-      const metrics = await chatwootService.getAccountMetrics(accountId, dateRange, inboxId ? Number(inboxId) : undefined, agentId ? Number(agentId) : undefined);
+      const metrics = await chatwootMetricsService.computeMetrics(accountId, {
+        dateFrom: dateFrom as string,
+        dateTo: dateTo as string,
+        inboxId: inboxId ? Number(inboxId) : undefined,
+        agentId: agentId ? Number(agentId) : undefined,
+      });
+
       res.json({ success: true, data: metrics });
     } catch (error) {
+      logger.error('[Metrics] computeMetrics failed', { error });
       next(error);
     }
   }
