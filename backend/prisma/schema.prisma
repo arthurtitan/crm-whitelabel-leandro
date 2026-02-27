@@ -132,6 +132,8 @@ model Contact {
   chatwootContactId      Int? @map("chatwoot_contact_id")
   chatwootConversationId Int? @map("chatwoot_conversation_id")
 
+  firstResolvedAt DateTime? @map("first_resolved_at") @db.Timestamptz
+
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -513,6 +515,25 @@ enum AttendeeStatus {
   confirmed
   declined
   tentative
+}
+
+// ============================================
+// RESOLUTION LOGS
+// ============================================
+model ResolutionLog {
+  id              String   @id @default(uuid()) @db.Uuid
+  accountId       String   @map("account_id") @db.Uuid
+  conversationId  Int      @map("conversation_id")
+  resolvedBy      String   @map("resolved_by")
+  resolutionType  String   @default("explicit") @map("resolution_type")
+  aiParticipated  Boolean? @default(false) @map("ai_participated")
+  agentId         Int?     @map("agent_id")
+  resolvedAt      DateTime @default(now()) @map("resolved_at") @db.Timestamptz
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([accountId])
+  @@index([resolvedAt])
+  @@map("resolution_logs")
 }
 
 // ============================================
