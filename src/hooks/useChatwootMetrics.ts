@@ -1,6 +1,7 @@
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBackend } from '@/config/backend.config';
+import { hasChatwootConfig } from '@/utils/chatwootConfig';
 import { supabase } from '@/integrations/supabase/client';
 import { apiClient } from '@/api/client';
 import { API_ENDPOINTS } from '@/api/endpoints';
@@ -233,11 +234,7 @@ export function useChatwootMetrics({
 }: UseChatwootMetricsParams): UseChatwootMetricsResult {
   const { account } = useAuth();
 
-  const isConfigured = Boolean(
-    account?.chatwoot_base_url &&
-    account?.chatwoot_account_id &&
-    account?.chatwoot_api_key
-  );
+  const isConfigured = hasChatwootConfig(account);
 
   const query = useQuery({
     queryKey: [
@@ -280,7 +277,7 @@ export function useChatwootMetrics({
   });
 
   // Mapear estados do TanStack Query para interface existente
-  const isLoading = query.isPending;
+  const isLoading = isConfigured ? query.isPending : false;
   const isSyncing = query.isFetching && !query.isPending;
   const lastSyncAt = query.dataUpdatedAt 
     ? new Date(query.dataUpdatedAt).toISOString() 

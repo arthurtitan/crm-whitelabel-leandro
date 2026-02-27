@@ -18,6 +18,32 @@ import { toast } from 'sonner';
 // This is a module-level import for the React context object only
 import { AuthContext } from '@/contexts/AuthContext';
 
+// --- Normalize helpers for snake_case / camelCase backend responses ---
+function normalizeUser(raw: any): User {
+  return {
+    id: raw.id,
+    email: raw.email,
+    nome: raw.nome,
+    role: raw.role,
+    account_id: raw.account_id ?? raw.accountId,
+    permissions: raw.permissions || ['dashboard'],
+    status: raw.status || 'active',
+    chatwoot_agent_id: raw.chatwoot_agent_id ?? raw.chatwootAgentId,
+  };
+}
+
+function normalizeAccount(raw: any): Account | null {
+  if (!raw) return null;
+  return {
+    id: raw.id,
+    nome: raw.nome,
+    status: raw.status,
+    chatwoot_base_url: raw.chatwoot_base_url ?? raw.chatwootBaseUrl,
+    chatwoot_account_id: raw.chatwoot_account_id ?? raw.chatwootAccountId,
+    chatwoot_api_key: raw.chatwoot_api_key ?? raw.chatwootApiKey,
+  };
+}
+
 // Types (same as AuthContext.tsx)
 interface User {
   id: string;
@@ -81,24 +107,8 @@ export function BackendAuthProvider({ children }: { children: ReactNode }) {
       if (!mountedRef.current) return;
 
       setAuthState({
-        user: {
-          id: response.user.id,
-          email: response.user.email,
-          nome: response.user.nome,
-          role: response.user.role,
-          account_id: response.user.account_id || response.user.accountId,
-          permissions: response.user.permissions || ['dashboard'],
-          status: response.user.status,
-          chatwoot_agent_id: response.user.chatwoot_agent_id || response.user.chatwootAgentId,
-        },
-        account: response.account ? {
-          id: response.account.id,
-          nome: response.account.nome,
-          status: response.account.status,
-          chatwoot_base_url: response.account.chatwoot_base_url || response.account.chatwootBaseUrl,
-          chatwoot_account_id: response.account.chatwoot_account_id || response.account.chatwootAccountId,
-          chatwoot_api_key: response.account.chatwoot_api_key || response.account.chatwootApiKey,
-        } : null,
+        user: normalizeUser(response.user),
+        account: normalizeAccount(response.account),
         isAuthenticated: true,
         isLoading: false,
         authError: null,
@@ -149,24 +159,8 @@ export function BackendAuthProvider({ children }: { children: ReactNode }) {
       tokenManager.setRefreshToken(response.refreshToken);
 
       setAuthState({
-        user: {
-          id: response.user.id,
-          email: response.user.email,
-          nome: response.user.nome,
-          role: response.user.role,
-          account_id: response.user.account_id || response.user.accountId,
-          permissions: response.user.permissions || ['dashboard'],
-          status: response.user.status || 'active',
-          chatwoot_agent_id: response.user.chatwoot_agent_id,
-        },
-        account: response.account ? {
-          id: response.account.id,
-          nome: response.account.nome,
-          status: response.account.status,
-          chatwoot_base_url: response.account.chatwoot_base_url,
-          chatwoot_account_id: response.account.chatwoot_account_id,
-          chatwoot_api_key: response.account.chatwoot_api_key,
-        } : null,
+        user: normalizeUser(response.user),
+        account: normalizeAccount(response.account),
         isAuthenticated: true,
         isLoading: false,
         authError: null,
@@ -221,25 +215,8 @@ export function BackendAuthProvider({ children }: { children: ReactNode }) {
         tokenManager.setToken(response.token);
       }
 
-      const targetUser: User = {
-        id: response.user.id,
-        email: response.user.email,
-        nome: response.user.nome,
-        role: response.user.role,
-        account_id: response.user.account_id || response.user.accountId,
-        permissions: response.user.permissions || ['dashboard'],
-        status: response.user.status,
-        chatwoot_agent_id: response.user.chatwoot_agent_id || response.user.chatwootAgentId,
-      };
-
-      const targetAccount: Account | null = response.account ? {
-        id: response.account.id,
-        nome: response.account.nome,
-        status: response.account.status,
-        chatwoot_base_url: response.account.chatwoot_base_url || response.account.chatwootBaseUrl,
-        chatwoot_account_id: response.account.chatwoot_account_id || response.account.chatwootAccountId,
-        chatwoot_api_key: response.account.chatwoot_api_key || response.account.chatwootApiKey,
-      } : null;
+      const targetUser = normalizeUser(response.user);
+      const targetAccount = normalizeAccount(response.account);
 
       setOriginalUser(authState.user);
       setIsImpersonating(true);
