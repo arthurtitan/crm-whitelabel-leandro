@@ -522,6 +522,45 @@ class ChatwootMetricsService {
     }
 
     // ========================================================================
+    // FALLBACK: compute from raw Chatwoot data if resolution_logs empty
+    // ========================================================================
+    if (historicoResolucoes.totalIA === 0 && historicoResolucoes.totalHumano === 0) {
+      const resolvedConversations = finalConversations.filter(
+        (c: any) => c.status === 'resolved'
+      );
+
+      let fallbackIA = 0;
+      let fallbackHumano = 0;
+      let fallbackTransbordo = 0;
+
+      for (const conv of resolvedConversations) {
+        const result = classifyResolver(conv);
+        if (result.type === 'ai') {
+          fallbackIA++;
+        } else if (result.type === 'human') {
+          fallbackHumano++;
+          const custom = conv.custom_attributes || {};
+          const additional = conv.additional_attributes || {};
+          const aiResponded = custom.ai_responded === true || additional.ai_responded === true;
+          if (aiResponded) fallbackTransbordo++;
+        }
+      }
+
+      const fallbackTotal = fallbackIA + fallbackHumano;
+      historicoResolucoes = {
+        totalIA: fallbackIA,
+        totalHumano: fallbackHumano,
+        transbordoCount: fallbackTransbordo,
+        percentualIA: fallbackTotal > 0 ? Math.round((fallbackIA / fallbackTotal) * 100) : 0,
+        percentualHumano: fallbackTotal > 0 ? Math.round((fallbackHumano / fallbackTotal) * 100) : 0,
+      };
+
+      logger.info('[Metrics] Used Chatwoot API fallback for resolution data', {
+        ia: fallbackIA, humano: fallbackHumano, transbordo: fallbackTransbordo
+      });
+    }
+
+    // ========================================================================
     // BUILD RESOLUCAO FROM PERSISTENT DATA
     // ========================================================================
     const resolucao = {
