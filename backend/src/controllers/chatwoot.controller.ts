@@ -258,8 +258,8 @@ class ChatwootController {
       const { dateFrom, dateTo, inboxId, agentId } = { ...req.query, ...req.body };
 
       const dateRange = {
-        since: dateFrom as string | undefined,
-        until: dateTo as string | undefined,
+        since: dateFrom ? String(Math.floor(new Date(dateFrom as string).getTime() / 1000)) : undefined,
+        until: dateTo ? String(Math.floor(new Date(dateTo as string).getTime() / 1000)) : undefined,
       };
 
       const metrics = await chatwootService.getAccountMetrics(accountId, dateRange, inboxId ? Number(inboxId) : undefined, agentId ? Number(agentId) : undefined);
@@ -279,8 +279,8 @@ class ChatwootController {
       const { since, until } = req.query;
       
       const dateRange = {
-        since: since as string | undefined,
-        until: until as string | undefined,
+        since: since ? String(Math.floor(new Date(since as string).getTime() / 1000)) : undefined,
+        until: until ? String(Math.floor(new Date(until as string).getTime() / 1000)) : undefined,
       };
 
       const metrics = await chatwootService.getAgentMetrics(accountId, dateRange);
@@ -300,8 +300,8 @@ class ChatwootController {
       const { since, until } = req.query;
       
       const dateRange = {
-        since: since as string | undefined,
-        until: until as string | undefined,
+        since: since ? String(Math.floor(new Date(since as string).getTime() / 1000)) : undefined,
+        until: until ? String(Math.floor(new Date(until as string).getTime() / 1000)) : undefined,
       };
 
       const metrics = await chatwootService.getConversationMetrics(accountId, dateRange);

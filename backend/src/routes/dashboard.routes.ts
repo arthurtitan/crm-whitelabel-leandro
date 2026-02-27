@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { dashboardController } from '../controllers/dashboard.controller';
-import { authenticate, requireSuperAdmin } from '../middlewares/auth.middleware';
+import { authenticate, requireSuperAdmin, requireAccountId } from '../middlewares/auth.middleware';
 
 const router = Router();
 
-// All routes require authentication
+// All routes require authentication + accountId
 router.use(authenticate);
+router.use(requireAccountId);
 
 router.get('/kpis', (req, res, next) => dashboardController.getKPIs(req, res, next));
 router.get('/hourly-peak', (req, res, next) => dashboardController.getHourlyPeak(req, res, next));

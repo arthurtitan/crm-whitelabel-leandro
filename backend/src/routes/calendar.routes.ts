@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { calendarController } from '../controllers/calendar.controller';
-import { authenticate, requirePermission, requireAdmin } from '../middlewares/auth.middleware';
+import { authenticate, requirePermission, requireAdmin, requireAccountId } from '../middlewares/auth.middleware';
 
 const router = Router();
 
-// All routes require authentication
+// All routes require authentication + accountId
 router.use(authenticate);
+router.use(requireAccountId);
 
 router.get('/events', requirePermission('agenda'), (req, res, next) => calendarController.list(req, res, next));
 router.post('/events', requirePermission('agenda'), (req, res, next) => calendarController.create(req, res, next));

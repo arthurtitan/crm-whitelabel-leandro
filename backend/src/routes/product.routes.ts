@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { productController } from '../controllers/product.controller';
-import { authenticate, requirePermission, requireAdmin } from '../middlewares/auth.middleware';
+import { authenticate, requirePermission, requireAdmin, requireAccountId } from '../middlewares/auth.middleware';
 
 const router = Router();
 
-// All routes require authentication
+// All routes require authentication + accountId
 router.use(authenticate);
+router.use(requireAccountId);
 
 router.get('/', requirePermission('products', 'sales'), (req, res, next) => productController.list(req, res, next));
 router.post('/', requirePermission('products'), (req, res, next) => productController.create(req, res, next));

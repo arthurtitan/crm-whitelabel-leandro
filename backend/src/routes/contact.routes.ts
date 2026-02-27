@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { contactController } from '../controllers/contact.controller';
-import { authenticate, requirePermission } from '../middlewares/auth.middleware';
+import { authenticate, requirePermission, requireAccountId } from '../middlewares/auth.middleware';
 
 const router = Router();
 
-// All routes require authentication
+// All routes require authentication + accountId
 router.use(authenticate);
+router.use(requireAccountId);
 
 router.get('/', requirePermission('leads', 'kanban'), (req, res, next) => contactController.list(req, res, next));
 router.post('/', requirePermission('leads', 'kanban'), (req, res, next) => contactController.create(req, res, next));
