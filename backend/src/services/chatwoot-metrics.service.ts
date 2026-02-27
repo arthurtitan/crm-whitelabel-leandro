@@ -138,7 +138,7 @@ async function fetchAllConversations(
         break;
       }
 
-      const data = await response.json();
+      const data = await response.json() as any;
       const conversations = data.data?.payload || data.payload || [];
 
       if (conversations.length === 0) {
@@ -167,7 +167,7 @@ async function fetchAgents(
     const response = await fetchWithRetry(url, headers);
 
     if (response.ok) {
-      const data = await response.json();
+      const data = await response.json() as any;
       return Array.isArray(data) ? data : (data.payload || []);
     }
 
@@ -189,7 +189,7 @@ async function fetchInboxes(
     const response = await fetchWithRetry(url, headers);
 
     if (response.ok) {
-      const data = await response.json();
+      const data = await response.json() as any;
       return data.payload || [];
     }
 
