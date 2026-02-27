@@ -1,96 +1,135 @@
 
+# Auditoria e Correcao: Metricas do Dashboard vs Dados Reais do Chatwoot
 
-# Fix: Automatic JWT Token Refresh
+## Dados Encontrados na Investigacao
 
-## Problem
+### O que o Dashboard exibe (screenshots):
+| Metrica | 30 dias | 7 dias |
+|---|---|---|
+| Total de Leads | 22 | 3 |
+| Novos Leads | 0 | 0 |
+| Retornos | 22 | 3 |
+| Resolucao IA | 0 (0%) | 0 (0%) |
+| Resolucao Humano | 4 (100%) | 2 (100%) |
+| Transbordo | 4 (100%) | 2 (100%) |
+| Backlog Humano | 0/0/0 | 0/0/0 |
 
-The JWT access token expires after 1 hour (`JWT_EXPIRES_IN=1h`). The dashboard polls Chatwoot metrics every 30 seconds. When the token expires mid-session, the API returns 401 "Token expirado", triggering a global logout via `auth:unauthorized`. The user sees the error banner and loses their session.
+### O que o banco de dados contém:
+- `contacts` table: **VAZIA** (0 registros) - nenhum contato sincronizado
+- `resolution_logs`: 15 registros (9 AI + 6 humano), todos entre Feb 12-16
+- Unique constraint e em `(account_id, conversation_id, resolved_at)`, permitindo multiplas entradas por conversa
 
-The backend already has a fully functional `/api/auth/refresh` endpoint that accepts the refresh token (stored in localStorage) and returns a new access token. However, the frontend `apiClient` never calls it.
+## Bugs Identificados
 
-## Solution
+### Bug 1: Novos Leads SEMPRE 0 (CRITICO)
 
-Add transparent token refresh to `src/api/client.ts`:
+**Causa raiz:** A logica de novos leads depende da tabela `contacts` ter registros com `chatwoot_contact_id` e `first_resolved_at` populados. Como a tabela contacts esta VAZIA, a query retorna 0 resultados e `novosLeads = 0`.
 
-1. When a request gets a 401 with code `TOKEN_EXPIRED`, instead of immediately logging out:
-   - Attempt to call `/api/auth/refresh` with the stored refresh token
-   - If successful, save the new access token and retry the original request
-   - If refresh also fails, then proceed with logout
+**Consequencia:** `retornosNoPeriodo = totalLeads - 0 = totalLeads`. Todos os leads aparecem como "retornos", o que e incorreto.
 
-2. Use a mutex/flag to prevent multiple concurrent refresh attempts (the 30s polling could trigger several 401s simultaneously).
+**Edge Function (linhas 741-765):** Query contra contacts retorna vazio, novosLeads fica 0.
+**Backend (linhas 492-520):** Mesma query via Prisma, mesmo resultado.
 
-## Implementation Details
-
-**File: `src/api/client.ts`**
-
-Add a refresh mechanism:
+**Correcao:** Quando a query ao banco retorna 0 contatos correspondentes, usar fallback baseado nos dados da API do Chatwoot. Agrupar todas as conversas por `sender.id`, verificar se a conversa mais antiga de cada contato foi criada dentro do periodo. Se sim, e um "novo lead".
 
 ```typescript
-let isRefreshing = false;
-let refreshPromise: Promise<boolean> | null = null;
-
-async function tryRefreshToken(): Promise<boolean> {
-  const refreshToken = tokenManager.getRefreshToken();
-  if (!refreshToken) return false;
+// FALLBACK: Se DB nao tem contacts sincronizados, inferir de allConversations
+if (novosLeads === 0 && contactIdsInPeriod.length > 0) {
+  const convsBySender = new Map();
+  for (const conv of allConversations) {
+    const sid = conv.meta?.sender?.id;
+    if (!sid) continue;
+    if (!convsBySender.has(sid)) convsBySender.set(sid, []);
+    convsBySender.get(sid).push(conv);
+  }
   
-  try {
-    const response = await fetch(buildUrl('/api/auth/refresh'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
-    });
-    
-    if (!response.ok) return false;
-    
-    const result = await response.json();
-    const data = result?.data ?? result;
-    if (data?.token) {
-      tokenManager.setToken(data.token);
-      return true;
+  let fallbackNovos = 0;
+  for (const contactId of contactIdsInPeriod) {
+    const allConvs = convsBySender.get(contactId) || [];
+    const earliestMs = Math.min(...allConvs.map(c => {
+      const raw = c.created_at;
+      return typeof raw === 'number' ? raw * 1000 : new Date(raw).getTime();
+    }));
+    if (earliestMs >= dateFromParsed.getTime()) {
+      fallbackNovos++;
     }
-    return false;
-  } catch {
-    return false;
+  }
+  novosLeads = fallbackNovos;
+}
+```
+
+### Bug 2: Resolucoes IA = 0 quando n8n nao esta ativo
+
+**Causa raiz:** O sync de resolution_logs (linha 668 EF / 468 backend) **pula** conversas com `resolved_by === 'ai'` no Chatwoot, esperando que o n8n as registre via endpoint `log-resolution`. Se o n8n nao estiver rodando, NENHUMA resolucao IA e registrada no banco.
+
+O fallback que calcula resolucoes a partir dos dados brutos so e ativado quando `totalIA === 0 AND totalHumano === 0`. Mas se existem entradas humanas no banco (como as 6 que existem), o fallback NAO e acionado, e as resolucoes IA ficam zeradas.
+
+**Correcao:** Mudar a condicao do fallback para tambem suplementar resolucoes IA quando o banco nao tem nenhuma. Quando `totalIA === 0` mas existem conversas resolvidas com marcadores de IA no Chatwoot, calcular via fallback apenas a parte de IA.
+
+```typescript
+// FALLBACK PARCIAL: Se DB nao tem resolucoes IA mas Chatwoot tem
+if (historicoResolucoes.totalIA === 0) {
+  const resolvedConvs = finalConversations.filter(c => c.status === 'resolved');
+  let fallbackIA = 0;
+  for (const conv of resolvedConvs) {
+    const result = classifyResolver(conv);
+    if (result.type === 'ai') fallbackIA++;
+  }
+  if (fallbackIA > 0) {
+    historicoResolucoes.totalIA = fallbackIA;
+    // Recalcular percentuais
+    const total = historicoResolucoes.totalIA + historicoResolucoes.totalHumano;
+    historicoResolucoes.percentualIA = Math.round((historicoResolucoes.totalIA / total) * 100);
+    historicoResolucoes.percentualHumano = 100 - historicoResolucoes.percentualIA;
   }
 }
 ```
 
-Modify `handleResponse` to intercept `TOKEN_EXPIRED` and retry:
+### Bug 3: Taxa de Transbordo incorreta em cenarios sem IA
 
-- On 401 with `TOKEN_EXPIRED` code, call `tryRefreshToken()` (deduplicated via the mutex)
-- If refresh succeeds, retry the original fetch with the new token
-- If refresh fails, proceed with current logout behavior
+Quando IA = 0, a formula `transbordo / (ia + transbordo) * 100` retorna `transbordo / transbordo = 100%`. Isso esta tecnicamente correto pela regra (toda resolucao humana = transbordo), mas se IA deveria ter registros (Bug 2), a taxa fica inflada.
 
-The retry needs access to the original request parameters, so the refresh+retry logic will be integrated into the `request()` function rather than `handleResponse()`.
+**Correcao:** Sera automaticamente corrigida ao resolver o Bug 2. Com as resolucoes IA corretas, a taxa refletira a proporcao real.
 
-## Architecture
+## Arquivos Afetados
 
-```text
-Request fails with 401 TOKEN_EXPIRED
-        |
-        v
-  Is refresh in progress?
-   /            \
-  YES            NO
-   |              |
-   v              v
- Wait for      Start refresh
- existing      POST /api/auth/refresh
- promise         |
-   |         Success?
-   |        /       \
-   v      YES        NO
- Retry    Save      Clear tokens
- with     new       Dispatch logout
- new      token
- token      |
-            v
-          Retry original request
-```
+### 1. `supabase/functions/fetch-chatwoot-metrics/index.ts`
+- **Linhas 740-765:** Adicionar fallback de novosLeads via API quando contacts table vazia
+- **Linhas 798-830:** Mudar condicao do fallback de resolucoes para suplementar IA quando totalIA === 0 (nao apenas quando ambos sao 0)
 
-## Result
+### 2. `backend/src/services/chatwoot-metrics.service.ts`
+- **Linhas 492-520:** Adicionar mesmo fallback de novosLeads
+- **Linhas 556-587:** Mesma correcao do fallback parcial de IA
 
-- Users stay logged in as long as the refresh token is valid (7 days)
-- Dashboard polling continues seamlessly across token renewals
-- No more "Token expirado" errors during normal usage
-- Multiple simultaneous 401s are deduplicated into a single refresh call
+## Mudancas Necessarias por Arquivo
+
+### Edge Function (`fetch-chatwoot-metrics/index.ts`)
+
+**Mudanca A** - Apos o bloco de novosLeads (linha 765), adicionar fallback:
+- Construir mapa de conversas por sender.id usando `allConversations` (todas as conversas, nao filtradas)
+- Para cada contato unico no periodo, verificar se sua conversa mais antiga esta dentro do periodo
+- Se sim, contar como novo lead
+
+**Mudanca B** - Alterar condicao do fallback (linha 799):
+- DE: `if (historicoResolucoes.totalIA === 0 && historicoResolucoes.totalHumano === 0)`
+- PARA: Duas etapas - fallback total (quando ambos 0) + fallback parcial IA (quando so IA = 0)
+
+### Backend (`chatwoot-metrics.service.ts`)
+
+**Mudanca C** - Apos o bloco de novosLeads (linha 520), adicionar mesmo fallback via `allConversations`
+
+**Mudanca D** - Alterar condicao do fallback (linha 556), mesma logica da Mudanca B
+
+## Resultado Esperado
+
+| Cenario | Antes | Depois |
+|---|---|---|
+| Contacts table vazia | Novos Leads = 0, Retornos = Total | Novos Leads calculado via API, Retornos correto |
+| n8n nao ativo, humano resolve | IA = 0 (mesmo com bots respondendo) | IA contabilizada via fallback parcial |
+| Taxa Transbordo sem IA | 100% sempre | Proporcional ao mix real IA/Humano |
+
+## Consideracoes
+
+- O fallback de novosLeads depende do `allConversations` (max 500 conversas). Para contas com historico > 500 conversas, pode haver imprecisao marginal (contato com conversas muito antigas pode ser classificado como "novo")
+- As resolucoes IA via fallback sao uma rede de seguranca. A solucao definitiva e garantir que o n8n esteja chamando o endpoint `log-resolution` para resolucoes IA
+- Deploy da Edge Function e automatico. Backend Express requer rebuild no VPS
