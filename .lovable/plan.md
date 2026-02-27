@@ -1,44 +1,58 @@
 
+# Correcao: Exclusao de Conta Retorna Sucesso mas Conta Permanece Visivel
 
-# Fix: Backend Build Failure Blocking All Production Fixes
+## Diagnostico
 
-## Root Cause
+O backend faz **soft delete** (muda status para `cancelled`) e retorna 200 corretamente. O toast "Conta excluida com sucesso!" aparece. Porem:
 
-The backend has **never deployed any of the previous fixes** because the TypeScript compiler fails at build time with:
+1. O badge de status (linha 838) so mapeia `active` para "Ativa" e **todo o resto** para "Pausada" — entao contas canceladas aparecem como "Pausada"
+2. O filtro de status nao tem opcao "Canceladas"
+3. A lista nao filtra contas canceladas por padrao
 
-```
-'chatwootBaseUrl' does not exist in type '{ id: string; nome: string; status: AccountStatus; timezone: string; }'
-```
+O resultado e que a conta parece nao ter sido excluida, quando na verdade o status mudou para `cancelled` no banco.
 
-The middleware (`auth.middleware.ts`) assigns `chatwootBaseUrl`, `chatwootAccountId`, and `chatwootApiKey` to `req.account`, but the `AuthenticatedRequest` interface in `backend/src/types/index.ts` does not declare those fields.
+## Solucao
 
-## Fix (1 file, 3 lines)
+### 1. Frontend: Filtrar contas canceladas da lista padrao
 
-**File:** `backend/src/types/index.ts` (lines 26-31)
+**Arquivo:** `src/pages/super-admin/SuperAdminAccountsPage.tsx`
 
-Update the `account` property of `AuthenticatedRequest` to include the Chatwoot fields:
+- No `filteredAccounts`, quando `statusFilter === 'all'`, ocultar contas com status `cancelled`
+- Adicionar opcao "Canceladas" no dropdown de filtro para poder visualiza-las quando necessario
+- Atualizar o badge para mostrar 3 estados: "Ativa" (verde), "Pausada" (laranja), "Cancelada" (vermelho)
+- Atualizar o mapeamento de cores do badge para incluir `cancelled`
 
+### 2. Frontend: Mesma correcao na pagina de detalhe
+
+**Arquivo:** `src/pages/super-admin/SuperAdminAccountDetailPage.tsx`
+
+- Exibir badge "Cancelada" corretamente quando status for `cancelled`
+
+## Resultado Esperado
+
+- Ao excluir uma conta, ela desaparece da lista padrao ("Todos")
+- Super admin pode filtrar por "Canceladas" para ver contas excluidas
+- Se uma conta cancelada for exibida, mostra badge vermelho "Cancelada" em vez de "Pausada"
+
+## Detalhes Tecnicos
+
+Alteracoes no `filteredAccounts`:
 ```typescript
-account?: {
-  id: string;
-  nome: string;
-  status: AccountStatus;
-  timezone: string;
-  chatwootBaseUrl: string | null;
-  chatwootAccountId: string | null;
-  chatwootApiKey: string | null;
-};
+const filteredAccounts = accounts.filter((account) => {
+  const matchesSearch = account.nome.toLowerCase().includes(searchTerm.toLowerCase());
+  if (statusFilter === 'all') {
+    return matchesSearch && account.status !== 'cancelled';
+  }
+  return matchesSearch && account.status === statusFilter;
+});
 ```
 
-## What This Unblocks
+Badge atualizado:
+```typescript
+{account.status === 'active' ? 'Ativa' : account.status === 'cancelled' ? 'Cancelada' : 'Pausada'}
+```
 
-Once this type is fixed, the backend will compile and deploy successfully. All previously-implemented fixes will then become active in production:
-
-1. `verifyPassword` returning 400/403 instead of 401 (no more forced logout)
-2. `x-confirm-password` header being sent from the frontend on account deletion
-3. Calendar controller guards for null `accountId` (no more Prisma crashes)
-4. Chatwoot fields returned in `/api/auth/me` response
-
-## After Deploy
-
-Rebuild the backend on EasyPanel. The build should pass, and all 7 previous fixes will go live simultaneously.
+Nova opcao no Select:
+```typescript
+<SelectItem value="cancelled">Canceladas</SelectItem>
+```
