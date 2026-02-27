@@ -1,90 +1,74 @@
 
 
-# Correcao: Metricas de Resolucao zeradas no Backend Express
+# Correcao: classifyCurrentHandler e Paridade de Metricas
 
-## Problema Identificado
+## Regras de Metrificacao (Resumo do Contrato n8n/Chatwoot)
 
-Comparando a resposta da Edge Function (dados corretos) com o que o dashboard exibe (via backend Express):
+Atributos customizados gerenciados pelo n8n:
 
-| Metrica | Edge Function (correto) | Backend/Dashboard (errado) |
+| Atributo | Tipo | Significado |
 |---|---|---|
-| Resolucao IA | 9 (60%) | 0 (0%) |
-| Resolucao Humano | 6 (40%) | 3 (100%) |
-| Transbordo | 6 (40%) | 3 (100%) |
-| Eficiencia IA | 60% | 0% |
+| `ai_responded` | bool | IA respondeu nesta conversa (persistente, "sticky") |
+| `human_active` | bool | Trava: humano assumiu, IA silenciada |
+| `handoff_to_human` | bool | Transbordo explicito ocorreu |
+| `human_intervened` | bool | Intervencao manual de agente |
+| `resolved_by` | 'ai'/'human' | Quem encerrou (gravado antes do resolve) |
 
-A causa raiz: as migrations 0002 e 0003 foram marcadas como `rolled-back`, entao a tabela `resolution_logs` **nao existe** no banco PostgreSQL do VPS. O backend detecta isso corretamente (linhas 416-420) e pula a query, mas o fallback simplesmente retorna zeros em vez de calcular as resolucoes a partir dos dados brutos das conversas do Chatwoot.
+Regra de reset: quando conversa reabre (resolved -> open), o n8n reseta todos os atributos de ciclo.
 
-A Edge Function nao tem esse problema porque ela calcula tudo a partir dos dados da API do Chatwoot diretamente.
+## Problema Atual
+
+`classifyCurrentHandler()` (identica no backend e na Edge Function) usa esta logica:
+
+```
+if (ai_responded) return 'ai'    // <-- BUG: ai_responded e sticky!
+if (hasHumanAssignee) return 'human'
+return 'none'
+```
+
+Consequencia: conversa onde IA respondeu mas humano ja assumiu (`human_active=true`, `handoff_to_human=true`, ou agente atribuido) ainda aparece como "IA atendendo". Isso explica o "1 atendimento de IA" no dashboard quando a IA nem esta ligada.
 
 ## Solucao
 
-**Arquivo:** `backend/src/services/chatwoot-metrics.service.ts`
+Atualizar `classifyCurrentHandler()` em **dois arquivos** com logica de prioridade que respeita o contrato:
 
-Adicionar um fallback que computa `historicoResolucoes` diretamente das conversas resolvidas usando `classifyResolver()` (funcao que ja existe no arquivo mas nunca e usada como fallback).
-
-### Mudanca especifica:
-
-Apos o bloco de query da `resolution_logs` (linha ~522), adicionar logica de fallback:
-
-```typescript
-// Se resolution_logs nao disponivel OU retornou vazio, 
-// calcular a partir dos dados brutos do Chatwoot
-if (historicoResolucoes.totalIA === 0 && historicoResolucoes.totalHumano === 0) {
-  const resolvedConversations = finalConversations.filter(
-    (c: any) => c.status === 'resolved'
-  );
-  
-  let fallbackIA = 0;
-  let fallbackHumano = 0;
-  let fallbackTransbordo = 0;
-  
-  for (const conv of resolvedConversations) {
-    const result = classifyResolver(conv);
-    if (result.type === 'ai') fallbackIA++;
-    else if (result.type === 'human') {
-      fallbackHumano++;
-      // Transbordo: humano resolveu mas IA participou
-      const custom = conv.custom_attributes || {};
-      const additional = conv.additional_attributes || {};
-      const aiResponded = custom.ai_responded === true || additional.ai_responded === true;
-      if (aiResponded) fallbackTransbordo++;
-    }
-  }
-  
-  const fallbackTotal = fallbackIA + fallbackHumano;
-  historicoResolucoes = {
-    totalIA: fallbackIA,
-    totalHumano: fallbackHumano,
-    transbordoCount: fallbackTransbordo,
-    percentualIA: fallbackTotal > 0 ? Math.round((fallbackIA / fallbackTotal) * 100) : 0,
-    percentualHumano: fallbackTotal > 0 ? Math.round((fallbackHumano / fallbackTotal) * 100) : 0,
-  };
-  
-  logger.info('[Metrics] Used Chatwoot API fallback for resolution data', {
-    ia: fallbackIA, humano: fallbackHumano, transbordo: fallbackTransbordo
-  });
-}
+```
+PRIORIDADE 1: human_active || handoff_to_human || human_intervened -> HUMANO
+PRIORIDADE 2: Bot nativo (AgentBot) -> IA
+PRIORIDADE 3: ai_responded SEM assignee humano -> IA
+PRIORIDADE 4: ai_responded COM assignee humano -> HUMANO (transicao)
+PRIORIDADE 5: Apenas assignee humano -> HUMANO
+PRIORIDADE 6: Ninguem -> Em Aberto (none)
 ```
 
-### Por que isso resolve:
+## Arquivos Afetados
 
-1. A funcao `classifyResolver()` ja implementa toda a logica de classificacao (explicit via `resolved_by`, bot nativo, inferencia via `ai_responded`, fallback por assignee) — identica a Edge Function.
-2. Quando `resolution_logs` nao existe ou esta vazio, o sistema calcula automaticamente a partir dos dados do Chatwoot.
-3. Quando `resolution_logs` voltar a funcionar (apos re-aplicar migrations), os dados persistidos terao prioridade.
+### 1. `backend/src/services/chatwoot-metrics.service.ts` (linhas 39-48)
 
-### Resultado esperado apos correcao:
+Substituir `classifyCurrentHandler()` pela versao corrigida com checks de takeover humano.
 
-- Resolucao IA: 9 (60%) — igual a Edge Function
-- Resolucao Humano: 6 (40%) — igual a Edge Function  
-- Transbordo: 6 (40%) — igual a Edge Function
-- Eficiencia IA: 60% — igual a Edge Function
+### 2. `supabase/functions/fetch-chatwoot-metrics/index.ts` (linhas 25-39)
 
-## Arquivos afetados
+Mesma correcao para manter paridade entre backend Express e Edge Function.
 
-- `backend/src/services/chatwoot-metrics.service.ts` — unico arquivo, adicao de ~25 linhas de fallback
+## Resultado Esperado
 
-## Observacoes
+| Cenario | Antes (errado) | Depois (correto) |
+|---|---|---|
+| `ai_responded=true` + `human_active=true` | IA | Humano |
+| `ai_responded=true` + assignee humano | IA | Humano |
+| `ai_responded=true` sem flags humanas, sem assignee | IA | IA |
+| Bot nativo (AgentBot) | depende | IA |
+| Apenas assignee humano | Humano | Humano |
+| Sem ninguem | none | none |
 
-- As demais metricas (Total de Leads, Atendimento ao Vivo, Backlog, Performance de Agentes, Qualidade) ja estao corretas e alinhadas entre Edge Function e Backend.
-- A correcao e retrocompativel: quando as migrations forem re-aplicadas e `resolution_logs` tiver dados, eles terao prioridade sobre o fallback.
+- Card "Atendimento Agora": IA so aparece quando realmente nao ha indicacao de takeover humano
+- Metricas de Resolucao: ja corrigidas pelo fallback adicionado anteriormente (calculam via `classifyResolver()` quando `resolution_logs` indisponivel)
+- Edge Function e Backend Express: logica identica, dados coerentes independente do modo
+
+## Detalhes Tecnicos
+
+A mudanca e cirurgica: apenas a funcao `classifyCurrentHandler()` em cada arquivo. Nao afeta `classifyResolver()` (resolucao historica), que ja possui logica correta com prioridade para `resolved_by` explicito.
+
+Apos a correcao, sera necessario rebuild no VPS para aplicar a mudanca do backend Express. A Edge Function sera deployada automaticamente.
+
