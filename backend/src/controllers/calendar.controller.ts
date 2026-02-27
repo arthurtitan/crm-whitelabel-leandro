@@ -38,6 +38,10 @@ export class CalendarController {
    */
   async list(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
+      if (!req.user!.accountId) {
+        res.status(400).json({ error: { code: 'NO_ACCOUNT', message: 'Usuário não vinculado a uma conta' } });
+        return;
+      }
       const query = listEventsSchema.parse(req.query);
       const pagination = getPaginationParams(req);
 
@@ -63,6 +67,7 @@ export class CalendarController {
    */
   async getById(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
+      if (!req.user!.accountId) { res.status(400).json({ error: { code: 'NO_ACCOUNT', message: 'Usuário não vinculado a uma conta' } }); return; }
       const id = req.params.id as string;
       const result = await calendarService.getById(id, req.user!.accountId!);
 
@@ -77,6 +82,7 @@ export class CalendarController {
    */
   async create(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
+      if (!req.user!.accountId) { res.status(400).json({ error: { code: 'NO_ACCOUNT', message: 'Usuário não vinculado a uma conta' } }); return; }
       const body = createEventSchema.parse(req.body);
       const result = await calendarService.create({
         ...body,

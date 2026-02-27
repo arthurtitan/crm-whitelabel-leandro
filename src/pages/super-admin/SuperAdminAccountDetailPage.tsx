@@ -61,7 +61,7 @@ interface EditFormData {
 
 type ConnectionStatus = 'idle' | 'loading' | 'success' | 'error';
 
-const VALID_PASSWORDS = ['admin123', 'Admin@123', 'superadmin123'];
+// Password validation is now done server-side via the backend API
 
 export default function SuperAdminAccountDetailPage() {
   const { accountId } = useParams<{ accountId: string }>();
@@ -186,14 +186,15 @@ export default function SuperAdminAccountDetailPage() {
     editFormData.chatwootAccountId.trim() !== '' && 
     editFormData.chatwootApiKey.trim() !== '';
 
-  const handleToggleStatus = () => {
+  const handleToggleStatus = async () => {
     const newStatus = account.status === 'active' ? 'paused' : 'active';
-    setAccount({
-      ...account,
-      status: newStatus,
-      updated_at: new Date().toISOString(),
-    });
-    toast.success(`Status alterado para ${newStatus === 'active' ? 'Ativa' : 'Pausada'}!`);
+    try {
+      await accountsCloudOrBackend.update(account.id, { status: newStatus });
+      setAccount({ ...account, status: newStatus, updated_at: new Date().toISOString() });
+      toast.success(`Status alterado para ${newStatus === 'active' ? 'Ativa' : 'Pausada'}!`);
+    } catch (error: any) {
+      toast.error('Erro ao alterar status: ' + (error.message || 'Erro desconhecido'));
+    }
   };
 
   const handleRequestUpdate = () => {
@@ -208,41 +209,49 @@ export default function SuperAdminAccountDetailPage() {
     }
 
     setIsValidatingUpdate(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    if (!VALID_PASSWORDS.includes(updatePassword)) {
+    try {
+      await accountsCloudOrBackend.update(account.id, {
+        nome: editFormData.nome,
+        status: editFormData.status,
+        chatwoot_base_url: editFormData.chatwootEnabled ? editFormData.chatwootBaseUrl : undefined,
+        chatwoot_account_id: editFormData.chatwootEnabled ? editFormData.chatwootAccountId : undefined,
+        chatwoot_api_key: editFormData.chatwootEnabled ? editFormData.chatwootApiKey : undefined,
+      });
+      setAccount({
+        ...account,
+        nome: editFormData.nome,
+        status: editFormData.status,
+        chatwoot_base_url: editFormData.chatwootEnabled ? editFormData.chatwootBaseUrl : undefined,
+        chatwoot_account_id: editFormData.chatwootEnabled ? editFormData.chatwootAccountId : undefined,
+        chatwoot_api_key: editFormData.chatwootEnabled ? editFormData.chatwootApiKey : undefined,
+        updated_at: new Date().toISOString(),
+      });
+      setIsPasswordConfirmOpen(false);
+      setIsControlOpen(false);
+      toast.success('Conta atualizada com sucesso!');
+    } catch (error: any) {
+      toast.error('Erro ao atualizar: ' + (error.message || 'Erro desconhecido'));
+    } finally {
       setIsValidatingUpdate(false);
-      toast.error('Senha incorreta! Tente novamente.');
-      return;
     }
-
-    setAccount({
-      ...account,
-      nome: editFormData.nome,
-      status: editFormData.status,
-      chatwoot_base_url: editFormData.chatwootEnabled ? editFormData.chatwootBaseUrl : undefined,
-      chatwoot_account_id: editFormData.chatwootEnabled ? editFormData.chatwootAccountId : undefined,
-      chatwoot_api_key: editFormData.chatwootEnabled ? editFormData.chatwootApiKey : undefined,
-      updated_at: new Date().toISOString(),
-    });
-    
-    setIsValidatingUpdate(false);
-    setIsPasswordConfirmOpen(false);
-    setIsControlOpen(false);
-    toast.success('Conta atualizada com sucesso!');
   };
 
   const getIdiomaLabel = (idioma: string) => {
     return idioma === 'pt' ? 'Português' : 'English';
   };
 
-  const handleDelete = () => {
-    if (!VALID_PASSWORDS.includes(deletePassword)) {
-      toast.error('Senha incorreta!');
+  const handleDelete = async () => {
+    if (!deletePassword.trim()) {
+      toast.error('Digite sua senha para confirmar!');
       return;
     }
-    toast.success('Conta excluída com sucesso!');
-    navigate('/super-admin/accounts');
+    try {
+      await accountsCloudOrBackend.delete(account.id, deletePassword);
+      toast.success('Conta excluída com sucesso!');
+      navigate('/super-admin/accounts');
+    } catch (error: any) {
+      toast.error('Erro ao excluir: ' + (error.message || 'Erro desconhecido'));
+    }
   };
 
   const getStatusBadge = (status: AccountStatus) => {
