@@ -57,6 +57,7 @@ import { toast } from 'sonner';
 import { tagsCloudService, type Tag as CloudTag, type LeadTag } from '@/services/tags.cloud.service';
 import { tagsBackendService } from '@/services/tags.backend.service';
 import { useBackend } from '@/config/backend.config';
+import { hasChatwootConfig as checkChatwootConfig } from '@/utils/chatwootConfig';
 import { supabase } from '@/integrations/supabase/client';
 import { apiClient } from '@/api/client';
 import { API_ENDPOINTS } from '@/api/endpoints';
@@ -95,8 +96,8 @@ export default function AdminKanbanPage() {
 
   const accountId = user?.account_id || account?.id;
   
-  // Check if Chatwoot is configured - moved up for hooks to access
-  const hasChatwootConfig = Boolean(account?.chatwoot_base_url && account?.chatwoot_account_id && account?.chatwoot_api_key);
+  // Check if Chatwoot is configured - backend-aware
+  const hasChatwootConfig = checkChatwootConfig(account);
 
   // Clear new lead tag animation after delay
   const clearNewLeadTagIds = useCallback((ids: string[]) => {

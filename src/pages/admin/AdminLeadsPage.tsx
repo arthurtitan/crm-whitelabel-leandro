@@ -61,6 +61,7 @@ import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useBackend } from '@/config/backend.config';
+import { hasChatwootConfig as checkChatwootConfig } from '@/utils/chatwootConfig';
 import type { Tag as CloudTag } from '@/services/tags.cloud.service';
 import { tagsBackendService } from '@/services/tags.backend.service';
 import { contactsCloudService } from '@/services/contacts.cloud.service';
@@ -95,12 +96,8 @@ export default function AdminLeadsPage() {
     if (!accountId) return;
 
     const loadData = async () => {
-      // Check Chatwoot config
-      setHasChatwootConfig(
-        !!account?.chatwoot_base_url && 
-        !!account?.chatwoot_api_key && 
-        !!account?.chatwoot_account_id
-      );
+      // Check Chatwoot config (backend-aware)
+      setHasChatwootConfig(checkChatwootConfig(account));
 
       if (useBackend) {
         // Backend: fetch stage tags via backend service
