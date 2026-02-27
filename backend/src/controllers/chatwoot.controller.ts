@@ -255,8 +255,15 @@ class ChatwootController {
   async getMetrics(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const accountId = req.user!.accountId!;
-      const metrics = await chatwootService.getAccountMetrics(accountId);
-      res.json(metrics);
+      const { dateFrom, dateTo, inboxId, agentId } = { ...req.query, ...req.body };
+
+      const dateRange = {
+        since: dateFrom as string | undefined,
+        until: dateTo as string | undefined,
+      };
+
+      const metrics = await chatwootService.getAccountMetrics(accountId, dateRange, inboxId ? Number(inboxId) : undefined, agentId ? Number(agentId) : undefined);
+      res.json({ success: true, data: metrics });
     } catch (error) {
       next(error);
     }
