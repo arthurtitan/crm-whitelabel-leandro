@@ -28,6 +28,9 @@ export interface AuthenticatedRequest extends Request {
     nome: string;
     status: AccountStatus;
     timezone: string;
+    chatwootBaseUrl: string | null;
+    chatwootAccountId: string | null;
+    chatwootApiKey: string | null;
   };
 }
 
