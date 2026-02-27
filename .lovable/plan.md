@@ -1,39 +1,54 @@
 
 
-# Fix: Erros de compilacao TypeScript no chatwoot-metrics.service.ts
+# Criar migracao Prisma para tabela resolution_logs e coluna first_resolved_at
 
 ## Problema
 
-O build falha com 4 erros identicos:
-```
-src/services/chatwoot-metrics.service.ts(142,29): error TS18046: 'data' is of type 'unknown'.
-src/services/chatwoot-metrics.service.ts(142,51): error TS18046: 'data' is of type 'unknown'.
-src/services/chatwoot-metrics.service.ts(171,44): error TS18046: 'data' is of type 'unknown'.
-src/services/chatwoot-metrics.service.ts(193,14): error TS18046: 'data' is of type 'unknown'.
-```
+O schema Prisma foi atualizado com:
+1. Model `ResolutionLog` (tabela `resolution_logs`)
+2. Campo `firstResolvedAt` na tabela `contacts`
 
-O `tsconfig.json` do backend usa `strict: true`, o que faz `response.json()` retornar `unknown` em vez de `any`. O codigo acessa propriedades diretamente sem type assertion.
+Porem, **nenhuma migracao foi criada** para aplicar essas mudancas no banco de dados de producao. A unica migracao existente e `0001_init`, que nao inclui nenhuma dessas estruturas. Por isso o Prisma gera queries para colunas/tabelas que nao existem no PostgreSQL do EasyPanel.
 
 ## Solucao
 
-Adicionar `as any` nas 3 chamadas `response.json()` nas funcoes `fetchAllConversations`, `fetchAgents` e `fetchInboxes`:
+Criar uma nova migracao `0002_add_resolution_logs` com o SQL necessario.
 
-### Arquivo: `backend/src/services/chatwoot-metrics.service.ts`
+### Arquivo novo: `backend/prisma/migrations/0002_add_resolution_logs/migration.sql`
 
-**Linha 141** (fetchAllConversations):
-```typescript
-const data = await response.json() as any;
+```sql
+-- AlterTable: Add first_resolved_at to contacts
+ALTER TABLE "contacts" ADD COLUMN "first_resolved_at" TIMESTAMPTZ;
+
+-- CreateTable: resolution_logs
+CREATE TABLE "resolution_logs" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "account_id" UUID NOT NULL,
+    "conversation_id" INTEGER NOT NULL,
+    "resolved_by" TEXT NOT NULL,
+    "resolution_type" TEXT NOT NULL DEFAULT 'explicit',
+    "ai_participated" BOOLEAN DEFAULT false,
+    "agent_id" INTEGER,
+    "resolved_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    CONSTRAINT "resolution_logs_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE INDEX "resolution_logs_account_id_idx" ON "resolution_logs"("account_id");
+CREATE INDEX "resolution_logs_resolved_at_idx" ON "resolution_logs"("resolved_at");
 ```
 
-**Linha 170** (fetchAgents):
-```typescript
-const data = await response.json() as any;
-```
+## Por que funciona
 
-**Linha 192** (fetchInboxes):
-```typescript
-const data = await response.json() as any;
-```
+- O script `start.sh` do container ja executa `npx prisma migrate deploy` antes de iniciar o servidor
+- Essa migracao sera detectada automaticamente no proximo rebuild
+- As tabelas serao criadas no PostgreSQL do EasyPanel
+- O Prisma Client ja esta gerado com esses models, entao o codigo backend ja esta pronto
 
-Isso resolve os 4 erros de compilacao (linha 142 tem 2 acessos ao mesmo `data`). Nenhuma outra mudanca necessaria — apos o rebuild o servico de metricas estara operacional.
+## Sequencia
+
+1. Criar arquivo de migracao `0002_add_resolution_logs/migration.sql`
+2. Rebuild no EasyPanel (o `start.sh` aplica automaticamente)
 
