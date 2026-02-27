@@ -537,7 +537,6 @@ class ContactService {
       _count: undefined,
     }));
   }
-  }
 
   /**
    * List all lead_tags for an account (for Kanban mapping)
