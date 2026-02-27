@@ -156,8 +156,10 @@ export default function SuperAdminAccountsPage() {
 
   const filteredAccounts = accounts.filter((account) => {
     const matchesSearch = account.nome.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || account.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    if (statusFilter === 'all') {
+      return matchesSearch && account.status !== 'cancelled';
+    }
+    return matchesSearch && account.status === statusFilter;
   });
 
   const handleTestConnection = async () => {
@@ -762,6 +764,7 @@ export default function SuperAdminAccountsPage() {
                 <SelectItem value="all">Todos</SelectItem>
                 <SelectItem value="active">Ativas</SelectItem>
                 <SelectItem value="paused">Pausadas</SelectItem>
+                <SelectItem value="cancelled">Canceladas</SelectItem>
               </SelectContent>
             </Select>
             <Button variant="outline" onClick={loadAccounts} disabled={isLoading}>
@@ -828,14 +831,16 @@ export default function SuperAdminAccountsPage() {
                       </TableCell>
                       <TableCell>
                         <Badge
-                          variant={account.status === 'active' ? 'default' : 'secondary'}
+                          variant={account.status === 'active' ? 'default' : account.status === 'cancelled' ? 'destructive' : 'secondary'}
                           className={
                             account.status === 'active'
                               ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20'
+                              : account.status === 'cancelled'
+                              ? 'bg-red-500/10 text-red-500 hover:bg-red-500/20'
                               : 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20'
                           }
                         >
-                          {account.status === 'active' ? 'Ativa' : 'Pausada'}
+                          {account.status === 'active' ? 'Ativa' : account.status === 'cancelled' ? 'Cancelada' : 'Pausada'}
                         </Badge>
                       </TableCell>
                       <TableCell>
