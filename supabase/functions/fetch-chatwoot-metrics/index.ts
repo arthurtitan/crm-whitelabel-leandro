@@ -795,6 +795,43 @@ serve(async (req) => {
       console.error('[Resolution Logs] DB error (non-fatal):', dbErr);
     }
 
+    // FALLBACK: Se resolution_logs vazio, calcular via dados brutos do Chatwoot
+    if (historicoResolucoes.totalIA === 0 && historicoResolucoes.totalHumano === 0) {
+      const resolvedConversations = finalConversations.filter(
+        (c: any) => c.status === 'resolved'
+      );
+
+      let fallbackIA = 0;
+      let fallbackHumano = 0;
+      let fallbackTransbordo = 0;
+
+      for (const conv of resolvedConversations) {
+        const result = classifyResolver(conv);
+        if (result.type === 'ai') {
+          fallbackIA++;
+        } else if (result.type === 'human') {
+          fallbackHumano++;
+          const custom = conv.custom_attributes || {};
+          const additional = conv.additional_attributes || {};
+          const aiResponded = custom.ai_responded === true || additional.ai_responded === true;
+          if (aiResponded) fallbackTransbordo++;
+        }
+      }
+
+      const fallbackTotal = fallbackIA + fallbackHumano;
+      historicoResolucoes = {
+        totalIA: fallbackIA,
+        totalHumano: fallbackHumano,
+        transbordoCount: fallbackTransbordo,
+        percentualIA: fallbackTotal > 0 ? Math.round((fallbackIA / fallbackTotal) * 100) : 0,
+        percentualHumano: fallbackTotal > 0 ? Math.round((fallbackHumano / fallbackTotal) * 100) : 0,
+      };
+
+      console.log('[Metrics] Used Chatwoot API fallback for resolution data', {
+        ia: fallbackIA, humano: fallbackHumano, transbordo: fallbackTransbordo
+      });
+    }
+
     // ========================================================================
     // CAMADA 2: Popula resolucao a partir de resolution_logs (fonte persistente)
     // Isso garante que métricas NÃO desapareçam quando conversa é reaberta
