@@ -25,16 +25,31 @@ interface MetricsRequest {
 function classifyCurrentHandler(conv: any): 'ai' | 'human' | 'none' {
   const custom = conv.custom_attributes || {};
   const additional = conv.additional_attributes || {};
+
+  // Flags do contrato n8n/Chatwoot
   const aiResponded = custom.ai_responded === true || additional.ai_responded === true;
+  const humanActive = custom.human_active === true || additional.human_active === true;
+  const humanIntervened = custom.human_intervened === true || additional.human_intervened === true;
+  const handoffToHuman = custom.handoff_to_human === true || additional.handoff_to_human === true;
   const hasHumanAssignee = !!(conv.meta?.assignee?.id || conv.assignee_id);
+  const hasBotAssignee = conv.meta?.assignee?.type === 'AgentBot' || !!conv.agent_bot_id;
 
-  // PRIORIDADE 1: ai_responded = true → IA atendendo
-  if (aiResponded) return 'ai';
+  // PRIORIDADE 1: Humano assumiu explicitamente (flags de takeover)
+  if (humanActive || handoffToHuman || humanIntervened) return 'human';
 
-  // PRIORIDADE 2: Assignee humano sem ai_responded → Humano atendendo
+  // PRIORIDADE 2: Bot nativo do Chatwoot (AgentBot)
+  if (hasBotAssignee) return 'ai';
+
+  // PRIORIDADE 3: IA respondeu SEM assignee humano → IA atendendo
+  if (aiResponded && !hasHumanAssignee) return 'ai';
+
+  // PRIORIDADE 4: IA respondeu COM assignee humano → transição, humano prevalece
+  if (aiResponded && hasHumanAssignee) return 'human';
+
+  // PRIORIDADE 5: Apenas assignee humano sem IA
   if (hasHumanAssignee) return 'human';
 
-  // PRIORIDADE 3: Sem assignee → Aguardando
+  // PRIORIDADE 6: Ninguém → Em Aberto
   return 'none';
 }
 
