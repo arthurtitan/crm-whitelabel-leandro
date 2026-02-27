@@ -406,40 +406,62 @@ class ChatwootMetricsService {
     // RESOLUTION LOGS: Sync + Query via Prisma
     // ========================================================================
     let historicoResolucoes = { totalIA: 0, totalHumano: 0, transbordoCount: 0, percentualIA: 0, percentualHumano: 0 };
-    let novosLeads = 0;
+    let novosLeads = leadsInPeriod; // fallback: use Chatwoot count
+
+    // --- Check if resolution_logs table exists (avoid flood of errors) ---
+    let resolutionLogsAvailable = false;
+    let firstResolvedAtAvailable = false;
 
     try {
-      // Sync: insert human resolutions that are not yet in DB
-      const resolvedConversations = finalConversations.filter((c: any) => c.status === 'resolved');
+      await prisma.$queryRaw`SELECT 1 FROM resolution_logs LIMIT 0`;
+      resolutionLogsAvailable = true;
+    } catch (_) {
+      logger.warn('[Metrics] resolution_logs table not available — using fallback');
+    }
 
-      for (const conv of resolvedConversations) {
-        const custom = conv.custom_attributes || {};
-        const additional = conv.additional_attributes || {};
-        const resolvedByAttr = custom.resolved_by || additional.resolved_by;
+    try {
+      await prisma.$queryRaw`SELECT first_resolved_at FROM contacts LIMIT 0`;
+      firstResolvedAtAvailable = true;
+    } catch (_) {
+      logger.warn('[Metrics] contacts.first_resolved_at column not available — using fallback');
+    }
 
-        // IA resolutions are already logged by n8n — skip
-        if (resolvedByAttr === 'ai') continue;
+    // --- Sync resolution_logs (only if table exists) ---
+    if (resolutionLogsAvailable) {
+      try {
+        const resolvedConversations = finalConversations.filter((c: any) => c.status === 'resolved');
 
-        const lastActivityAt = conv.last_activity_at;
-        if (!lastActivityAt) continue;
+        for (const conv of resolvedConversations) {
+          const custom = conv.custom_attributes || {};
+          const additional = conv.additional_attributes || {};
+          const resolvedByAttr = custom.resolved_by || additional.resolved_by;
 
-        const resolvedAt = typeof lastActivityAt === 'number'
-          ? new Date(lastActivityAt * 1000)
-          : new Date(lastActivityAt);
+          if (resolvedByAttr === 'ai') continue;
 
-        try {
-          // Use raw query for upsert-like behavior (skip on unique conflict)
-          await prisma.$executeRaw`
-            INSERT INTO resolution_logs (account_id, conversation_id, resolved_by, resolution_type, ai_participated, resolved_at)
-            VALUES (${dbAccountId}::uuid, ${conv.id}, 'human', 'inferred', true, ${resolvedAt})
-            ON CONFLICT DO NOTHING
-          `;
-        } catch (insertErr) {
-          // Non-fatal — skip duplicates silently
+          const lastActivityAt = conv.last_activity_at;
+          if (!lastActivityAt) continue;
+
+          const resolvedAt = typeof lastActivityAt === 'number'
+            ? new Date(lastActivityAt * 1000)
+            : new Date(lastActivityAt);
+
+          try {
+            await prisma.$executeRaw`
+              INSERT INTO resolution_logs (account_id, conversation_id, resolved_by, resolution_type, ai_participated, resolved_at)
+              VALUES (${dbAccountId}::uuid, ${conv.id}, 'human', 'inferred', true, ${resolvedAt})
+              ON CONFLICT DO NOTHING
+            `;
+          } catch (insertErr) {
+            // Non-fatal — skip duplicates silently
+          }
         }
+      } catch (syncErr) {
+        logger.warn('[Metrics] resolution_logs sync error (non-fatal):', syncErr);
       }
+    }
 
-      // Count new leads (contacts with first_resolved_at in range or null)
+    // --- Count new leads via first_resolved_at (only if column exists) ---
+    if (firstResolvedAtAvailable) {
       try {
         const contactIdsInPeriod = [...new Set(
           finalConversations
@@ -463,35 +485,40 @@ class ChatwootMetricsService {
           }).length;
         }
       } catch (_) {
-        // Non-fatal
+        logger.warn('[Metrics] first_resolved_at query failed — using leadsInPeriod fallback');
+        novosLeads = leadsInPeriod;
       }
+    }
 
-      // Query resolution totals from DB
-      const resolutionLogs = await prisma.$queryRaw<Array<{ resolved_by: string; ai_participated: boolean | null }>>`
-        SELECT resolved_by, ai_participated FROM resolution_logs
-        WHERE account_id = ${dbAccountId}::uuid
-          AND resolved_at >= ${dateFromParsed}
-          AND resolved_at <= ${dateToParsed}
-      `;
+    // --- Query resolution totals from DB (only if table exists) ---
+    if (resolutionLogsAvailable) {
+      try {
+        const resolutionLogs = await prisma.$queryRaw<Array<{ resolved_by: string; ai_participated: boolean | null }>>`
+          SELECT resolved_by, ai_participated FROM resolution_logs
+          WHERE account_id = ${dbAccountId}::uuid
+            AND resolved_at >= ${dateFromParsed}
+            AND resolved_at <= ${dateToParsed}
+        `;
 
-      if (resolutionLogs.length > 0) {
-        const aiCount = resolutionLogs.filter(r => r.resolved_by === 'ai').length;
-        const humanCount = resolutionLogs.filter(r => r.resolved_by === 'human').length;
-        const transbordoCount = resolutionLogs.filter(
-          r => r.resolved_by === 'human' && r.ai_participated === true
-        ).length;
-        const total = aiCount + humanCount;
+        if (resolutionLogs.length > 0) {
+          const aiCount = resolutionLogs.filter(r => r.resolved_by === 'ai').length;
+          const humanCount = resolutionLogs.filter(r => r.resolved_by === 'human').length;
+          const transbordoCount = resolutionLogs.filter(
+            r => r.resolved_by === 'human' && r.ai_participated === true
+          ).length;
+          const total = aiCount + humanCount;
 
-        historicoResolucoes = {
-          totalIA: aiCount,
-          totalHumano: humanCount,
-          transbordoCount,
-          percentualIA: total > 0 ? Math.round((aiCount / total) * 100) : 0,
-          percentualHumano: total > 0 ? Math.round((humanCount / total) * 100) : 0,
-        };
+          historicoResolucoes = {
+            totalIA: aiCount,
+            totalHumano: humanCount,
+            transbordoCount,
+            percentualIA: total > 0 ? Math.round((aiCount / total) * 100) : 0,
+            percentualHumano: total > 0 ? Math.round((humanCount / total) * 100) : 0,
+          };
+        }
+      } catch (dbErr) {
+        logger.warn('[Metrics] resolution_logs query error (non-fatal):', dbErr);
       }
-    } catch (dbErr) {
-      logger.error('[Metrics] DB error (non-fatal):', dbErr);
     }
 
     // ========================================================================

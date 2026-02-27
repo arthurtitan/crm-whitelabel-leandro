@@ -7,8 +7,6 @@
 # terem sido aplicadas.
 # ============================================
 
-set -e
-
 echo "============================================"
 echo "GLEPS CRM - Backend Starting"
 echo "============================================"
@@ -33,11 +31,47 @@ if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
     exit 1
 fi
 
-# ---- 2. Aplicar migrations ----
+# ---- 2. Aplicar migrations (com auto-recovery de P3009) ----
 echo ""
 echo "🔄 Aplicando migrations..."
-npx prisma migrate deploy
-echo "✅ Migrations aplicadas"
+
+MIGRATE_OUTPUT=$(npx prisma migrate deploy 2>&1)
+MIGRATE_EXIT=$?
+
+if [ $MIGRATE_EXIT -ne 0 ]; then
+    echo "⚠️  Primeira tentativa de migration falhou (exit=$MIGRATE_EXIT)"
+
+    # Check if it's a P3009 (failed migration blocking)
+    if echo "$MIGRATE_OUTPUT" | grep -q "P3009"; then
+        echo "🔧 Detectado P3009 — tentando resolver migration falhada..."
+
+        # Try to resolve each known migration that could be stuck
+        for MIGRATION_NAME in "0003_add_resolution_unique" "0002_add_resolution_logs"; do
+            echo "   Resolvendo $MIGRATION_NAME como rolled-back..."
+            npx prisma migrate resolve --rolled-back "$MIGRATION_NAME" 2>/dev/null || true
+        done
+
+        echo "🔄 Re-aplicando migrations..."
+        MIGRATE_OUTPUT=$(npx prisma migrate deploy 2>&1)
+        MIGRATE_EXIT=$?
+
+        if [ $MIGRATE_EXIT -ne 0 ]; then
+            echo "❌ Migration falhou mesmo após recovery:"
+            echo "$MIGRATE_OUTPUT"
+            echo ""
+            echo "⚠️  Iniciando servidor mesmo assim (funcionalidade parcial)..."
+        else
+            echo "✅ Migrations aplicadas com sucesso após recovery"
+        fi
+    else
+        echo "❌ Erro de migration (não é P3009):"
+        echo "$MIGRATE_OUTPUT"
+        echo ""
+        echo "⚠️  Iniciando servidor mesmo assim (funcionalidade parcial)..."
+    fi
+else
+    echo "✅ Migrations aplicadas"
+fi
 
 # ---- 3. Executar seed (se habilitado) ----
 if [ "${RUN_SEED:-true}" = "true" ]; then
