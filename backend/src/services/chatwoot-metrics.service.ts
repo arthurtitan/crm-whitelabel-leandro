@@ -549,7 +549,7 @@ class ChatwootMetricsService {
           }
         }
         novosLeads = fallbackNovos;
-        logger.info('[Metrics] Used allConversations fallback for novosLeads:', fallbackNovos);
+        logger.info('[Metrics] Used allConversations fallback for novosLeads', { fallbackNovos });
       }
     }
 
@@ -637,7 +637,7 @@ class ChatwootMetricsService {
         historicoResolucoes.percentualIA = Math.round((fallbackIA / total) * 100);
         historicoResolucoes.percentualHumano = 100 - historicoResolucoes.percentualIA;
 
-        logger.info('[Metrics] Used Chatwoot API PARTIAL fallback for IA resolutions:', fallbackIA);
+        logger.info('[Metrics] Used Chatwoot API PARTIAL fallback for IA resolutions', { fallbackIA });
       }
     }
 
