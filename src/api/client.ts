@@ -32,6 +32,9 @@ export interface ApiError {
 const TOKEN_KEY = 'auth_token';
 const REFRESH_TOKEN_KEY = 'refresh_token';
 
+// Refresh token mutex
+let refreshPromise: Promise<boolean> | null = null;
+
 // Token management
 export const tokenManager = {
   getToken: (): string | null => {
@@ -115,10 +118,40 @@ function createTimeoutPromise(ms: number): Promise<never> {
   });
 }
 
-// Handle response errors
-async function handleResponse<T>(response: Response, skipAuth = false): Promise<T> {
+// Deduplicated token refresh
+async function tryRefreshToken(): Promise<boolean> {
+  if (refreshPromise) return refreshPromise;
+
+  refreshPromise = (async () => {
+    const refreshToken = tokenManager.getRefreshToken();
+    if (!refreshToken) return false;
+    try {
+      const response = await fetch(buildUrl('/api/auth/refresh'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      });
+      if (!response.ok) return false;
+      const result = await response.json();
+      const data = result?.data ?? result;
+      if (data?.token) {
+        tokenManager.setToken(data.token);
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+
+  return refreshPromise;
+}
+
+// Handle response errors — throws ApiError, does NOT handle refresh/logout
+async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    // Parse error body first to get the real message
     let errorData: ApiError;
     try {
       const body = await response.json();
@@ -129,104 +162,83 @@ async function handleResponse<T>(response: Response, skipAuth = false): Promise<
         details: body?.details,
       };
     } catch {
-      errorData = { 
-        message: response.statusText || 'Erro desconhecido', 
-        status: response.status 
-      };
+      errorData = { message: response.statusText || 'Erro desconhecido', status: response.status };
     }
-
-    // Handle 401 Unauthorized — only trigger global logout for token/session errors
-    // Do NOT logout for operational errors (password validation, etc.)
-    if (response.status === 401 && !skipAuth) {
-      const isSessionError = !errorData.code || ['TOKEN_EXPIRED', 'TOKEN_INVALID', 'USER_NOT_FOUND', 'USER_SUSPENDED', 'USER_INACTIVE', 'ACCOUNT_PAUSED'].includes(errorData.code);
-      if (isSessionError) {
-        tokenManager.clearTokens();
-        window.dispatchEvent(new CustomEvent('auth:unauthorized'));
-      }
-    }
-    
     throw errorData;
   }
-  
-  // Handle 204 No Content
-  if (response.status === 204) {
-    return {} as T;
-  }
-  
+  if (response.status === 204) return {} as T;
   return response.json();
 }
 
-// Core request function with retry logic
+// Core request function with automatic token refresh
 async function request<T>(
   endpoint: string,
   options: RequestOptions = {}
 ): Promise<T> {
   const { params, skipAuth = false, timeout = apiConfig.timeout, ...fetchOptions } = options;
-  
+
   const url = buildUrl(endpoint, params);
-  
-  // Build headers
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-    ...fetchOptions.headers,
-  };
-  
-  // Add auth token if not skipped
-  if (!skipAuth) {
-    const token = tokenManager.getToken();
-    if (token) {
-      (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
+
+  const buildHeaders = (): HeadersInit => {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(fetchOptions.headers as Record<string, string>),
+    };
+    if (!skipAuth) {
+      const token = tokenManager.getToken();
+      if (token) headers['Authorization'] = `Bearer ${token}`;
     }
-  }
-  
-  const config: RequestInit = {
-    ...fetchOptions,
-    headers,
+    return headers;
   };
-  
-  // Execute with timeout
-  const fetchPromise = fetch(url, config).then(res => handleResponse<T>(res, skipAuth));
-  
-  if (timeout > 0) {
-    return Promise.race([fetchPromise, createTimeoutPromise(timeout)]);
+
+  const doFetch = (): Promise<T> => {
+    const config: RequestInit = { ...fetchOptions, headers: buildHeaders() };
+    return fetch(url, config).then(res => handleResponse<T>(res));
+  };
+
+  const applyTimeout = (p: Promise<T>): Promise<T> =>
+    timeout > 0 ? Promise.race([p, createTimeoutPromise(timeout)]) : p;
+
+  try {
+    return await applyTimeout(doFetch());
+  } catch (err: any) {
+    // Intercept TOKEN_EXPIRED → try refresh → retry once
+    if (!skipAuth && err?.status === 401 && err?.code === 'TOKEN_EXPIRED') {
+      const refreshed = await tryRefreshToken();
+      if (refreshed) {
+        return applyTimeout(doFetch());
+      }
+    }
+
+    // If 401 session error and not refreshable, trigger global logout
+    if (!skipAuth && err?.status === 401) {
+      const isSessionError = !err.code || ['TOKEN_EXPIRED', 'TOKEN_INVALID', 'USER_NOT_FOUND', 'USER_SUSPENDED', 'USER_INACTIVE', 'ACCOUNT_PAUSED'].includes(err.code);
+      if (isSessionError) {
+        tokenManager.clearTokens();
+        window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+      }
+    }
+
+    throw err;
   }
-  
-  return fetchPromise;
 }
 
 // API client methods
 export const apiClient = {
-  get: <T>(endpoint: string, options?: RequestOptions): Promise<T> => {
-    return request<T>(endpoint, { ...options, method: 'GET' });
-  },
-  
-  post: <T>(endpoint: string, data?: unknown, options?: RequestOptions): Promise<T> => {
-    return request<T>(endpoint, {
-      ...options,
-      method: 'POST',
-      body: data ? JSON.stringify(data) : undefined,
-    });
-  },
-  
-  put: <T>(endpoint: string, data?: unknown, options?: RequestOptions): Promise<T> => {
-    return request<T>(endpoint, {
-      ...options,
-      method: 'PUT',
-      body: data ? JSON.stringify(data) : undefined,
-    });
-  },
-  
-  patch: <T>(endpoint: string, data?: unknown, options?: RequestOptions): Promise<T> => {
-    return request<T>(endpoint, {
-      ...options,
-      method: 'PATCH',
-      body: data ? JSON.stringify(data) : undefined,
-    });
-  },
-  
-  delete: <T>(endpoint: string, options?: RequestOptions): Promise<T> => {
-    return request<T>(endpoint, { ...options, method: 'DELETE' });
-  },
+  get: <T>(endpoint: string, options?: RequestOptions): Promise<T> =>
+    request<T>(endpoint, { ...options, method: 'GET' }),
+
+  post: <T>(endpoint: string, data?: unknown, options?: RequestOptions): Promise<T> =>
+    request<T>(endpoint, { ...options, method: 'POST', body: data ? JSON.stringify(data) : undefined }),
+
+  put: <T>(endpoint: string, data?: unknown, options?: RequestOptions): Promise<T> =>
+    request<T>(endpoint, { ...options, method: 'PUT', body: data ? JSON.stringify(data) : undefined }),
+
+  patch: <T>(endpoint: string, data?: unknown, options?: RequestOptions): Promise<T> =>
+    request<T>(endpoint, { ...options, method: 'PATCH', body: data ? JSON.stringify(data) : undefined }),
+
+  delete: <T>(endpoint: string, options?: RequestOptions): Promise<T> =>
+    request<T>(endpoint, { ...options, method: 'DELETE' }),
 };
 
 export default apiClient;
