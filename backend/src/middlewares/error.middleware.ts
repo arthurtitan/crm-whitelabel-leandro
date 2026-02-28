@@ -11,13 +11,13 @@ export function errorHandler(
   res: Response,
   next: NextFunction
 ): void {
-  // Log error
-  logger.error('Request error', error, {
-    method: req.method,
-    path: req.path,
-    query: req.query,
-    ip: req.ip,
-  });
+  // Log: downgrade auth errors (401/403) to warn to reduce noise
+  const meta = { method: req.method, path: req.path, query: req.query, ip: req.ip };
+  if (error instanceof AppError && (error.statusCode === 401 || error.statusCode === 403)) {
+    logger.warn(`Auth error: ${error.message}`, { ...meta, code: error.code });
+  } else {
+    logger.error('Request error', error, meta);
+  }
 
   // Handle AppError (our custom errors)
   if (error instanceof AppError) {

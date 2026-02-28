@@ -264,8 +264,11 @@ export function useChatwootMetrics({
     staleTime: 25000,
     gcTime: 5 * 60 * 1000, // 5 minutos
     
-    // Retry: 3 tentativas com backoff exponencial
-    retry: 3,
+    // Retry: skip auth errors (401/403), retry transient errors up to 3x
+    retry: (failureCount, error: any) => {
+      if (error?.status === 401 || error?.status === 403) return false;
+      return failureCount < 3;
+    },
     retryDelay: (attemptIndex) => {
       const baseDelay = Math.min(1000 * 2 ** attemptIndex, 10000);
       const jitter = Math.floor(Math.random() * 500);

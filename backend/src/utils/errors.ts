@@ -23,15 +23,23 @@ export class ValidationError extends AppError {
   }
 }
 
+// Reverse lookup: resolve machine-readable code from ErrorCodes message
+const errorMessageToCode: Record<string, string> = {};
+// Populated lazily after ErrorCodes is defined (see bottom of file)
+
+function resolveCode(message: string, fallback: string): string {
+  return errorMessageToCode[message] || fallback;
+}
+
 export class UnauthorizedError extends AppError {
   constructor(message: string = 'Não autorizado') {
-    super(message, 401, 'UNAUTHORIZED');
+    super(message, 401, resolveCode(message, 'UNAUTHORIZED'));
   }
 }
 
 export class ForbiddenError extends AppError {
   constructor(message: string = 'Acesso negado') {
-    super(message, 403, 'FORBIDDEN');
+    super(message, 403, resolveCode(message, 'FORBIDDEN'));
   }
 }
 
@@ -89,3 +97,8 @@ export const ErrorCodes = {
   SUPER_ADMIN_REQUIRED: 'Apenas Super Admin pode realizar esta ação',
   ADMIN_REQUIRED: 'Apenas Admin pode realizar esta ação',
 } as const;
+
+// Populate reverse lookup: message → KEY (machine-readable code)
+Object.entries(ErrorCodes).forEach(([key, message]) => {
+  errorMessageToCode[message] = key;
+});
