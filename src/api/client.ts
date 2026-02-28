@@ -202,21 +202,15 @@ async function request<T>(
   try {
     return await applyTimeout(doFetch());
   } catch (err: any) {
-    // Intercept TOKEN_EXPIRED → try refresh → retry once
-    if (!skipAuth && err?.status === 401 && err?.code === 'TOKEN_EXPIRED') {
+    // On any 401 for authenticated requests, try refresh once then retry
+    if (!skipAuth && err?.status === 401) {
       const refreshed = await tryRefreshToken();
       if (refreshed) {
         return applyTimeout(doFetch());
       }
-    }
-
-    // If 401 session error and not refreshable, trigger global logout
-    if (!skipAuth && err?.status === 401) {
-      const isSessionError = !err.code || ['TOKEN_EXPIRED', 'TOKEN_INVALID', 'USER_NOT_FOUND', 'USER_SUSPENDED', 'USER_INACTIVE', 'ACCOUNT_PAUSED'].includes(err.code);
-      if (isSessionError) {
-        tokenManager.clearTokens();
-        window.dispatchEvent(new CustomEvent('auth:unauthorized'));
-      }
+      // Refresh failed or no refresh token — force global logout
+      tokenManager.clearTokens();
+      window.dispatchEvent(new CustomEvent('auth:unauthorized'));
     }
 
     throw err;
