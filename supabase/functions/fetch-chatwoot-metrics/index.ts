@@ -678,8 +678,14 @@ serve(async (req) => {
             ? new Date(lastActivityAt * 1000).toISOString()
             : new Date(lastActivityAt).toISOString();
 
-          // IA sempre inicia o atendimento, toda resolução humana = transbordo
-          const aiResponded = true;
+          // Verificar se IA realmente participou desta conversa
+          const aiResponded =
+            custom.ai_responded === true ||
+            additional.ai_responded === true ||
+            custom.ai_participated === true ||
+            additional.ai_participated === true ||
+            custom.handoff_to_human === true ||
+            additional.handoff_to_human === true;
 
           const { error: insertError } = await supabase
             .from('resolution_logs')
@@ -764,6 +770,16 @@ serve(async (req) => {
           // Não fatal — fallback para 0
         }
 
+        // DEBUG: Logs detalhados para diagnóstico de leads
+        console.log('[Metrics][Leads Debug]', {
+          finalConversationsCount: finalConversations.length,
+          contactIdsInPeriodCount: [...new Set(finalConversations.map((c: any) => c.meta?.sender?.id).filter(Boolean))].length,
+          novosLeadsFromDB: novosLeads,
+          dateFrom,
+          dateTo,
+          path: novosLeads > 0 ? 'DB' : 'will try fallback',
+        });
+
         // FALLBACK: Se DB não tem contacts sincronizados, inferir novosLeads via allConversations
         if (novosLeads === 0) {
           const contactIdsInPeriod = [...new Set(
@@ -846,7 +862,17 @@ serve(async (req) => {
           fallbackIA++;
         } else if (result.type === 'human') {
           fallbackHumano++;
-          fallbackTransbordo++;
+          // Transbordo = humano resolveu, mas IA participou antes
+          const custom = conv.custom_attributes || {};
+          const additional = conv.additional_attributes || {};
+          const aiParticipated =
+            custom.ai_responded === true ||
+            additional.ai_responded === true ||
+            custom.ai_participated === true ||
+            additional.ai_participated === true;
+          if (aiParticipated) {
+            fallbackTransbordo++;
+          }
         }
       }
 
