@@ -1,115 +1,116 @@
 
 
-# Correcao: Metricas de Leads zeradas e Taxa de Transbordo 100%
+# Correcao: Leads zerados e Taxa de Transbordo no Backend Express
 
-## Problemas identificados
+## Diagnostico completo
 
-Existem **3 bugs** na Edge Function `fetch-chatwoot-metrics` (o caminho ativo em producao, pois `VITE_USE_BACKEND` nao esta habilitado):
+Apos analisar todo o fluxo de dados, identifiquei **4 problemas** no arquivo `backend/src/services/chatwoot-metrics.service.ts` que causam as metricas zeradas:
 
-### Bug 1: `ai_participated` hardcodado como `true` (linha 682)
+### Bug 1: `ai_participated = true` hardcodado (linha 480)
+Toda resolucao humana e gravada como `ai_participated: true`, causando transbordo de 100%.
 
-No bloco de sincronizacao com `resolution_logs`, toda resolucao humana e inserida no banco com `ai_participated: true`:
+### Bug 2: `ON CONFLICT DO NOTHING` (linha 481)
+Registros antigos corrompidos nunca sao corrigidos. Precisa ser `ON CONFLICT DO UPDATE`.
 
-```text
-const aiResponded = true; // "IA sempre inicia o atendimento"
+### Bug 3: `novosLeads` sobrescrito incorretamente (linhas 493-519)
+Quando a coluna `first_resolved_at` existe na tabela `contacts`, o sistema tenta buscar leads pelo `chatwootContactId`. Se os contatos do Chatwoot nao estao sincronizados na tabela `contacts` do CRM (o que e provavel), a query retorna 0 registros e **sobrescreve** o valor correto de `novosLeads` com 0. Isso faz `conversasAtivas` (Novos Leads no frontend) e consequentemente `retornosNoPeriodo` ficarem errados.
+
+### Bug 4: Falta de logs de diagnostico
+Nao ha como saber remotamente se o problema e na API do Chatwoot, no filtro de datas, ou na query ao banco.
+
+## Correcoes propostas
+
+### Arquivo: `backend/src/services/chatwoot-metrics.service.ts`
+
+**Alteracao 1 (linhas 477-486):** Corrigir `ai_participated` e trocar para UPSERT:
+
+```typescript
+// De:
+await prisma.$executeRaw`
+  INSERT INTO resolution_logs (..., ai_participated, ...)
+  VALUES (..., true, ...)
+  ON CONFLICT DO NOTHING
+`;
+
+// Para:
+const aiParticipated =
+  custom.ai_responded === true || additional.ai_responded === true ||
+  custom.ai_participated === true || additional.ai_participated === true ||
+  custom.handoff_to_human === true || additional.handoff_to_human === true;
+
+await prisma.$executeRaw`
+  INSERT INTO resolution_logs (account_id, conversation_id, resolved_by, resolution_type, ai_participated, resolved_at)
+  VALUES (${dbAccountId}::uuid, ${conv.id}, 'human', 'inferred', ${aiParticipated}, ${resolvedAt})
+  ON CONFLICT (account_id, conversation_id)
+  DO UPDATE SET ai_participated = ${aiParticipated}, resolved_at = ${resolvedAt}
+`;
 ```
 
-Isso corrompe os dados persistidos: quando o sistema depois consulta `resolution_logs` e filtra por `ai_participated === true`, **todas** as resolucoes humanas sao contadas como transbordo, resultando em taxa de 100%.
+**Alteracao 2 (linhas 493-519):** Corrigir a logica de `novosLeads` para NAO sobrescrever com 0 quando a tabela contacts nao tem dados sincronizados:
 
-**Correcao:** Verificar os metadados reais da conversa (`ai_responded`, `ai_participated`, `handoff_to_human`) nos `custom_attributes` e `additional_attributes`.
-
-### Bug 2: Fallback sem verificacao de IA (linhas 843-851)
-
-Quando `resolution_logs` esta vazio, o fallback conta toda resolucao humana como transbordo:
-
-```text
-} else if (result.type === 'human') {
-  fallbackHumano++;
-  fallbackTransbordo++;  // BUG
+```typescript
+// De:
+if (firstResolvedAtAvailable) {
+  // ... query contacts
+  novosLeads = contacts.filter(...).length;  // Pode ser 0!
 }
-```
 
-**Correcao:** Mesma logica ja aplicada no backend Express -- verificar `ai_responded`/`ai_participated` antes de incrementar `fallbackTransbordo`.
-
-### Bug 3: Leads zerados - dados corrompidos no `resolution_logs` afetam `novosLeads`
-
-O calculo de `novosLeads` (linha 757) consulta os contatos no banco e filtra por `first_resolved_at`. Porem, como o Bug 1 insere registros com `ai_participated: true` incorretamente, o campo `first_resolved_at` e marcado prematuramente em contatos que nem existem como leads reais no periodo. Alem disso, se nenhum contato do Chatwoot esta sincronizado na tabela `contacts`, a query retorna 0 registros e `novosLeads = 0`.
-
-O fallback via `allConversations` (linhas 768-799) so e acionado se `novosLeads === 0`, mas depende de `finalConversations` ter contatos -- que por sua vez depende de conversas retornadas pela API no periodo selecionado.
-
-**Diagnostico necessario:** Adicionar logs de debug para expor:
-- Quantas conversas brutas a API retornou
-- Quantas passaram no filtro de data
-- Quantos `sender.id` unicos existem
-- Quantos contatos foram encontrados na tabela `contacts`
-
-## Arquivo alterado
-
-**`supabase/functions/fetch-chatwoot-metrics/index.ts`**
-
-### Alteracao 1: Linha 682 - Corrigir `aiResponded` hardcodado
-
-Substituir:
-```typescript
-const aiResponded = true;
-```
-Por:
-```typescript
-const aiResponded =
-  custom.ai_responded === true ||
-  additional.ai_responded === true ||
-  custom.ai_participated === true ||
-  additional.ai_participated === true ||
-  custom.handoff_to_human === true ||
-  additional.handoff_to_human === true;
-```
-
-### Alteracao 2: Linhas 843-851 - Corrigir fallback de transbordo
-
-Substituir:
-```typescript
-} else if (result.type === 'human') {
-  fallbackHumano++;
-  fallbackTransbordo++;
-}
-```
-Por:
-```typescript
-} else if (result.type === 'human') {
-  fallbackHumano++;
-  const custom = conv.custom_attributes || {};
-  const additional = conv.additional_attributes || {};
-  const aiParticipated =
-    custom.ai_responded === true ||
-    additional.ai_responded === true ||
-    custom.ai_participated === true ||
-    additional.ai_participated === true;
-  if (aiParticipated) {
-    fallbackTransbordo++;
+// Para:
+if (firstResolvedAtAvailable) {
+  // ... query contacts
+  if (contacts.length > 0) {
+    // So sobrescreve se o banco TEM dados sincronizados
+    novosLeads = contacts.filter(...).length;
   }
+  // Se contacts.length === 0, manter o valor calculado via conversas
 }
 ```
 
-### Alteracao 3: Adicionar logs de debug detalhados para leads
+Esta e a correcao principal do bug de leads. O valor inicial de `novosLeads` (linhas 430-438) ja esta correto -- conta sender IDs unicos de conversas criadas no periodo. Mas a query ao banco (que retorna 0 por falta de sync) sobrescreve esse valor bom com 0.
 
-Apos o bloco de contagem de leads (proximo a linha 800), adicionar logs que exponham:
-- `contactIdsInPeriod.length` (quantos sender.id unicos existem)
-- `finalConversations.length` (quantas conversas passaram no filtro de data)
-- Resultado da query ao banco de contatos
-- Qual caminho foi usado (DB vs fallback)
+**Alteracao 3:** Adicionar logs de debug detalhados apos o calculo de leads para diagnostico remoto:
 
-Isso permitira diagnosticar se o problema de "0 leads" e causado por:
-1. API do Chatwoot nao retornando conversas no periodo
-2. Contatos nao sincronizados na tabela `contacts`
-3. Filtro de data descartando conversas existentes
+```text
+[Metrics][Leads] {
+  allConversationsCount, finalConversationsCount,
+  uniqueSenderIds, novosLeads, leadsInPeriod,
+  contactsFoundInDB, path: 'DB' | 'fallback' | 'initial'
+}
+```
+
+### SQL para PostgreSQL de producao
+
+Executar diretamente no banco de producao para limpar dados corrompidos:
+
+```sql
+-- 1. Corrigir ai_participated em resolucoes inferidas
+UPDATE resolution_logs
+SET ai_participated = false
+WHERE resolution_type = 'inferred' AND ai_participated = true;
+
+-- 2. Remover duplicatas (manter mais recente)
+DELETE FROM resolution_logs a USING resolution_logs b
+WHERE a.id < b.id
+  AND a.account_id = b.account_id
+  AND a.conversation_id = b.conversation_id;
+
+-- 3. Garantir unique constraint
+CREATE UNIQUE INDEX IF NOT EXISTS "resolution_logs_account_id_conversation_id_key"
+  ON resolution_logs(account_id, conversation_id);
+```
+
+## Resultado esperado
+
+Apos as correcoes:
+- **Total de Leads**: Contatos unicos com atividade no periodo (ex: 22 para 30 dias)
+- **Novos Leads**: Contatos cujo primeiro contato historico caiu no periodo
+- **Retornos**: Total - Novos
+- **Taxa de Transbordo**: 0% (conta sem IA ativa)
 
 ## Impacto
 
-- 1 arquivo alterado: `supabase/functions/fetch-chatwoot-metrics/index.ts`
-- A Edge Function e redeployada automaticamente
-- Corrige taxa de transbordo inflada (100% -> valor real)
-- Corrige dados corrompidos sendo inseridos no `resolution_logs`
-- Adiciona visibilidade sobre o problema de leads zerados via logs
-- Zero alteracao no frontend ou backend Express
-- Nao quebra nenhuma funcionalidade existente
+- 1 arquivo alterado: `backend/src/services/chatwoot-metrics.service.ts`
+- 1 SQL de limpeza para PostgreSQL de producao
+- Zero alteracao no frontend
+- Deploy necessario no backend para aplicar as mudancas
 
