@@ -542,9 +542,8 @@ class ChatwootMetricsService {
       uniqueSenderIds: [...new Set(finalConversations.map((c: any) => c.meta?.sender?.id).filter(Boolean))].length,
       novosLeads,
       leadsInPeriod,
-      totalLeads,
-      dateFrom,
-      dateTo,
+      dateFrom: params.dateFrom,
+      dateTo: params.dateTo,
     });
 
     // FALLBACK: Se DB não tem contacts sincronizados, inferir novosLeads via allConversations
