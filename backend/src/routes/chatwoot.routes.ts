@@ -10,22 +10,27 @@ const router = Router();
 router.post('/webhook', (req, res, next) => chatwootController.handleWebhook(req, res, next));
 
 // ============================================
+// Credential-based routes (no accountId needed)
+// Super Admin can use these when creating new accounts
+// ============================================
+router.post('/test-connection', authenticate, requireRole('admin', 'super_admin'), (req, res, next) => chatwootController.testConnectionWithCredentials(req, res, next));
+router.post('/agents/fetch', authenticate, requireRole('admin', 'super_admin'), (req, res, next) => chatwootController.fetchAgentsWithCredentials(req, res, next));
+
+// ============================================
 // All other routes require authentication + accountId
 // ============================================
 router.use(authenticate);
 router.use(requireAccountId);
 
 // ============================================
-// Connection Testing
+// Connection Testing (account-based)
 // ============================================
 router.get('/test-connection', (req, res, next) => chatwootController.testConnection(req, res, next));
-router.post('/test-connection', (req, res, next) => chatwootController.testConnectionWithCredentials(req, res, next));
 
 // ============================================
-// Agents
+// Agents (account-based)
 // ============================================
 router.get('/agents', (req, res, next) => chatwootController.getAgents(req, res, next));
-router.post('/agents/fetch', (req, res, next) => chatwootController.fetchAgentsWithCredentials(req, res, next));
 
 // ============================================
 // Inboxes
