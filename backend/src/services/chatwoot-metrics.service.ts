@@ -475,10 +475,20 @@ class ChatwootMetricsService {
             : new Date(lastActivityAt);
 
           try {
+            // Verificar se IA realmente participou desta conversa
+            const aiParticipated =
+              custom.ai_responded === true ||
+              additional.ai_responded === true ||
+              custom.ai_participated === true ||
+              additional.ai_participated === true ||
+              custom.handoff_to_human === true ||
+              additional.handoff_to_human === true;
+
             await prisma.$executeRaw`
               INSERT INTO resolution_logs (account_id, conversation_id, resolved_by, resolution_type, ai_participated, resolved_at)
-              VALUES (${dbAccountId}::uuid, ${conv.id}, 'human', 'inferred', true, ${resolvedAt})
-              ON CONFLICT DO NOTHING
+              VALUES (${dbAccountId}::uuid, ${conv.id}, 'human', 'inferred', ${aiParticipated}, ${resolvedAt})
+              ON CONFLICT (account_id, conversation_id)
+              DO UPDATE SET ai_participated = ${aiParticipated}, resolved_at = ${resolvedAt}
             `;
           } catch (insertErr) {
             // Non-fatal — skip duplicates silently
@@ -507,17 +517,35 @@ class ChatwootMetricsService {
             select: { id: true, firstResolvedAt: true },
           });
 
-          novosLeads = contacts.filter(c => {
-            if (!c.firstResolvedAt) return true;
-            const frd = new Date(c.firstResolvedAt);
-            return frd >= dateFromParsed && frd <= dateToParsed;
-          }).length;
+          // Só sobrescreve novosLeads se o banco TEM dados sincronizados
+          if (contacts.length > 0) {
+            novosLeads = contacts.filter(c => {
+              if (!c.firstResolvedAt) return true;
+              const frd = new Date(c.firstResolvedAt);
+              return frd >= dateFromParsed && frd <= dateToParsed;
+            }).length;
+            logger.info('[Metrics][Leads] Used DB contacts path', { contactsFound: contacts.length, novosLeads });
+          } else {
+            logger.info('[Metrics][Leads] DB contacts empty — keeping initial novosLeads', { novosLeads });
+          }
         }
       } catch (_) {
         logger.warn('[Metrics] first_resolved_at query failed — using leadsInPeriod fallback');
         novosLeads = leadsInPeriod;
       }
     }
+
+    // DEBUG: Log detalhado para diagnóstico remoto de leads
+    logger.info('[Metrics][Leads] Summary before fallback', {
+      allConversationsCount: allConversations.length,
+      finalConversationsCount: finalConversations.length,
+      uniqueSenderIds: [...new Set(finalConversations.map((c: any) => c.meta?.sender?.id).filter(Boolean))].length,
+      novosLeads,
+      leadsInPeriod,
+      totalLeads,
+      dateFrom,
+      dateTo,
+    });
 
     // FALLBACK: Se DB não tem contacts sincronizados, inferir novosLeads via allConversations
     if (novosLeads === 0) {
