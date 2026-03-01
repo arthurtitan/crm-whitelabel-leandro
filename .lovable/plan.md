@@ -1,43 +1,64 @@
 
 
-# Correcao: Navegacao ao sair da impersonacao
+# Correcao: Taxa de Transbordo incorreta no fallback de metricas
 
-## Problema
+## Problema identificado
 
-Quando o Super Admin clica em "Sair" na barra de impersonacao, o sistema restaura o estado do usuario original corretamente, mas **nao navega** de volta ao painel Super Admin. O usuario permanece na rota `/admin` (dashboard do cliente), que exibe o erro "Chatwoot nao configurado" porque a conta do Super Admin nao possui integracao.
+No arquivo `backend/src/services/chatwoot-metrics.service.ts`, linhas 599-606, o **fallback** de calculo de resolucoes (usado quando a tabela `resolution_logs` esta vazia ou sem dados no periodo) contabiliza **toda resolucao humana como transbordo**. Isso causa a exibicao de 100% de taxa de transbordo mesmo quando a IA nao participou da conversa.
 
-## Causa raiz
+### Codigo atual com bug (linhas 599-606):
 
-As funcoes `exitImpersonation` nos dois AuthContexts (`AuthContext.tsx` e `AuthContext.backend.tsx`) apenas atualizam o estado React, sem fazer navegacao. Os botoes "Sair" nos layouts chamam `exitImpersonation` diretamente, sem redirecionar.
+```text
+for (const conv of resolvedConversations) {
+  const result = classifyResolver(conv);
+  if (result.type === 'ai') {
+    fallbackIA++;
+  } else if (result.type === 'human') {
+    fallbackHumano++;
+    fallbackTransbordo++;  // BUG: conta TODA resolucao humana como transbordo
+  }
+}
+```
+
+### Logica correta (ja presente no caminho do banco de dados, linhas 569-571):
+
+No caminho que usa `resolution_logs`, o transbordo so e contado quando `ai_participated === true`. O fallback deve replicar essa mesma logica, verificando se a IA participou da conversa antes de contar como transbordo.
 
 ## Correcao
 
-Alterar os dois pontos de chamada nos layouts (`AdminLayout.tsx` e `SuperAdminLayout.tsx`) para navegar ao `/super-admin` apos sair da impersonacao. Isso e mais limpo do que colocar navegacao dentro do contexto de autenticacao (que nao deve conhecer rotas).
+### Arquivo: `backend/src/services/chatwoot-metrics.service.ts`
 
-### Arquivos alterados
-
-**1. `src/layouts/AdminLayout.tsx`**
-- Criar funcao `handleExitImpersonation` que chama `exitImpersonation()` e depois `navigate('/super-admin')`
-- Substituir as 3 referencias a `exitImpersonation` pelo novo handler (dropdown menu item, botao na barra amarela)
-
-**2. `src/layouts/SuperAdminLayout.tsx`**
-- Mesma alteracao: criar `handleExitImpersonation` com navegacao para `/super-admin`
-- Substituir as referencias nos mesmos pontos (dropdown e barra)
-
-### Exemplo da mudanca
+**Alterar o bloco do fallback (linhas 599-606)** para verificar os atributos `ai_responded` e `ai_participated` da conversa antes de incrementar `fallbackTransbordo`:
 
 ```typescript
-// Em ambos os layouts:
-const handleExitImpersonation = useCallback(() => {
-  exitImpersonation();
-  navigate('/super-admin');
-}, [exitImpersonation, navigate]);
-
-// Substituir onClick={exitImpersonation} por onClick={handleExitImpersonation}
+for (const conv of resolvedConversations) {
+  const result = classifyResolver(conv);
+  if (result.type === 'ai') {
+    fallbackIA++;
+  } else if (result.type === 'human') {
+    fallbackHumano++;
+    // Transbordo = humano resolveu, mas IA participou antes
+    const custom = conv.custom_attributes || {};
+    const additional = conv.additional_attributes || {};
+    const aiParticipated =
+      custom.ai_responded === true ||
+      additional.ai_responded === true ||
+      custom.ai_participated === true ||
+      additional.ai_participated === true;
+    if (aiParticipated) {
+      fallbackTransbordo++;
+    }
+  }
+}
 ```
+
+Esta mudanca alinha o fallback com a logica do banco de dados e com o contrato de metadados do n8n (que marca `ai_responded` e `ai_participated` nas conversas onde a IA atuou).
 
 ## Impacto
 
-- Zero alteracao nos contextos de autenticacao ou backend
-- Apenas 2 arquivos frontend alterados
-- Comportamento esperado: ao clicar "Sair", o Super Admin volta ao painel de administracao global
+- 1 arquivo backend alterado (`chatwoot-metrics.service.ts`)
+- Zero alteracao no frontend
+- Corrige a taxa de transbordo inflada (100% quando deveria ser 0% em conversas sem participacao de IA)
+- Nao afeta o caminho principal (via `resolution_logs`) que ja funciona corretamente
+- Totalmente compativel com o contrato de dados existente do n8n/Chatwoot
+
