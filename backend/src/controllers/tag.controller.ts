@@ -176,6 +176,19 @@ export class TagController {
   }
 }
 
+  /**
+   * POST /tags/sync-labels
+   */
+  async syncLabels(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await tagService.syncAllLabels(req.user!.accountId!);
+      res.json({ data: result });
+    } catch (error) {
+      next(error);
+    }
+  }
+}
+
 export const tagController = new TagController();
 
 export class FunnelController {
