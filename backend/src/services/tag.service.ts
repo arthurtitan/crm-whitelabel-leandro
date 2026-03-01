@@ -203,7 +203,8 @@ class TagService {
     if (existingTag.chatwootLabelId) {
       try {
         await chatwootService.updateLabel(accountId, existingTag.chatwootLabelId, {
-          title: input.name,
+          title: existingTag.slug,
+          description: input.name ? `Etapa do Kanban: ${input.name}` : undefined,
           color: input.color,
         });
         logger.info('Tag update synced to Chatwoot', { tagId: id, labelId: existingTag.chatwootLabelId });
@@ -368,10 +369,12 @@ class TagService {
       })),
     }));
   }
-}
 
   /**
-   * Sync all stage tags to Chatwoot labels (for tags missing chatwootLabelId)
+   * Reconcile all active stage tags with Chatwoot labels
+   * - garante título por slug
+   * - corrige vínculos quebrados (chatwootLabelId inválido)
+   * - cria labels faltantes
    */
   async syncAllLabels(accountId: string) {
     const account = await prisma.account.findUnique({ where: { id: accountId } });
@@ -385,35 +388,48 @@ class TagService {
         accountId,
         type: 'stage',
         ativo: true,
-        chatwootLabelId: null,
       },
       orderBy: { ordem: 'asc' },
     });
 
-    const results: { tagId: string; tagName: string; labelId?: number; error?: string }[] = [];
+    const results: { tagId: string; tagName: string; slug: string; labelId?: number; error?: string }[] = [];
 
     for (const tag of tags) {
       try {
-        const label = await chatwootService.createLabel(accountId, {
-          title: tag.slug,
-          description: `Etapa do Kanban: ${tag.name}`,
-          color: tag.color || '#6366F1',
-        });
+        const labelId = await chatwootService.syncTagToLabel(tag.id, accountId);
 
-        await prisma.tag.update({
-          where: { id: tag.id },
-          data: { chatwootLabelId: label.id },
-        });
+        if (!labelId) {
+          results.push({
+            tagId: tag.id,
+            tagName: tag.name,
+            slug: tag.slug,
+            error: 'Falha ao reconciliar etiqueta no Chatwoot',
+          });
+          continue;
+        }
 
-        results.push({ tagId: tag.id, tagName: tag.name, labelId: label.id });
-        logger.info('Tag synced to Chatwoot label', { tagId: tag.id, labelId: label.id });
+        results.push({
+          tagId: tag.id,
+          tagName: tag.name,
+          slug: tag.slug,
+          labelId,
+        });
       } catch (error: any) {
-        results.push({ tagId: tag.id, tagName: tag.name, error: error.message });
-        logger.warn('Failed to sync tag', { tagId: tag.id, error });
+        results.push({
+          tagId: tag.id,
+          tagName: tag.name,
+          slug: tag.slug,
+          error: error?.message || 'Erro desconhecido',
+        });
+        logger.warn('Failed to reconcile tag label', { tagId: tag.id, error });
       }
     }
 
-    return { synced: results.filter(r => !r.error).length, failed: results.filter(r => r.error).length, details: results };
+    return {
+      synced: results.filter(r => !r.error).length,
+      failed: results.filter(r => r.error).length,
+      details: results,
+    };
   }
 }
 

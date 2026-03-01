@@ -526,54 +526,95 @@ class ChatwootService {
 
   /**
    * Sync a local tag with Chatwoot label
-   * Creates label if tag doesn't have chatwootLabelId
+   * Garante vínculo por slug, reaproveita labels existentes e corrige IDs quebrados
    */
   async syncTagToLabel(tagId: string, accountId: string): Promise<number | null> {
-    const tag = await prisma.tag.findUnique({
-      where: { id: tagId },
-    });
-
+    const tag = await prisma.tag.findUnique({ where: { id: tagId } });
     if (!tag || tag.type !== 'stage') return null;
 
-    // If already synced, just update
-    if (tag.chatwootLabelId) {
-      try {
-        await this.updateLabel(accountId, tag.chatwootLabelId, {
-          title: tag.name,
+    const desiredTitle = tag.slug;
+    const desiredDescription = `Etapa do Kanban: ${tag.name}`;
+    const normalize = (value: string) => value.trim().toLowerCase().replace(/\s+/g, '_');
+
+    try {
+      const labels = await this.getLabels(accountId);
+
+      // 1) Se já existe vínculo e a label existe no Chatwoot, apenas atualiza
+      const linkedLabel = tag.chatwootLabelId
+        ? labels.find((label) => label.id === tag.chatwootLabelId)
+        : undefined;
+
+      if (linkedLabel) {
+        await this.updateLabel(accountId, linkedLabel.id, {
+          title: desiredTitle,
+          description: desiredDescription,
           color: tag.color,
         });
-        return tag.chatwootLabelId;
-      } catch (error) {
-        logger.warn('Failed to update Chatwoot label, will try creating new', { tagId, error });
-      }
-    }
 
-    // Create new label
-    try {
+        if (linkedLabel.id !== tag.chatwootLabelId) {
+          await prisma.tag.update({
+            where: { id: tag.id },
+            data: { chatwootLabelId: linkedLabel.id },
+          });
+        }
+
+        return linkedLabel.id;
+      }
+
+      // 2) Se havia vínculo salvo mas não existe mais no Chatwoot, limpa vínculo local
+      if (tag.chatwootLabelId && !linkedLabel) {
+        await prisma.tag.update({
+          where: { id: tag.id },
+          data: { chatwootLabelId: null },
+        });
+      }
+
+      // 3) Reaproveita label existente por slug (evita duplicidade)
+      const matchedBySlug = labels.find((label) => normalize(label.title) === desiredTitle);
+      if (matchedBySlug) {
+        await this.updateLabel(accountId, matchedBySlug.id, {
+          title: desiredTitle,
+          description: desiredDescription,
+          color: tag.color,
+        });
+
+        await prisma.tag.update({
+          where: { id: tag.id },
+          data: { chatwootLabelId: matchedBySlug.id },
+        });
+
+        return matchedBySlug.id;
+      }
+
+      // 4) Cria label nova quando não há correspondente
       const label = await this.createLabel(accountId, {
-        title: tag.name,
+        title: desiredTitle,
+        description: desiredDescription,
         color: tag.color,
       });
 
-      // Update tag with label ID
       await prisma.tag.update({
-        where: { id: tagId },
+        where: { id: tag.id },
         data: { chatwootLabelId: label.id },
       });
 
       return label.id;
     } catch (error) {
-      logger.error('Failed to create Chatwoot label', { tagId, error });
+      logger.error('Failed to sync Chatwoot label from tag', {
+        tagId,
+        desiredTitle,
+        error,
+      });
       return null;
     }
   }
 
   /**
-   * Apply label to conversation when lead changes stage
+   * Apply stage labels to conversation when lead changes stage
    */
   async syncLeadStageToConversation(
     contactId: string,
-    tagName: string,
+    tagSlug: string,
     accountId: string
   ): Promise<void> {
     const contact = await prisma.contact.findUnique({
@@ -593,19 +634,13 @@ class ChatwootService {
     }
 
     try {
-      // Get all stage labels to apply
-      const stageLabels = contact.leadTags.map(lt => lt.tag.name);
-      
-      // Ensure the new tag is in the list
-      if (!stageLabels.includes(tagName)) {
-        stageLabels.push(tagName);
+      const stageLabels = [...new Set(contact.leadTags.map((lt) => lt.tag.slug))];
+
+      if (!stageLabels.includes(tagSlug)) {
+        stageLabels.push(tagSlug);
       }
 
-      await this.updateConversationLabels(
-        accountId,
-        contact.chatwootConversationId,
-        stageLabels
-      );
+      await this.updateConversationLabels(accountId, contact.chatwootConversationId, stageLabels);
 
       logger.info('Synced lead stage to Chatwoot conversation', {
         contactId,
@@ -613,7 +648,7 @@ class ChatwootService {
         labels: stageLabels,
       });
     } catch (error) {
-      logger.error('Failed to sync lead stage to Chatwoot', { contactId, error });
+      logger.error('Failed to sync lead stage to Chatwoot', { contactId, tagSlug, error });
     }
   }
 
