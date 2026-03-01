@@ -602,7 +602,17 @@ class ChatwootMetricsService {
           fallbackIA++;
         } else if (result.type === 'human') {
           fallbackHumano++;
-          fallbackTransbordo++;
+          // Transbordo = humano resolveu, mas IA participou antes
+          const custom = conv.custom_attributes || {};
+          const additional = conv.additional_attributes || {};
+          const aiParticipated =
+            custom.ai_responded === true ||
+            additional.ai_responded === true ||
+            custom.ai_participated === true ||
+            additional.ai_participated === true;
+          if (aiParticipated) {
+            fallbackTransbordo++;
+          }
         }
       }
 
