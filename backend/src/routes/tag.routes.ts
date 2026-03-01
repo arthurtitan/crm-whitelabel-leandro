@@ -12,6 +12,7 @@ router.get('/', requirePermission('kanban', 'leads'), (req, res, next) => tagCon
 router.post('/', requireAdmin, (req, res, next) => tagController.create(req, res, next));
 router.get('/kanban', requirePermission('kanban'), (req, res, next) => tagController.getKanbanData(req, res, next));
 router.post('/reorder', requireAdmin, (req, res, next) => tagController.reorderBulk(req, res, next));
+router.post('/sync-labels', requireAdmin, (req, res, next) => tagController.syncLabels(req, res, next));
 
 router.get('/:id', requirePermission('kanban', 'leads'), (req, res, next) => tagController.getById(req, res, next));
 router.put('/:id', requireAdmin, (req, res, next) => tagController.update(req, res, next));

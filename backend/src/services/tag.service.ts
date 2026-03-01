@@ -139,9 +139,10 @@ class TagService {
       try {
         const account = await prisma.account.findUnique({ where: { id: input.accountId } });
         
-        if (account?.chatwootApiKey && account?.chatwootBaseUrl && account?.chatwootAccountId) {
+    if (account?.chatwootApiKey && account?.chatwootBaseUrl && account?.chatwootAccountId) {
           const label = await chatwootService.createLabel(input.accountId, {
-            title: input.name,
+            title: finalSlug,  // Use slug (e.g. "novo_lead"), not display name
+            description: `Etapa do Kanban: ${input.name}`,
             color: input.color || '#6366F1',
           });
           
@@ -249,12 +250,10 @@ class TagService {
       }
     }
 
-    await prisma.tag.delete({ where: { id } });
-
-    // Record in tag history
+    // Record history BEFORE deleting (tagId: null to avoid FK violation)
     await prisma.tagHistory.create({
       data: {
-        tagId: id,
+        tagId: null,
         action: 'tag_deleted',
         actorType: 'user',
         actorId: deletedById,
@@ -262,6 +261,8 @@ class TagService {
         tagName: tag.name,
       },
     });
+
+    await prisma.tag.delete({ where: { id } });
 
     await eventService.create({
       eventType: 'funnel.stage.deleted',
@@ -366,6 +367,53 @@ class TagService {
         _count: undefined,
       })),
     }));
+  }
+}
+
+  /**
+   * Sync all stage tags to Chatwoot labels (for tags missing chatwootLabelId)
+   */
+  async syncAllLabels(accountId: string) {
+    const account = await prisma.account.findUnique({ where: { id: accountId } });
+
+    if (!account?.chatwootApiKey || !account?.chatwootBaseUrl || !account?.chatwootAccountId) {
+      throw new ValidationError('Configuração do Chatwoot incompleta.');
+    }
+
+    const tags = await prisma.tag.findMany({
+      where: {
+        accountId,
+        type: 'stage',
+        ativo: true,
+        chatwootLabelId: null,
+      },
+      orderBy: { ordem: 'asc' },
+    });
+
+    const results: { tagId: string; tagName: string; labelId?: number; error?: string }[] = [];
+
+    for (const tag of tags) {
+      try {
+        const label = await chatwootService.createLabel(accountId, {
+          title: tag.slug,
+          description: `Etapa do Kanban: ${tag.name}`,
+          color: tag.color || '#6366F1',
+        });
+
+        await prisma.tag.update({
+          where: { id: tag.id },
+          data: { chatwootLabelId: label.id },
+        });
+
+        results.push({ tagId: tag.id, tagName: tag.name, labelId: label.id });
+        logger.info('Tag synced to Chatwoot label', { tagId: tag.id, labelId: label.id });
+      } catch (error: any) {
+        results.push({ tagId: tag.id, tagName: tag.name, error: error.message });
+        logger.warn('Failed to sync tag', { tagId: tag.id, error });
+      }
+    }
+
+    return { synced: results.filter(r => !r.error).length, failed: results.filter(r => r.error).length, details: results };
   }
 }
 
