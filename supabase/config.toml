@@ -35,3 +35,12 @@ verify_jwt = false
 
 [functions.super-admin-kpis]
 verify_jwt = false
+
+[functions.fix-resolution-logs]
+verify_jwt = false
+
+[functions.fetch-chatwoot-metrics]
+verify_jwt = false
+
+[functions.super-admin-kpis]
+verify_jwt = false
