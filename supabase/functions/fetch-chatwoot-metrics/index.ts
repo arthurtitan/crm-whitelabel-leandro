@@ -687,24 +687,19 @@ serve(async (req) => {
             custom.handoff_to_human === true ||
             additional.handoff_to_human === true;
 
-          const { error: insertError } = await supabase
+          const { error: upsertError } = await supabase
             .from('resolution_logs')
-            .insert({
+            .upsert({
               account_id: dbAccountId,
               conversation_id: conv.id,
               resolved_by: 'human',
               resolution_type: 'inferred',
               ai_participated: aiResponded,
               resolved_at: resolvedAt,
-            });
+            }, { onConflict: 'account_id,conversation_id' });
 
-          if (insertError) {
-            // Código 23505 = unique constraint violation → duplicata, skip silencioso
-            if (insertError.code === '23505') {
-              duplicatesSkipped++;
-            } else {
-              console.error('[Resolution Sync] Insert error for conv', conv.id, ':', insertError.message);
-            }
+          if (upsertError) {
+            console.error('[Resolution Sync] Upsert error for conv', conv.id, ':', upsertError.message);
           } else {
             syncedCount++;
 
