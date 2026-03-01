@@ -1,4 +1,4 @@
-import { ReactNode, useState, useMemo } from 'react';
+import { ReactNode, useState, useMemo, useCallback } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -61,6 +61,11 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const visibleNavItems = useMemo(() => {
     return adminNavItems.filter(item => canAccessRoute(item.href));
   }, [canAccessRoute]);
+
+  const handleExitImpersonation = useCallback(() => {
+    exitImpersonation();
+    navigate('/super-admin');
+  }, [exitImpersonation, navigate]);
 
   const handleLogout = async () => {
     await logout();
@@ -191,7 +196,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
               <DropdownMenuSeparator />
               {isImpersonating && (
                 <>
-                  <DropdownMenuItem onClick={exitImpersonation} className="text-warning">
+                  <DropdownMenuItem onClick={handleExitImpersonation} className="text-warning">
                     <ArrowLeftRight className="w-4 h-4 mr-2" />
                     Sair da Impersonação
                   </DropdownMenuItem>
@@ -263,7 +268,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                   Visualizando como <strong className="truncate max-w-[100px] inline-block align-bottom">{user?.nome}</strong>
                 </span>
               </div>
-              <button onClick={exitImpersonation} className="underline hover:no-underline whitespace-nowrap">
+              <button onClick={handleExitImpersonation} className="underline hover:no-underline whitespace-nowrap">
                 Sair
               </button>
             </div>

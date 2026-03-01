@@ -1,4 +1,4 @@
-import { ReactNode, useState } from 'react';
+import { ReactNode, useState, useCallback } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
@@ -42,6 +42,11 @@ export default function SuperAdminLayout({ children }: SidebarLayoutProps) {
   const { user, logout, isImpersonating, exitImpersonation } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+
+  const handleExitImpersonation = useCallback(() => {
+    exitImpersonation();
+    navigate('/super-admin');
+  }, [exitImpersonation, navigate]);
 
   const handleLogout = async () => {
     await logout();
@@ -172,7 +177,7 @@ export default function SuperAdminLayout({ children }: SidebarLayoutProps) {
               <DropdownMenuSeparator />
               {isImpersonating && (
                 <>
-                  <DropdownMenuItem onClick={exitImpersonation} className="text-warning">
+                  <DropdownMenuItem onClick={handleExitImpersonation} className="text-warning">
                     <ArrowLeftRight className="w-4 h-4 mr-2" />
                     Sair da Impersonação
                   </DropdownMenuItem>
@@ -244,7 +249,7 @@ export default function SuperAdminLayout({ children }: SidebarLayoutProps) {
                 </span>
               </div>
               <button
-                onClick={exitImpersonation}
+                onClick={handleExitImpersonation}
                 className="underline hover:no-underline whitespace-nowrap"
               >
                 Sair
