@@ -409,7 +409,7 @@ class ContactService {
     // Sync to Chatwoot if this is a stage change from Kanban
     if (tag.type === 'stage' && source === 'kanban') {
       try {
-        await chatwootService.syncLeadStageToConversation(id, tag.name, accountId);
+        await chatwootService.syncLeadStageToConversation(id, tag.slug, accountId);
       } catch (error) {
         logger.warn('Failed to sync stage change to Chatwoot', { contactId: id, tagId, error });
       }

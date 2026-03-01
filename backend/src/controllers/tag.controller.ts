@@ -174,7 +174,6 @@ export class TagController {
       next(error);
     }
   }
-}
 
   /**
    * POST /tags/sync-labels
