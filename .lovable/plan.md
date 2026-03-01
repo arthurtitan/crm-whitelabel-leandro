@@ -1,42 +1,65 @@
 
 
-# Correcao do erro de build no backend
+# Correcao Final: Limpeza do Banco + Edge Function Upsert
 
-## Problema
+## Verificacao via API real (Chatwoot account 1)
 
-O `docker build` falha com 3 erros TypeScript no arquivo `backend/src/services/chatwoot-metrics.service.ts` (linhas 545-547):
+Requisicao direta ao Chatwoot (30 dias) retornou:
+- **23 conversas** no total, **22 contatos unicos**
+- **9 resolucoes IA** (explicitas via n8n), **8 resolucoes humanas**
+- **4 agentes**, **1 inbox** (Prospeccao)
 
-- `totalLeads` nao existe como variavel nesse escopo (e calculado depois, no `return`)
-- `dateFrom` e `dateTo` nao existem (os nomes corretos sao `params.dateFrom` e `params.dateTo`)
+O Edge Function retorna dados corretos para leads (`totalLeads: 22`), mas o **dashboard de producao mostra zeros** porque usa o backend Express (que ainda nao foi redeployado com nossas correcoes anteriores).
 
-Esses erros foram introduzidos no bloco de debug log adicionado na ultima alteracao.
+## Problemas confirmados no banco de dados (Lovable Cloud)
 
-## Correcao
+Consulta direta ao banco revelou:
+- **17 registros** na tabela `resolution_logs`, mas apenas **4 conversas unicas** (duplicatas massivas)
+- Conversa 21 sozinha tem 10+ registros duplicados
+- **Todos os registros `inferred` tem `ai_participated: true`** (corrompidos)
+- **Nao existe unique constraint** na tabela (a migracao 0003 nunca foi aplicada)
 
-### Arquivo: `backend/src/services/chatwoot-metrics.service.ts` (linhas 543-547)
+## Correcoes necessarias
 
-Substituir:
-```typescript
-      novosLeads,
-      leadsInPeriod,
-      totalLeads,
-      dateFrom,
-      dateTo,
+### 1. Criar Edge Function temporaria para limpar o banco
+
+Como o tool `read-query` so aceita SELECT, vou criar uma Edge Function `fix-resolution-logs` que:
+- Seta `ai_participated = false` em todos os registros `resolution_type = 'inferred'`
+- Remove duplicatas mantendo apenas o registro mais recente por `(account_id, conversation_id)`
+
+Apos executar e confirmar a limpeza, essa funcao sera deletada.
+
+### 2. Adicionar unique constraint via SQL migration
+
+Criar uma migracao que adiciona o indice unico `(account_id, conversation_id)` na tabela `resolution_logs` para evitar futuras duplicatas e suportar UPSERT.
+
+### 3. Atualizar Edge Function `fetch-chatwoot-metrics`
+
+Alterar a logica de sync de resolucoes (linha 690-699) de `.insert()` para `.upsert()`:
+
+```text
+// De:
+.insert({ ... })  // falha silenciosamente em duplicatas
+
+// Para:
+.upsert({ ... }, { onConflict: 'account_id,conversation_id' })
 ```
 
-Por:
-```typescript
-      novosLeads,
-      leadsInPeriod,
-      dateFrom: params.dateFrom,
-      dateTo: params.dateTo,
-```
+Isso garante que futuras execucoes corrijam automaticamente registros existentes.
 
-Remove a referencia a `totalLeads` (que so existe no return statement) e corrige `dateFrom`/`dateTo` para `params.dateFrom`/`params.dateTo`.
+### 4. Nenhuma alteracao no backend Express
 
-## Impacto
+As correcoes anteriores (ai_participated dinamico + UPSERT) ja foram aplicadas. O usuario so precisa fazer o deploy.
 
-- 1 arquivo, 3 linhas alteradas
-- Corrige o build do Docker que estava falhando
-- Zero alteracao de logica
+## Resultado esperado
 
+Apos as correcoes:
+- **Banco limpo**: 4 registros unicos (sem duplicatas), `ai_participated = false` em todos os `inferred`
+- **Edge Function**: auto-corrige registros existentes via UPSERT
+- **Dashboard producao**: Apos deploy do backend, mostrara totalLeads=22, transbordo=0%
+
+## Arquivos alterados
+
+1. `supabase/functions/fix-resolution-logs/index.ts` (novo, temporario)
+2. `supabase/functions/fetch-chatwoot-metrics/index.ts` (insert -> upsert)
+3. Migracao SQL: unique constraint em `resolution_logs`
