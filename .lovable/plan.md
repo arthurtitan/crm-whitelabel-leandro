@@ -1,54 +1,73 @@
 
 
-# Fix: Kanban Page Blank (Crash on lead-tags response parsing)
+# Correcao: Exclusao de Tags (FK) + Criacao Correta de Labels no Chatwoot
 
-## Root Cause
+## Problemas Identificados
 
-The backend endpoint `GET /api/lead-tags` returns a wrapped response: `{ data: [...] }`.
+### Bug 1: Exclusao falha com erro de FK
+No arquivo `backend/src/services/tag.service.ts`, o metodo `delete()` executa:
+1. Linha 252: `prisma.tag.delete({ where: { id } })` -- apaga a tag
+2. Linha 255: `prisma.tagHistory.create({ tagId: id, ... })` -- tenta criar historico referenciando a tag deletada
 
-However, `AdminKanbanPage.tsx` line 136 treats the raw response as a flat `LeadTag[]` array:
+Resultado: "Foreign key constraint violated: tag_history_tag_id_fkey"
 
+**Correcao**: Mover o `tagHistory.create` para ANTES do `prisma.tag.delete`, e usar `tagId: null` (ja que `tagId` e nullable no schema e o `tagName` ja preserva o snapshot).
+
+### Bug 2: Label criada com nome errado no Chatwoot
+No `createLabel` (linha 143 de tag.service.ts), o titulo passado e o nome de exibicao (`input.name` = "Novo Lead"), mas o Chatwoot espera o slug como titulo (`novo_lead`). A Edge Function `push-all-labels-to-chatwoot` usa corretamente `tag.slug`, mas o backend Express usa `input.name`.
+
+Isso causa labels com titulos inconsistentes (ex: "Novo Lead" em vez de "novo_lead"), que nao sao reconhecidas pela sincronizacao bilateral.
+
+**Correcao**: Na criacao de labels, usar o `slug` da tag como `title` e o `name` como `description`, igual ao padrao da Edge Function.
+
+### Bug 3: Nao existe endpoint para re-sincronizar labels existentes
+Tags criadas antes do Chatwoot estar configurado ficam sem `chatwoot_label_id`. Nao existe forma de corrigir isso sem acessar o banco diretamente.
+
+**Correcao**: Adicionar endpoint `POST /api/tags/sync-labels` que percorre todas as tags do tipo `stage` e cria/vincula labels faltantes.
+
+## Mudancas por Arquivo
+
+### 1. `backend/src/services/tag.service.ts`
+
+**Delete (linhas 252-264)**: Reordenar para registrar historico antes de deletar:
 ```typescript
-incoming = await apiClient.get<LeadTag[]>('/api/lead-tags', { params: { accountId } });
+// Registrar historico ANTES de deletar (tagId: null para evitar FK)
+await prisma.tagHistory.create({
+  data: {
+    tagId: null,  // tag sera deletada, usar null
+    action: 'tag_deleted',
+    actorType: 'user',
+    actorId: deletedById,
+    source: 'api',
+    tagName: tag.name,
+  },
+});
+
+// Agora sim, deletar a tag
+await prisma.tag.delete({ where: { id } });
 ```
 
-This means `incoming` is actually `{ data: [...] }` (an object), not an array. When React later calls `.find()` or passes it to `mergeById()` (which does `incoming.map()`), it crashes because objects don't have `.map()` or `.find()`.
-
-Since there's no Error Boundary, the crash propagates and unmounts the entire page -- resulting in the blank screen seen in the screenshot.
-
-## Fix (2 changes)
-
-### 1. `src/pages/admin/AdminKanbanPage.tsx` -- Unwrap the response
-
-At line 136, unwrap the `{ data }` envelope the same way other backend services do (e.g., `tagsBackendService.listStageTags`):
-
+**Create (linhas 143-144)**: Corrigir titulo da label para usar slug:
 ```typescript
-// Before (broken):
-incoming = await apiClient.get<LeadTag[]>('/api/lead-tags', { params: { accountId } });
-
-// After (correct):
-const response = await apiClient.get<any>('/api/lead-tags', { params: { accountId } });
-incoming = Array.isArray(response) ? response : (response?.data || []);
+const label = await chatwootService.createLabel(input.accountId, {
+  title: finalSlug,  // slug, nao o nome de exibicao
+  color: input.color || '#6366F1',
+});
 ```
 
-### 2. Add defensive guard in the same file
+**Novo metodo `syncAllLabels`**: Itera todas as tags stage da conta, usa `chatwootService.syncTagToLabel()` (que ja existe) para cada uma sem `chatwootLabelId`.
 
-Around line 147, add a safety check so `mergeById` never receives a non-array even in future edge cases:
+### 2. `backend/src/controllers/tag.controller.ts`
 
-```typescript
-// Ensure incoming is always an array before merging
-if (!Array.isArray(incoming)) {
-  incoming = [];
-}
-```
+Adicionar acao `syncLabels` que chama `tagService.syncAllLabels(accountId)`.
 
-## Why this happens only on VPS (not in development)
+### 3. `backend/src/routes/tag.routes.ts`
 
-In development mode with mocks enabled, the Kanban uses `supabase.from('lead_tags').select('*')` which returns a flat array. In backend mode (VPS), it uses the Express API which wraps responses in `{ data: [...] }`.
+Registrar `POST /sync-labels` (requireAdmin) antes das rotas com `:id`.
 
-## Expected Result
+## Resultado Esperado
 
-- Kanban page loads and displays the 19 synced contacts across their stage columns.
-- No more blank page crash.
-- Compatible with both mock/Supabase and backend modes.
-
+- Exclusao de tags funciona sem erro de FK
+- Novas tags criadas geram labels com slug correto no Chatwoot (ex: `novo_lead`, nao "Novo Lead")
+- Endpoint de re-sync permite vincular tags existentes que ficaram sem label
+- Apos deploy e chamada ao `POST /api/tags/sync-labels`, todas as 6 etapas terao labels corretas no Chatwoot
