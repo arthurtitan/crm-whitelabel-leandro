@@ -133,7 +133,8 @@ export default function AdminKanbanPage() {
       if (useBackend) {
         // Backend: fetch all lead_tags via API (contacts endpoint aggregates them)
         try {
-          incoming = await apiClient.get<LeadTag[]>('/api/lead-tags', { params: { accountId } });
+          const response = await apiClient.get<any>('/api/lead-tags', { params: { accountId } });
+          incoming = Array.isArray(response) ? response : (response?.data || []);
         } catch {
           incoming = [];
         }
@@ -144,6 +145,9 @@ export default function AdminKanbanPage() {
         incoming = leadTagsData || [];
       }
       
+      // Defensive guard
+      if (!Array.isArray(incoming)) incoming = [];
+
       setLeadTags(current => {
         if (current.length === 0 || isFirstTagsLoad.current) {
           return incoming;
