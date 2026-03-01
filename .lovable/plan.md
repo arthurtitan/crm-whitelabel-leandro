@@ -1,64 +1,115 @@
 
 
-# Correcao: Taxa de Transbordo incorreta no fallback de metricas
+# Correcao: Metricas de Leads zeradas e Taxa de Transbordo 100%
 
-## Problema identificado
+## Problemas identificados
 
-No arquivo `backend/src/services/chatwoot-metrics.service.ts`, linhas 599-606, o **fallback** de calculo de resolucoes (usado quando a tabela `resolution_logs` esta vazia ou sem dados no periodo) contabiliza **toda resolucao humana como transbordo**. Isso causa a exibicao de 100% de taxa de transbordo mesmo quando a IA nao participou da conversa.
+Existem **3 bugs** na Edge Function `fetch-chatwoot-metrics` (o caminho ativo em producao, pois `VITE_USE_BACKEND` nao esta habilitado):
 
-### Codigo atual com bug (linhas 599-606):
+### Bug 1: `ai_participated` hardcodado como `true` (linha 682)
+
+No bloco de sincronizacao com `resolution_logs`, toda resolucao humana e inserida no banco com `ai_participated: true`:
 
 ```text
-for (const conv of resolvedConversations) {
-  const result = classifyResolver(conv);
-  if (result.type === 'ai') {
-    fallbackIA++;
-  } else if (result.type === 'human') {
-    fallbackHumano++;
-    fallbackTransbordo++;  // BUG: conta TODA resolucao humana como transbordo
-  }
+const aiResponded = true; // "IA sempre inicia o atendimento"
+```
+
+Isso corrompe os dados persistidos: quando o sistema depois consulta `resolution_logs` e filtra por `ai_participated === true`, **todas** as resolucoes humanas sao contadas como transbordo, resultando em taxa de 100%.
+
+**Correcao:** Verificar os metadados reais da conversa (`ai_responded`, `ai_participated`, `handoff_to_human`) nos `custom_attributes` e `additional_attributes`.
+
+### Bug 2: Fallback sem verificacao de IA (linhas 843-851)
+
+Quando `resolution_logs` esta vazio, o fallback conta toda resolucao humana como transbordo:
+
+```text
+} else if (result.type === 'human') {
+  fallbackHumano++;
+  fallbackTransbordo++;  // BUG
 }
 ```
 
-### Logica correta (ja presente no caminho do banco de dados, linhas 569-571):
+**Correcao:** Mesma logica ja aplicada no backend Express -- verificar `ai_responded`/`ai_participated` antes de incrementar `fallbackTransbordo`.
 
-No caminho que usa `resolution_logs`, o transbordo so e contado quando `ai_participated === true`. O fallback deve replicar essa mesma logica, verificando se a IA participou da conversa antes de contar como transbordo.
+### Bug 3: Leads zerados - dados corrompidos no `resolution_logs` afetam `novosLeads`
 
-## Correcao
+O calculo de `novosLeads` (linha 757) consulta os contatos no banco e filtra por `first_resolved_at`. Porem, como o Bug 1 insere registros com `ai_participated: true` incorretamente, o campo `first_resolved_at` e marcado prematuramente em contatos que nem existem como leads reais no periodo. Alem disso, se nenhum contato do Chatwoot esta sincronizado na tabela `contacts`, a query retorna 0 registros e `novosLeads = 0`.
 
-### Arquivo: `backend/src/services/chatwoot-metrics.service.ts`
+O fallback via `allConversations` (linhas 768-799) so e acionado se `novosLeads === 0`, mas depende de `finalConversations` ter contatos -- que por sua vez depende de conversas retornadas pela API no periodo selecionado.
 
-**Alterar o bloco do fallback (linhas 599-606)** para verificar os atributos `ai_responded` e `ai_participated` da conversa antes de incrementar `fallbackTransbordo`:
+**Diagnostico necessario:** Adicionar logs de debug para expor:
+- Quantas conversas brutas a API retornou
+- Quantas passaram no filtro de data
+- Quantos `sender.id` unicos existem
+- Quantos contatos foram encontrados na tabela `contacts`
 
+## Arquivo alterado
+
+**`supabase/functions/fetch-chatwoot-metrics/index.ts`**
+
+### Alteracao 1: Linha 682 - Corrigir `aiResponded` hardcodado
+
+Substituir:
 ```typescript
-for (const conv of resolvedConversations) {
-  const result = classifyResolver(conv);
-  if (result.type === 'ai') {
-    fallbackIA++;
-  } else if (result.type === 'human') {
-    fallbackHumano++;
-    // Transbordo = humano resolveu, mas IA participou antes
-    const custom = conv.custom_attributes || {};
-    const additional = conv.additional_attributes || {};
-    const aiParticipated =
-      custom.ai_responded === true ||
-      additional.ai_responded === true ||
-      custom.ai_participated === true ||
-      additional.ai_participated === true;
-    if (aiParticipated) {
-      fallbackTransbordo++;
-    }
+const aiResponded = true;
+```
+Por:
+```typescript
+const aiResponded =
+  custom.ai_responded === true ||
+  additional.ai_responded === true ||
+  custom.ai_participated === true ||
+  additional.ai_participated === true ||
+  custom.handoff_to_human === true ||
+  additional.handoff_to_human === true;
+```
+
+### Alteracao 2: Linhas 843-851 - Corrigir fallback de transbordo
+
+Substituir:
+```typescript
+} else if (result.type === 'human') {
+  fallbackHumano++;
+  fallbackTransbordo++;
+}
+```
+Por:
+```typescript
+} else if (result.type === 'human') {
+  fallbackHumano++;
+  const custom = conv.custom_attributes || {};
+  const additional = conv.additional_attributes || {};
+  const aiParticipated =
+    custom.ai_responded === true ||
+    additional.ai_responded === true ||
+    custom.ai_participated === true ||
+    additional.ai_participated === true;
+  if (aiParticipated) {
+    fallbackTransbordo++;
   }
 }
 ```
 
-Esta mudanca alinha o fallback com a logica do banco de dados e com o contrato de metadados do n8n (que marca `ai_responded` e `ai_participated` nas conversas onde a IA atuou).
+### Alteracao 3: Adicionar logs de debug detalhados para leads
+
+Apos o bloco de contagem de leads (proximo a linha 800), adicionar logs que exponham:
+- `contactIdsInPeriod.length` (quantos sender.id unicos existem)
+- `finalConversations.length` (quantas conversas passaram no filtro de data)
+- Resultado da query ao banco de contatos
+- Qual caminho foi usado (DB vs fallback)
+
+Isso permitira diagnosticar se o problema de "0 leads" e causado por:
+1. API do Chatwoot nao retornando conversas no periodo
+2. Contatos nao sincronizados na tabela `contacts`
+3. Filtro de data descartando conversas existentes
 
 ## Impacto
 
-- 1 arquivo backend alterado (`chatwoot-metrics.service.ts`)
-- Zero alteracao no frontend
-- Corrige a taxa de transbordo inflada (100% quando deveria ser 0% em conversas sem participacao de IA)
-- Nao afeta o caminho principal (via `resolution_logs`) que ja funciona corretamente
-- Totalmente compativel com o contrato de dados existente do n8n/Chatwoot
+- 1 arquivo alterado: `supabase/functions/fetch-chatwoot-metrics/index.ts`
+- A Edge Function e redeployada automaticamente
+- Corrige taxa de transbordo inflada (100% -> valor real)
+- Corrige dados corrompidos sendo inseridos no `resolution_logs`
+- Adiciona visibilidade sobre o problema de leads zerados via logs
+- Zero alteracao no frontend ou backend Express
+- Nao quebra nenhuma funcionalidade existente
 
