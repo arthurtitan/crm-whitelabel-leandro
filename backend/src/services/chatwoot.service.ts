@@ -711,11 +711,13 @@ class ChatwootService {
     contacts_created: number;
     contacts_updated: number;
     contacts_deleted: number;
+    lead_tags_applied: number;
   }> {
     const config = await this.getAccountConfig(accountId);
     let created = 0;
     let updated = 0;
     let deleted = 0;
+    let leadTagsApplied = 0;
 
     // Get all stage tags for label matching
     const stageTags = await prisma.tag.findMany({
@@ -723,6 +725,9 @@ class ChatwootService {
     });
     const tagBySlug = new Map(stageTags.map(t => [t.slug, t]));
     const tagByName = new Map(stageTags.map(t => [t.name.toLowerCase(), t]));
+    // Normalized map: convert hyphens to underscores for Chatwoot label compatibility
+    const normalize = (s: string) => s.toLowerCase().replace(/-/g, '_');
+    const tagByNormalizedSlug = new Map(stageTags.map(t => [normalize(t.slug), t]));
 
     // Fetch all conversations (paginated)
     const seenChatwootContactIds = new Set<number>();
@@ -786,7 +791,10 @@ class ChatwootService {
         const labels: string[] = conv.labels || [];
         if (labels.length > 0) {
           for (const label of labels) {
-            const matchedTag = tagBySlug.get(label) || tagByName.get(label.toLowerCase());
+            const normalized = normalize(label);
+            const matchedTag = tagBySlug.get(label) 
+              || tagByNormalizedSlug.get(normalized) 
+              || tagByName.get(label.toLowerCase().replace(/-/g, ' '));
             if (matchedTag) {
               // Check if already has this tag
               const existing = await prisma.leadTag.findUnique({
@@ -808,6 +816,7 @@ class ChatwootService {
                     source: 'chatwoot',
                   },
                 });
+                leadTagsApplied++;
               }
               break; // Only one stage tag
             }
@@ -840,12 +849,13 @@ class ChatwootService {
       }
     }
 
-    logger.info('[SyncContacts] Completed', { accountId, created, updated, deleted });
+    logger.info('[SyncContacts] Completed', { accountId, created, updated, deleted, leadTagsApplied });
 
     return {
       contacts_created: created,
       contacts_updated: updated,
       contacts_deleted: deleted,
+      lead_tags_applied: leadTagsApplied,
     };
   }
 }
