@@ -257,9 +257,10 @@ Apenas agentes com pelo menos 1 conversa atribuída são exibidos na tabela.
 ### Critério de inclusão de conversas no período
 
 Uma conversa é incluída no período se:
-- `created_at` está dentro do intervalo
+- `created_at` está dentro do intervalo **OU**
+- `last_activity_at` está dentro do intervalo
 
-Mudanças administrativas (etiquetas, atribuições de agente) **NÃO** alteram a contagem de leads no período, pois não modificam o `created_at`. Isso evita que ações no Kanban (adicionar/mover etiquetas) inflem artificialmente os KPIs do Dashboard.
+Isso garante que conversas criadas antes do período mas com atividade recente também sejam contabilizadas.
 
 ### Filtros adicionais
 
