@@ -1,46 +1,61 @@
 
+## Correção: Sincronização de Leads do Chatwoot para o Kanban
 
-## Criar Documentacao das Metricas do Dashboard
+### Problema Raiz
 
-Criar o arquivo `docs/METRICAS_DASHBOARD.md` com a documentacao completa de cada metrica exibida no Dashboard de Atendimento.
+Dois bugs no método `syncContacts` em `backend/src/services/chatwoot.service.ts`:
 
-### Conteudo do documento
+**Bug 1 - Matching de labels falha por formatação**
 
-O documento cobrira todas as metricas organizadas em secoes:
+O Chatwoot normaliza títulos de labels usando hífens (`novo-lead`, `em-atendimento`), mas os slugs das tags no banco usam underscores (`novo_lead`, `em_atendimento`). O código compara diretamente sem normalizar, então nenhum label é reconhecido como etapa do Kanban.
 
-**1. Arquitetura de duas camadas**
-- Camada 1 (Tempo Real): conversas com status `open`, ignora filtro de data
-- Camada 2 (Historico): conversas filtradas pelo periodo selecionado
+```text
+Chatwoot label:  "novo-lead"
+Tag slug no DB:  "novo_lead"
+tagBySlug.get("novo-lead") → undefined  (sem match)
+tagByName.get("novo-lead") → undefined  (nome é "Novo Lead" → "novo lead")
+```
 
-**2. KPIs Principais (6 cards)**
-- **Total de Leads**: COUNT(DISTINCT sender.id) das conversas no periodo
-- **Novos Leads**: Contatos cujo primeiro contato historico cai dentro do periodo. Prioriza coluna `first_resolved_at` da tabela `contacts`, com fallback para inferencia via conversa mais antiga do sender
-- **Retornos no Periodo**: MAX(0, Total de Leads - Novos Leads)
-- **Agendamentos**: Eventos tipo `meeting`/`appointment` do calendario local no periodo
-- **Tempo Medio de Resposta**: Media de `(first_reply_created_at - created_at)` para conversas com agente humano
-- **Taxa de Transbordo**: `transbordo / (resolucoes_IA + transbordo) * 100`
+**Bug 2 - Resposta não inclui contagem de lead_tags aplicadas**
 
-**3. Atendimento em Tempo Real**
-- Classificacao do handler atual via `classifyCurrentHandler` com 6 niveis de prioridade (human_active, AgentBot, ai_responded, etc.)
+O método retorna apenas `contacts_created/updated/deleted`, mas nunca reporta `lead_tags_applied`. O frontend verifica esse campo para decidir se houve mudanças - como é sempre `undefined`, mostra "tudo sincronizado" mesmo quando deveria ter aplicado tags.
 
-**4. Resolucao (Historico)**
-- Fonte primaria: tabela `resolution_logs` (PostgreSQL)
-- Fallback: classificacao via `classifyResolver` com 7 niveis de prioridade
-- Detalhamento: IA explicita, bot nativo, inferida, humano explicito, humano inferido, nao classificado
+---
 
-**5. Taxas Calculadas**
-- % Resolucao IA, % Resolucao Humano, Taxa de Transbordo, Eficiencia da IA
+### Correção (1 arquivo)
 
-**6. Pico por Hora, Backlog, Performance de Agentes, Qualidade**
-- Cada metrica com formula, fonte e criterio de inclusao
+**Arquivo:** `backend/src/services/chatwoot.service.ts` - método `syncContacts` (linhas 710-850)
 
-**7. Filtros e Periodo**
-- Normalizacao para inicio/fim do dia
-- Criterio de inclusao: `created_at` OU `last_activity_at` dentro do intervalo
+**Mudança 1:** Normalizar labels para comparação, convertendo hífens para underscores (e vice-versa) antes de fazer o match:
 
-**8. Glossario**
-- Sender, Assignee, AgentBot, Transbordo, Resolution Log, custom_attributes
+```typescript
+// Criar mapa adicional normalizado
+const normalize = (s: string) => s.toLowerCase().replace(/-/g, '_');
+const tagByNormalizedSlug = new Map(stageTags.map(t => [normalize(t.slug), t]));
 
-### Arquivo a criar
-- `docs/METRICAS_DASHBOARD.md`
+// Na comparação (linha 789):
+const normalized = normalize(label);
+const matchedTag = tagBySlug.get(label) 
+  || tagByNormalizedSlug.get(normalized) 
+  || tagByName.get(label.toLowerCase().replace(/-/g, ' '));
+```
 
+**Mudança 2:** Adicionar contador `lead_tags_applied` ao retorno:
+
+```typescript
+let leadTagsApplied = 0;
+// ... dentro do loop, ao criar leadTag:
+leadTagsApplied++;
+
+return {
+  contacts_created: created,
+  contacts_updated: updated,
+  contacts_deleted: deleted,
+  lead_tags_applied: leadTagsApplied,
+};
+```
+
+Isso garante que:
+- Labels `novo-lead` do Chatwoot casam com o slug `novo_lead` da tag
+- O frontend recebe a contagem real de tags aplicadas e mostra o feedback correto
+- O rebuild aplica a correção sem intervenção manual
