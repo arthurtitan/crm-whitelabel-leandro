@@ -257,10 +257,9 @@ Apenas agentes com pelo menos 1 conversa atribuída são exibidos na tabela.
 ### Critério de inclusão de conversas no período
 
 Uma conversa é incluída no período se:
-- `created_at` está dentro do intervalo **OU**
-- `last_activity_at` está dentro do intervalo
+- `created_at` está dentro do intervalo
 
-Isso garante que conversas criadas antes do período mas com atividade recente também sejam contabilizadas.
+Ações administrativas (etiquetas, atribuições de agente, mudanças de status) **NÃO** inflam a contagem de leads no período, pois alteram apenas `last_activity_at` e não `created_at`. Isso evita que ações no Kanban ou no painel do Chatwoot inflem artificialmente os KPIs.
 
 ### Filtros adicionais
 
