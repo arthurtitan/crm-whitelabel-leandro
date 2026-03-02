@@ -611,7 +611,43 @@ serve(async (req) => {
     // Regra: resolved_by === "ai" → SKIP (n8n já logou). Qualquer outro caso → INSERT human.
     // ========================================================================
     let historicoResolucoes = { totalIA: 0, totalHumano: 0, transbordoCount: 0, percentualIA: 0, percentualHumano: 0 };
-    let novosLeads = 0;
+
+    // ========================================================================
+    // NOVOS LEADS: Contatos cuja conversa MAIS ANTIGA em todo o histórico
+    // do Chatwoot foi criada dentro do período. Não depende de tabelas do banco.
+    // ========================================================================
+    const novosLeads = (() => {
+      const contactIdsInPeriod = [...new Set(
+        finalConversations
+          .map((c: any) => c.meta?.sender?.id)
+          .filter(Boolean)
+      )] as number[];
+
+      if (contactIdsInPeriod.length === 0) return 0;
+
+      const earliestByContact = new Map<number, number>();
+      for (const conv of allConversations) {
+        const sid = conv.meta?.sender?.id;
+        if (!sid) continue;
+        const raw = conv.created_at;
+        const ms = typeof raw === 'number' ? raw * 1000 : new Date(raw).getTime();
+        const current = earliestByContact.get(sid);
+        if (!current || ms < current) {
+          earliestByContact.set(sid, ms);
+        }
+      }
+
+      let count = 0;
+      for (const contactId of contactIdsInPeriod) {
+        const earliest = earliestByContact.get(contactId);
+        if (!earliest || earliest >= dateFromParsed.getTime()) {
+          count++;
+        }
+      }
+      return count;
+    })();
+
+    console.log(`[Metrics] Novos Leads: ${novosLeads} (via allConversations histórico completo)`);
     
     try {
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -640,7 +676,6 @@ serve(async (req) => {
 
         // ====================================================================
         // SYNC: Inserir resoluções humanas que ainda não estão no banco
-        // Lógica binária: resolved_by === "ai" → skip, caso contrário → human
         // ====================================================================
         const resolvedConversations = finalConversations.filter(
           (c: any) => c.status === 'resolved'
@@ -648,21 +683,17 @@ serve(async (req) => {
 
         let syncedCount = 0;
         let skippedAI = 0;
-        let duplicatesSkipped = 0;
 
         for (const conv of resolvedConversations) {
           const custom = conv.custom_attributes || {};
           const additional = conv.additional_attributes || {};
           const resolvedByAttr = custom.resolved_by || additional.resolved_by;
 
-          // Se IA resolveu (atributo explícito), SKIP — n8n já logou via log-resolution
           if (resolvedByAttr === 'ai') {
             skippedAI++;
             continue;
           }
 
-          // Qualquer outro caso (null, undefined, "human", etc.) → resolução humana
-          // Usar last_activity_at do Chatwoot como resolved_at (timestamp real da resolução)
           const lastActivityAt = conv.last_activity_at;
           if (!lastActivityAt) continue;
 
@@ -670,7 +701,6 @@ serve(async (req) => {
             ? new Date(lastActivityAt * 1000).toISOString()
             : new Date(lastActivityAt).toISOString();
 
-          // Verificar se IA realmente participou desta conversa
           const aiResponded =
             custom.ai_responded === true ||
             additional.ai_responded === true ||
@@ -694,28 +724,6 @@ serve(async (req) => {
             console.error('[Resolution Sync] Upsert error for conv', conv.id, ':', upsertError.message);
           } else {
             syncedCount++;
-
-            // Safety net: marcar first_resolved_at no contato (se ainda não tiver)
-            const chatwootContactId = conv.meta?.sender?.id;
-            if (chatwootContactId) {
-              try {
-                const { data: contactRec } = await supabase
-                  .from('contacts')
-                  .select('id, first_resolved_at')
-                  .eq('chatwoot_contact_id', chatwootContactId)
-                  .eq('account_id', dbAccountId)
-                  .maybeSingle();
-
-                if (contactRec && !contactRec.first_resolved_at) {
-                  await supabase
-                    .from('contacts')
-                    .update({ first_resolved_at: new Date().toISOString() })
-                    .eq('id', contactRec.id);
-                }
-              } catch (_) {
-                // Não fatal
-              }
-            }
           }
         }
 
@@ -723,84 +731,7 @@ serve(async (req) => {
           totalResolved: resolvedConversations.length,
           skippedAI,
           syncedHuman: syncedCount,
-          duplicatesSkipped,
         });
-
-        // ====================================================================
-        // NOVOS LEADS: Contatos com atividade no período cujo first_resolved_at
-        // é NULL (nunca resolvido) ou caiu dentro do período (1ª resolução no período)
-        // ====================================================================
-        try {
-          const contactIdsInPeriod = [...new Set(
-            finalConversations
-              .map((c: any) => c.meta?.sender?.id)
-              .filter(Boolean)
-          )] as number[];
-
-          if (contactIdsInPeriod.length > 0) {
-            const { data: newLeadContacts } = await supabase
-              .from('contacts')
-              .select('id, first_resolved_at')
-              .eq('account_id', dbAccountId)
-              .in('chatwoot_contact_id', contactIdsInPeriod);
-
-            const dateFromParsedMs = new Date(dateFrom).getTime();
-            const dateToParsedMs = new Date(dateTo).getTime();
-
-            novosLeads = (newLeadContacts || []).filter(c => {
-              if (!c.first_resolved_at) return true; // Nunca resolvido = novo lead
-              const frdMs = new Date(c.first_resolved_at).getTime();
-              return frdMs >= dateFromParsedMs && frdMs <= dateToParsedMs;
-            }).length;
-          }
-        } catch (_) {
-          // Não fatal — fallback para 0
-        }
-
-        // DEBUG: Logs detalhados para diagnóstico de leads
-        console.log('[Metrics][Leads Debug]', {
-          finalConversationsCount: finalConversations.length,
-          contactIdsInPeriodCount: [...new Set(finalConversations.map((c: any) => c.meta?.sender?.id).filter(Boolean))].length,
-          novosLeadsFromDB: novosLeads,
-          dateFrom,
-          dateTo,
-          path: novosLeads > 0 ? 'DB' : 'will try fallback',
-        });
-
-        // FALLBACK: Se DB não tem contacts sincronizados, inferir novosLeads via allConversations
-        if (novosLeads === 0) {
-          const contactIdsInPeriod = [...new Set(
-            finalConversations
-              .map((c: any) => c.meta?.sender?.id)
-              .filter(Boolean)
-          )] as number[];
-
-          if (contactIdsInPeriod.length > 0) {
-            const convsBySender = new Map<number, any[]>();
-            for (const conv of allConversations) {
-              const sid = conv.meta?.sender?.id;
-              if (!sid) continue;
-              if (!convsBySender.has(sid)) convsBySender.set(sid, []);
-              convsBySender.get(sid)!.push(conv);
-            }
-
-            const dateFromParsed = new Date(dateFrom);
-            let fallbackNovos = 0;
-            for (const contactId of contactIdsInPeriod) {
-              const allConvs = convsBySender.get(contactId) || [];
-              if (allConvs.length === 0) { fallbackNovos++; continue; }
-              const earliestMs = Math.min(...allConvs.map((c: any) => {
-                const raw = c.created_at;
-                return typeof raw === 'number' ? raw * 1000 : new Date(raw).getTime();
-              }));
-              if (earliestMs >= dateFromParsed.getTime()) {
-                fallbackNovos++;
-              }
-            }
-            novosLeads = fallbackNovos;
-            console.log('[Metrics] Used allConversations fallback for novosLeads:', fallbackNovos);
-          }
-        }
 
         // ====================================================================
         // CONSULTA: Totais históricos filtrados por período

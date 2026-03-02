@@ -596,31 +596,51 @@ class ChatwootMetricsService {
     // RESOLUTION LOGS: Sync + Query via Prisma
     // ========================================================================
     let historicoResolucoes = { totalIA: 0, totalHumano: 0, transbordoCount: 0, percentualIA: 0, percentualHumano: 0 };
+
+    // ========================================================================
+    // NOVOS LEADS: Contatos cuja conversa MAIS ANTIGA em todo o histórico
+    // do Chatwoot foi criada dentro do período. Não depende de tabelas do banco.
+    // ========================================================================
     let novosLeads = (() => {
-      const createdInPeriod = finalConversations.filter((c: any) => {
-        const raw = c.created_at;
+      const contactIdsInPeriod = [...new Set(
+        finalConversations
+          .map((c: any) => c.meta?.sender?.id)
+          .filter(Boolean)
+      )] as number[];
+
+      if (contactIdsInPeriod.length === 0) return 0;
+
+      const earliestByContact = new Map<number, number>();
+      for (const conv of allConversations) {
+        const sid = conv.meta?.sender?.id;
+        if (!sid) continue;
+        const raw = conv.created_at;
         const ms = typeof raw === 'number' ? raw * 1000 : new Date(raw).getTime();
-        return ms >= dateFromParsed.getTime() && ms <= dateToParsed.getTime();
-      });
-      const uniqueIds = new Set(createdInPeriod.map((c: any) => c.meta?.sender?.id).filter(Boolean));
-      return uniqueIds.size || leadsInPeriod;
+        const current = earliestByContact.get(sid);
+        if (!current || ms < current) {
+          earliestByContact.set(sid, ms);
+        }
+      }
+
+      let count = 0;
+      for (const contactId of contactIdsInPeriod) {
+        const earliest = earliestByContact.get(contactId);
+        if (!earliest || earliest >= dateFromParsed.getTime()) {
+          count++;
+        }
+      }
+      return count;
     })();
 
+    logger.info(`[Metrics] Novos Leads: ${novosLeads} (via allConversations histórico completo)`);
+
     let resolutionLogsAvailable = false;
-    let firstResolvedAtAvailable = false;
 
     try {
       await prisma.$queryRaw`SELECT 1 FROM resolution_logs LIMIT 0`;
       resolutionLogsAvailable = true;
     } catch (_) {
       logger.warn('[Metrics] resolution_logs table not available — using fallback');
-    }
-
-    try {
-      await prisma.$queryRaw`SELECT first_resolved_at FROM contacts LIMIT 0`;
-      firstResolvedAtAvailable = true;
-    } catch (_) {
-      logger.warn('[Metrics] contacts.first_resolved_at column not available — using fallback');
     }
 
     // --- Sync resolution_logs (only if table exists) ---
@@ -663,71 +683,6 @@ class ChatwootMetricsService {
         }
       } catch (syncErr) {
         logger.warn('[Metrics] resolution_logs sync error (non-fatal):', syncErr as any);
-      }
-    }
-
-    // --- Count new leads via first_resolved_at (only if column exists) ---
-    if (firstResolvedAtAvailable) {
-      try {
-        const contactIdsInPeriod = [...new Set(
-          finalConversations
-            .map((c: any) => c.meta?.sender?.id)
-            .filter(Boolean)
-        )] as number[];
-
-        if (contactIdsInPeriod.length > 0) {
-          const contacts = await prisma.contact.findMany({
-            where: {
-              accountId: dbAccountId,
-              chatwootContactId: { in: contactIdsInPeriod },
-            },
-            select: { id: true, firstResolvedAt: true },
-          });
-
-          if (contacts.length > 0) {
-            novosLeads = contacts.filter(c => {
-              if (!c.firstResolvedAt) return true;
-              const frd = new Date(c.firstResolvedAt);
-              return frd >= dateFromParsed && frd <= dateToParsed;
-            }).length;
-          }
-        }
-      } catch (_) {
-        logger.warn('[Metrics] first_resolved_at query failed — using leadsInPeriod fallback');
-        novosLeads = leadsInPeriod;
-      }
-    }
-
-    // FALLBACK: Se DB não tem contacts sincronizados, inferir novosLeads via allConversations
-    if (novosLeads === 0) {
-      const contactIdsInPeriod = [...new Set(
-        finalConversations
-          .map((c: any) => c.meta?.sender?.id)
-          .filter(Boolean)
-      )] as number[];
-
-      if (contactIdsInPeriod.length > 0) {
-        const convsBySender = new Map<number, any[]>();
-        for (const conv of allConversations) {
-          const sid = conv.meta?.sender?.id;
-          if (!sid) continue;
-          if (!convsBySender.has(sid)) convsBySender.set(sid, []);
-          convsBySender.get(sid)!.push(conv);
-        }
-
-        let fallbackNovos = 0;
-        for (const contactId of contactIdsInPeriod) {
-          const allConvs = convsBySender.get(contactId) || [];
-          if (allConvs.length === 0) { fallbackNovos++; continue; }
-          const earliestMs = Math.min(...allConvs.map((c: any) => {
-            const raw = c.created_at;
-            return typeof raw === 'number' ? raw * 1000 : new Date(raw).getTime();
-          }));
-          if (earliestMs >= dateFromParsed.getTime()) {
-            fallbackNovos++;
-          }
-        }
-        novosLeads = fallbackNovos;
       }
     }
 
