@@ -147,20 +147,33 @@ async function fetchChatwootMetricsViaBackend(
   inboxId?: number,
   agentId?: number,
 ): Promise<DashboardMetrics> {
-  const response = await apiClient.post<{ success: boolean; data: DashboardMetrics }>(
-    API_ENDPOINTS.CHATWOOT.METRICS,
-    {
-      dateFrom: dateFrom.toISOString(),
-      dateTo: dateTo.toISOString(),
-      inboxId,
-      agentId,
+  try {
+    const response = await apiClient.post<{ success: boolean; data: DashboardMetrics; error?: string; chatwootFetchHealthy?: boolean }>(
+      API_ENDPOINTS.CHATWOOT.METRICS,
+      {
+        dateFrom: dateFrom.toISOString(),
+        dateTo: dateTo.toISOString(),
+        inboxId,
+        agentId,
+      }
+    );
+    if ((response as any).success && (response as any).data) {
+      return (response as any).data as DashboardMetrics;
     }
-  );
-  if ((response as any).success && (response as any).data) {
-    return (response as any).data as DashboardMetrics;
+    // If the response itself is the metrics data
+    return response as unknown as DashboardMetrics;
+  } catch (err: any) {
+    // Check if this is a Chatwoot integration error (502)
+    const errorMsg = err?.response?.data?.error || err?.message || 'Erro ao carregar métricas';
+    const isChatwootDown = err?.response?.status === 502 || err?.response?.data?.chatwootFetchHealthy === false;
+    const error = new Error(
+      isChatwootDown
+        ? `Integração Chatwoot indisponível: ${errorMsg}`
+        : errorMsg
+    );
+    (error as any).isChatwootIntegrationError = isChatwootDown;
+    throw error;
   }
-  // If the response itself is the metrics data
-  return response as unknown as DashboardMetrics;
 }
 
 async function fetchChatwootMetrics(
@@ -288,15 +301,19 @@ export function useChatwootMetrics({
   
   // Extrair mensagem de erro formatada
   let errorMessage: string | null = null;
+  let isChatwootIntegrationError = false;
   if (query.error) {
     const rawMsg = String(query.error?.message || '');
     const rawMsgLower = rawMsg.toLowerCase();
     const online = typeof navigator !== 'undefined' ? navigator.onLine : true;
+    isChatwootIntegrationError = !!(query.error as any)?.isChatwootIntegrationError;
     
     if (query.error.name === 'AbortError') {
       errorMessage = 'Timeout ao buscar métricas. O Chatwoot pode estar lento.';
     } else if (!online) {
       errorMessage = 'Sem conexão com a internet.';
+    } else if (isChatwootIntegrationError) {
+      errorMessage = rawMsg;
     } else if (rawMsgLower.includes('failed to fetch') || rawMsgLower.includes('networkerror')) {
       errorMessage = 'Falha de conexão ao buscar métricas. Tente novamente em alguns segundos.';
     } else {

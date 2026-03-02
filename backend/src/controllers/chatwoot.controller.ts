@@ -270,7 +270,17 @@ class ChatwootController {
       });
 
       res.json({ success: true, data: metrics });
-    } catch (error) {
+    } catch (error: any) {
+      // Differentiate Chatwoot integration errors from internal errors
+      const isChatwootError = error?.message?.includes('Chatwoot') || error?.message?.includes('Configuração');
+      if (isChatwootError) {
+        logger.error('[Metrics] Chatwoot integration error', { error: error.message });
+        return res.status(502).json({
+          success: false,
+          error: error.message,
+          chatwootFetchHealthy: false,
+        });
+      }
       logger.error('[Metrics] computeMetrics failed', { error });
       next(error);
     }
