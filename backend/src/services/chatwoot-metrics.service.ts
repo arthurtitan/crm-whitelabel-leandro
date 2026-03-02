@@ -410,8 +410,16 @@ class ChatwootMetricsService {
 
     const baseUrl = account.chatwootBaseUrl.replace(/\/$/, '');
     const chatwootAccountId = account.chatwootAccountId;
+    const apiKey = account.chatwootApiKey;
+
+    logger.info('[Chatwoot] Credentials loaded from DB', {
+      baseUrl,
+      chatwootAccountId,
+      apiKeyPreview: apiKey.substring(0, 4) + '****',
+    });
+
     const headers: Record<string, string> = {
-      'api_access_token': account.chatwootApiKey,
+      'api_access_token': apiKey,
       'Accept': 'application/json',
       'User-Agent': 'GLEPS-CRM/2.0',
     };
