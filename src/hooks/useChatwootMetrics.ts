@@ -164,8 +164,8 @@ async function fetchChatwootMetricsViaBackend(
     return response as unknown as DashboardMetrics;
   } catch (err: any) {
     // Check if this is a Chatwoot integration error (502)
-    const errorMsg = err?.response?.data?.error || err?.message || 'Erro ao carregar métricas';
-    const isChatwootDown = err?.response?.status === 502 || err?.response?.data?.chatwootFetchHealthy === false;
+    const errorMsg = err?.message || 'Erro ao carregar métricas';
+    const isChatwootDown = err?.status === 502;
     const error = new Error(
       isChatwootDown
         ? `Integração Chatwoot indisponível: ${errorMsg}`
