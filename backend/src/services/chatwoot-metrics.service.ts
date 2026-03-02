@@ -460,19 +460,14 @@ class ChatwootMetricsService {
     // ========================================================================
     // CAMADA 2: Resolução & Histórico — FILTRADO POR DATA
     // ========================================================================
+    // Filtra conversas históricas APENAS por created_at.
+    // Mudanças administrativas (etiquetas, atribuições) atualizam last_activity_at
+    // mas NÃO devem inflar a contagem de leads no período.
     const historyConversations = allConversations.filter((conv: any) => {
       const rawCreatedAt = conv.created_at;
       const createdAtMs = typeof rawCreatedAt === 'number' ? rawCreatedAt * 1000 : new Date(rawCreatedAt).getTime();
       const createdAt = new Date(createdAtMs);
-
-      const rawActivityAt = conv.last_activity_at;
-      const activityAtMs = rawActivityAt
-        ? (typeof rawActivityAt === 'number' ? rawActivityAt * 1000 : new Date(rawActivityAt).getTime())
-        : createdAtMs;
-      const activityDate = new Date(activityAtMs);
-
-      return (createdAt >= dateFromParsed && createdAt <= dateToParsed) ||
-             (activityDate >= dateFromParsed && activityDate <= dateToParsed);
+      return createdAt >= dateFromParsed && createdAt <= dateToParsed;
     });
 
     const filteredHistoryConversations = params.inboxId

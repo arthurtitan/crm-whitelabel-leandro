@@ -290,23 +290,15 @@ serve(async (req) => {
 
     // ========================================================================
     // CAMADA 2: Resolução & Histórico - FILTRADO POR DATA
-    // Conversas que foram criadas ou tiveram atividade no período solicitado
+    // Filtra conversas APENAS por created_at.
+    // Mudanças administrativas (etiquetas, atribuições) atualizam last_activity_at
+    // mas NÃO devem inflar a contagem de leads no período.
     // ========================================================================
     const historyConversations = allConversations.filter((conv: any) => {
       const rawCreatedAt = conv.created_at;
       const createdAtMs = typeof rawCreatedAt === 'number' ? rawCreatedAt * 1000 : new Date(rawCreatedAt).getTime();
       const createdAt = new Date(createdAtMs);
-
-      const rawActivityAt = conv.last_activity_at;
-      const activityAtMs = rawActivityAt
-        ? (typeof rawActivityAt === 'number' ? rawActivityAt * 1000 : new Date(rawActivityAt).getTime())
-        : createdAtMs;
-      const activityDate = new Date(activityAtMs);
-      
-      const createdInRange = createdAt >= dateFromParsed && createdAt <= dateToParsed;
-      const activeInRange = activityDate >= dateFromParsed && activityDate <= dateToParsed;
-      
-      return createdInRange || activeInRange;
+      return createdAt >= dateFromParsed && createdAt <= dateToParsed;
     });
 
     // Apply filters to historical data
