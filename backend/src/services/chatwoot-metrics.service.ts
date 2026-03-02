@@ -5,6 +5,8 @@
  * Fetches raw data from Chatwoot API (conversations, agents, inboxes)
  * and computes DashboardMetrics locally — never calls /reports/summary.
  * Also queries resolution_logs via Prisma for persistent resolution data.
+ * 
+ * v2: Resilient layered fetch, explicit error propagation, health metadata.
  */
 
 import { prisma } from '../config/database';
@@ -32,6 +34,15 @@ interface ResolverResult {
   method: 'explicit' | 'bot_native' | 'inferred' | 'fallback' | 'none';
 }
 
+interface FetchDebugInfo {
+  fetchMode: 'all' | 'by_status' | 'failed';
+  pagesFetched: number;
+  fallbackUsed: boolean;
+  chatwootFetchHealthy: boolean;
+  totalRawConversations: number;
+  errors: string[];
+}
+
 // ============================================================================
 // CLASSIFICATION HELPERS
 // ============================================================================
@@ -40,7 +51,6 @@ function classifyCurrentHandler(conv: any): 'ai' | 'human' | 'none' {
   const custom = conv.custom_attributes || {};
   const additional = conv.additional_attributes || {};
 
-  // Flags do contrato n8n/Chatwoot
   const aiResponded = custom.ai_responded === true || additional.ai_responded === true;
   const humanActive = custom.human_active === true || additional.human_active === true;
   const humanIntervened = custom.human_intervened === true || additional.human_intervened === true;
@@ -48,22 +58,11 @@ function classifyCurrentHandler(conv: any): 'ai' | 'human' | 'none' {
   const hasHumanAssignee = !!(conv.meta?.assignee?.id || conv.assignee_id);
   const hasBotAssignee = conv.meta?.assignee?.type === 'AgentBot' || !!conv.agent_bot_id;
 
-  // PRIORIDADE 1: Humano assumiu explicitamente (flags de takeover)
   if (humanActive || handoffToHuman || humanIntervened) return 'human';
-
-  // PRIORIDADE 2: Bot nativo do Chatwoot (AgentBot)
   if (hasBotAssignee) return 'ai';
-
-  // PRIORIDADE 3: IA respondeu SEM assignee humano → IA atendendo
   if (aiResponded && !hasHumanAssignee) return 'ai';
-
-  // PRIORIDADE 4: IA respondeu COM assignee humano → transição, humano prevalece
   if (aiResponded && hasHumanAssignee) return 'human';
-
-  // PRIORIDADE 5: Apenas assignee humano sem IA
   if (hasHumanAssignee) return 'human';
-
-  // PRIORIDADE 6: Ninguém → Em Aberto
   return 'none';
 }
 
@@ -107,7 +106,31 @@ function formatTime(ms: number): string {
 }
 
 // ============================================================================
-// CHATWOOT API FETCHERS
+// ROBUST PAYLOAD EXTRACTOR
+// ============================================================================
+
+function extractConversations(data: any): any[] {
+  // Format 1: { data: { payload: [...] } }
+  if (data?.data?.payload && Array.isArray(data.data.payload)) {
+    return data.data.payload;
+  }
+  // Format 2: { payload: [...] }
+  if (data?.payload && Array.isArray(data.payload)) {
+    return data.payload;
+  }
+  // Format 3: direct array
+  if (Array.isArray(data)) {
+    return data;
+  }
+  // Format 4: { data: [...] }
+  if (data?.data && Array.isArray(data.data)) {
+    return data.data;
+  }
+  return [];
+}
+
+// ============================================================================
+// CHATWOOT API FETCHERS (v2 — resilient)
 // ============================================================================
 
 async function fetchWithRetry(url: string, headers: Record<string, string>, retries = 2): Promise<Response> {
@@ -116,7 +139,7 @@ async function fetchWithRetry(url: string, headers: Record<string, string>, retr
   for (let i = 0; i <= retries; i++) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 20000);
+      const timeoutId = setTimeout(() => controller.abort(), 25000);
 
       const response = await fetch(url, {
         headers,
@@ -127,7 +150,7 @@ async function fetchWithRetry(url: string, headers: Record<string, string>, retr
       return response;
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
-      logger.warn(`[Chatwoot] Retry ${i + 1}/${retries + 1} failed: ${lastError.message}`);
+      logger.warn(`[Chatwoot] Retry ${i + 1}/${retries + 1} failed for ${url}: ${lastError.message}`);
       if (i < retries) {
         await new Promise(r => setTimeout(r, 1000 * (i + 1)));
       }
@@ -137,44 +160,188 @@ async function fetchWithRetry(url: string, headers: Record<string, string>, retr
   throw lastError;
 }
 
-async function fetchAllConversations(
+/**
+ * Strategy A: Fetch all conversations with status=all (paginated).
+ * Returns { conversations, healthy, pagesFetched, errors }.
+ */
+async function fetchConversationsAll(
   baseUrl: string,
   accountId: string,
   headers: Record<string, string>,
-  status: string = 'all'
-): Promise<any[]> {
+): Promise<{ conversations: any[]; healthy: boolean; pagesFetched: number; errors: string[] }> {
   const allConversations: any[] = [];
+  const errors: string[] = [];
   let page = 1;
   const perPage = 50;
   let hasMore = true;
+  let hadSuccessfulPage = false;
 
   while (hasMore && page <= 10) {
     try {
-      const url = `${baseUrl}/api/v1/accounts/${accountId}/conversations?status=${status}&page=${page}&per_page=${perPage}`;
-      const response = await fetchWithRetry(url, headers);
+      const url = `${baseUrl}/api/v1/accounts/${accountId}/conversations?status=all&page=${page}&per_page=${perPage}`;
+      const response = await fetchWithRetry(url, headers, 1);
 
       if (!response.ok) {
-        logger.error(`[Chatwoot] Conversations fetch failed: ${response.status}`);
+        const errText = await response.text().catch(() => '');
+        errors.push(`Page ${page}: HTTP ${response.status} - ${errText.substring(0, 200)}`);
         break;
       }
 
-      const data = await response.json() as any;
-      const conversations = data.data?.payload || data.payload || [];
+      const data = await response.json();
+      const conversations = extractConversations(data);
 
       if (conversations.length === 0) {
         hasMore = false;
       } else {
+        hadSuccessfulPage = true;
         allConversations.push(...conversations);
         page++;
         if (conversations.length < perPage) hasMore = false;
       }
     } catch (err) {
-      logger.error(`[Chatwoot] Error fetching page ${page}:`, err);
+      const msg = err instanceof Error ? err.message : String(err);
+      errors.push(`Page ${page}: ${msg}`);
       break;
     }
   }
 
-  return allConversations;
+  return {
+    conversations: allConversations,
+    healthy: hadSuccessfulPage || (allConversations.length === 0 && errors.length === 0),
+    pagesFetched: page - 1,
+    errors,
+  };
+}
+
+/**
+ * Strategy B (fallback): Fetch conversations by individual status.
+ * Merges by conversation_id to deduplicate.
+ */
+async function fetchConversationsByStatus(
+  baseUrl: string,
+  accountId: string,
+  headers: Record<string, string>,
+): Promise<{ conversations: any[]; healthy: boolean; pagesFetched: number; errors: string[] }> {
+  const statuses = ['open', 'pending', 'resolved', 'snoozed'];
+  const allMap = new Map<number, any>();
+  const errors: string[] = [];
+  let totalPages = 0;
+  let hadSuccess = false;
+
+  for (const status of statuses) {
+    let page = 1;
+    let hasMore = true;
+
+    while (hasMore && page <= 5) {
+      try {
+        const url = `${baseUrl}/api/v1/accounts/${accountId}/conversations?status=${status}&page=${page}&per_page=50`;
+        const response = await fetchWithRetry(url, headers, 1);
+
+        if (!response.ok) {
+          errors.push(`${status} page ${page}: HTTP ${response.status}`);
+          break;
+        }
+
+        const data = await response.json();
+        const conversations = extractConversations(data);
+
+        if (conversations.length === 0) {
+          hasMore = false;
+        } else {
+          hadSuccess = true;
+          for (const conv of conversations) {
+            if (conv.id && !allMap.has(conv.id)) {
+              allMap.set(conv.id, conv);
+            }
+          }
+          page++;
+          totalPages++;
+          if (conversations.length < 50) hasMore = false;
+        }
+      } catch (err) {
+        errors.push(`${status} page ${page}: ${err instanceof Error ? err.message : String(err)}`);
+        break;
+      }
+    }
+  }
+
+  return {
+    conversations: Array.from(allMap.values()),
+    healthy: hadSuccess,
+    pagesFetched: totalPages,
+    errors,
+  };
+}
+
+/**
+ * Layered fetch: tries Strategy A first, falls back to Strategy B.
+ * Throws if BOTH strategies fail completely.
+ */
+async function fetchAllConversationsResilient(
+  baseUrl: string,
+  accountId: string,
+  headers: Record<string, string>,
+): Promise<{ conversations: any[]; debug: FetchDebugInfo }> {
+  // Strategy A: status=all
+  const resultA = await fetchConversationsAll(baseUrl, accountId, headers);
+
+  if (resultA.healthy && resultA.conversations.length > 0) {
+    return {
+      conversations: resultA.conversations,
+      debug: {
+        fetchMode: 'all',
+        pagesFetched: resultA.pagesFetched,
+        fallbackUsed: false,
+        chatwootFetchHealthy: true,
+        totalRawConversations: resultA.conversations.length,
+        errors: resultA.errors,
+      },
+    };
+  }
+
+  // Strategy A returned 0 conversations with no errors — could be genuinely empty
+  if (resultA.healthy && resultA.conversations.length === 0 && resultA.errors.length === 0) {
+    return {
+      conversations: [],
+      debug: {
+        fetchMode: 'all',
+        pagesFetched: resultA.pagesFetched,
+        fallbackUsed: false,
+        chatwootFetchHealthy: true,
+        totalRawConversations: 0,
+        errors: [],
+      },
+    };
+  }
+
+  // Strategy A failed or returned 0 with errors — try Strategy B
+  logger.warn('[Chatwoot] Strategy A failed or empty with errors, trying Strategy B (by_status)', {
+    errorsA: resultA.errors,
+    countA: resultA.conversations.length,
+  });
+
+  const resultB = await fetchConversationsByStatus(baseUrl, accountId, headers);
+
+  if (resultB.healthy) {
+    return {
+      conversations: resultB.conversations,
+      debug: {
+        fetchMode: 'by_status',
+        pagesFetched: resultB.pagesFetched,
+        fallbackUsed: true,
+        chatwootFetchHealthy: true,
+        totalRawConversations: resultB.conversations.length,
+        errors: [...resultA.errors, ...resultB.errors],
+      },
+    };
+  }
+
+  // BOTH strategies failed — throw explicit error (no silent degradation)
+  const allErrors = [...resultA.errors, ...resultB.errors];
+  logger.error('[Chatwoot] BOTH fetch strategies failed', { errors: allErrors });
+  throw new Error(
+    `Falha ao buscar conversas do Chatwoot. Erros: ${allErrors.slice(0, 3).join('; ')}`
+  );
 }
 
 async function fetchAgents(
@@ -226,10 +393,6 @@ async function fetchInboxes(
 // ============================================================================
 
 class ChatwootMetricsService {
-  /**
-   * Compute full DashboardMetrics from raw Chatwoot data + resolution_logs.
-   * This is the port of the Edge Function logic.
-   */
   async computeMetrics(dbAccountId: string, params: MetricsParams) {
     // 1. Get Chatwoot config from DB
     const account = await prisma.account.findUnique({
@@ -250,23 +413,32 @@ class ChatwootMetricsService {
     const headers: Record<string, string> = {
       'api_access_token': account.chatwootApiKey,
       'Accept': 'application/json',
-      'User-Agent': 'GLEPS-CRM/1.0',
+      'User-Agent': 'GLEPS-CRM/2.0',
     };
 
+    // Normalize dates to full-day boundaries
     const dateFromParsed = new Date(params.dateFrom);
+    dateFromParsed.setHours(0, 0, 0, 0);
     const dateToParsed = new Date(params.dateTo);
+    dateToParsed.setHours(23, 59, 59, 999);
 
-    // 2. Fetch raw data in parallel
-    const [allConversations, agents, inboxes] = await Promise.all([
-      fetchAllConversations(baseUrl, chatwootAccountId, headers, 'all'),
+    // 2. Fetch raw data in parallel — conversations use resilient layered fetch
+    const [conversationsResult, agents, inboxes] = await Promise.all([
+      fetchAllConversationsResilient(baseUrl, chatwootAccountId, headers),
       fetchAgents(baseUrl, chatwootAccountId, headers),
       fetchInboxes(baseUrl, chatwootAccountId, headers),
     ]);
+
+    const allConversations = conversationsResult.conversations;
+    const fetchDebug = conversationsResult.debug;
 
     logger.info('[Metrics] Raw data fetched', {
       conversations: allConversations.length,
       agents: agents.length,
       inboxes: inboxes.length,
+      fetchMode: fetchDebug.fetchMode,
+      fallbackUsed: fetchDebug.fallbackUsed,
+      healthy: fetchDebug.chatwootFetchHealthy,
     });
 
     // ========================================================================
@@ -318,7 +490,6 @@ class ChatwootMetricsService {
     const now = Date.now();
     const backlog = { ate15min: 0, de15a60min: 0, acima60min: 0 };
 
-    // Agent stats
     const agentStats: Record<number, {
       name: string; email: string; thumbnail?: string;
       conversations: number; resolved: number;
@@ -335,7 +506,6 @@ class ChatwootMetricsService {
       };
     }
 
-    // Hourly distribution
     const hourlyCount: Record<number, number> = {};
     for (let h = 0; h <= 23; h++) hourlyCount[h] = 0;
 
@@ -350,7 +520,6 @@ class ChatwootMetricsService {
       else if (handler === 'human') atendimento.humano++;
       else atendimento.semAssignee++;
 
-      // Backlog (only human-assigned)
       const hasBotAssignee = conv.meta?.assignee?.type === 'AgentBot' || !!conv.agent_bot_id;
       const hasHumanAssignee = !!(conv.meta?.assignee?.id || conv.assignee_id) && !hasBotAssignee;
       if (hasHumanAssignee) {
@@ -384,7 +553,6 @@ class ChatwootMetricsService {
         unattendedCount++;
       }
 
-      // Agent stats
       const hasBotAssignee = conv.meta?.assignee?.type === 'AgentBot' || !!conv.agent_bot_id;
       const hasHumanAssignee = !!(conv.meta?.assignee?.id || conv.assignee_id) && !hasBotAssignee;
       if (hasHumanAssignee) {
@@ -407,7 +575,6 @@ class ChatwootMetricsService {
         }
       }
 
-      // Hourly distribution (only conversations created in range)
       const rawCreatedAt = conv.created_at;
       const createdAtMs = typeof rawCreatedAt === 'number' ? rawCreatedAt * 1000 : new Date(rawCreatedAt).getTime();
       const createdAt = new Date(createdAtMs);
@@ -426,7 +593,6 @@ class ChatwootMetricsService {
     // RESOLUTION LOGS: Sync + Query via Prisma
     // ========================================================================
     let historicoResolucoes = { totalIA: 0, totalHumano: 0, transbordoCount: 0, percentualIA: 0, percentualHumano: 0 };
-    // Fallback: contar contatos únicos criados no período
     let novosLeads = (() => {
       const createdInPeriod = finalConversations.filter((c: any) => {
         const raw = c.created_at;
@@ -437,7 +603,6 @@ class ChatwootMetricsService {
       return uniqueIds.size || leadsInPeriod;
     })();
 
-    // --- Check if resolution_logs table exists (avoid flood of errors) ---
     let resolutionLogsAvailable = false;
     let firstResolvedAtAvailable = false;
 
@@ -475,7 +640,6 @@ class ChatwootMetricsService {
             : new Date(lastActivityAt);
 
           try {
-            // Verificar se IA realmente participou desta conversa
             const aiParticipated =
               custom.ai_responded === true ||
               additional.ai_responded === true ||
@@ -517,16 +681,12 @@ class ChatwootMetricsService {
             select: { id: true, firstResolvedAt: true },
           });
 
-          // Só sobrescreve novosLeads se o banco TEM dados sincronizados
           if (contacts.length > 0) {
             novosLeads = contacts.filter(c => {
               if (!c.firstResolvedAt) return true;
               const frd = new Date(c.firstResolvedAt);
               return frd >= dateFromParsed && frd <= dateToParsed;
             }).length;
-            logger.info('[Metrics][Leads] Used DB contacts path', { contactsFound: contacts.length, novosLeads });
-          } else {
-            logger.info('[Metrics][Leads] DB contacts empty — keeping initial novosLeads', { novosLeads });
           }
         }
       } catch (_) {
@@ -534,17 +694,6 @@ class ChatwootMetricsService {
         novosLeads = leadsInPeriod;
       }
     }
-
-    // DEBUG: Log detalhado para diagnóstico remoto de leads
-    logger.info('[Metrics][Leads] Summary before fallback', {
-      allConversationsCount: allConversations.length,
-      finalConversationsCount: finalConversations.length,
-      uniqueSenderIds: [...new Set(finalConversations.map((c: any) => c.meta?.sender?.id).filter(Boolean))].length,
-      novosLeads,
-      leadsInPeriod,
-      dateFrom: params.dateFrom,
-      dateTo: params.dateTo,
-    });
 
     // FALLBACK: Se DB não tem contacts sincronizados, inferir novosLeads via allConversations
     if (novosLeads === 0) {
@@ -576,7 +725,6 @@ class ChatwootMetricsService {
           }
         }
         novosLeads = fallbackNovos;
-        logger.info('[Metrics] Used allConversations fallback for novosLeads', { fallbackNovos });
       }
     }
 
@@ -629,7 +777,6 @@ class ChatwootMetricsService {
           fallbackIA++;
         } else if (result.type === 'human') {
           fallbackHumano++;
-          // Transbordo = humano resolveu, mas IA participou antes
           const custom = conv.custom_attributes || {};
           const additional = conv.additional_attributes || {};
           const aiParticipated =
@@ -651,13 +798,7 @@ class ChatwootMetricsService {
         percentualIA: fallbackTotal > 0 ? Math.round((fallbackIA / fallbackTotal) * 100) : 0,
         percentualHumano: fallbackTotal > 0 ? Math.round((fallbackHumano / fallbackTotal) * 100) : 0,
       };
-
-      logger.info('[Metrics] Used Chatwoot API FULL fallback for resolution data', {
-        ia: fallbackIA, humano: fallbackHumano, transbordo: fallbackTransbordo
-      });
-    }
-    // FALLBACK PARCIAL IA: DB tem resoluções humanas mas não tem IA — suplementar via Chatwoot
-    else if (historicoResolucoes.totalIA === 0 && historicoResolucoes.totalHumano > 0) {
+    } else if (historicoResolucoes.totalIA === 0 && historicoResolucoes.totalHumano > 0) {
       const resolvedConversations = finalConversations.filter(
         (c: any) => c.status === 'resolved'
       );
@@ -673,8 +814,6 @@ class ChatwootMetricsService {
         const total = historicoResolucoes.totalIA + historicoResolucoes.totalHumano;
         historicoResolucoes.percentualIA = Math.round((fallbackIA / total) * 100);
         historicoResolucoes.percentualHumano = 100 - historicoResolucoes.percentualIA;
-
-        logger.info('[Metrics] Used Chatwoot API PARTIAL fallback for IA resolutions', { fallbackIA });
       }
     }
 
@@ -749,10 +888,9 @@ class ChatwootMetricsService {
       .map(([hora, total]) => ({ hora: Number(hora), totalConversas: total }));
 
     // ========================================================================
-    // RESPONSE (exact same shape as Edge Function)
+    // RESPONSE
     // ========================================================================
     return {
-      // Contagem de contatos ÚNICOS (não conversas)
       totalLeads: (() => {
         const ids = new Set(finalConversations.map((c: any) => c.meta?.sender?.id).filter(Boolean));
         return ids.size || finalConversations.length;
@@ -799,7 +937,7 @@ class ChatwootMetricsService {
       },
 
       _debug: {
-        totalConversationsRaw: allConversations.length,
+        ...fetchDebug,
         totalConversationsFiltered: finalConversations.length,
         atendimento,
         resolucao,

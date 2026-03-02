@@ -79,6 +79,16 @@ async function bootstrap() {
     });
   }
 
+  // Health endpoint with build version
+  app.get('/api/health', (_req, res) => {
+    res.json({
+      status: 'ok',
+      version: process.env.BUILD_VERSION || 'dev',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+    });
+  });
+
   // API routes
   app.use('/api', routes);
 

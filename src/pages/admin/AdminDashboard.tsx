@@ -14,7 +14,7 @@ import {
   UserPlus,
   RefreshCw,
 } from 'lucide-react';
-import { subDays, isWithinInterval, parseISO } from 'date-fns';
+import { subDays, startOfDay, endOfDay, isWithinInterval, parseISO } from 'date-fns';
 import { DateRange } from 'react-day-picker';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -36,8 +36,8 @@ export default function AdminDashboard() {
   const { events } = useCalendar();
   const [period, setPeriod] = useState('7d');
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
-    from: subDays(new Date(), 7),
-    to: new Date(),
+    from: startOfDay(subDays(new Date(), 7)),
+    to: endOfDay(new Date()),
   });
   const [channel, setChannel] = useState('all');
   const [selectedAgent, setSelectedAgent] = useState('all');
@@ -54,8 +54,8 @@ export default function AdminDashboard() {
     isConfigured,
     refetch,
   } = useChatwootMetrics({
-    dateFrom: dateRange?.from || subDays(new Date(), 7),
-    dateTo: dateRange?.to || new Date(),
+    dateFrom: dateRange?.from || startOfDay(subDays(new Date(), 7)),
+    dateTo: dateRange?.to || endOfDay(new Date()),
     inboxId: channel !== 'all' ? getInboxIdFromChannel(channel) : undefined,
     enablePolling: true,
     pollingInterval: 30000,
@@ -75,11 +75,15 @@ export default function AdminDashboard() {
   const handlePeriodChange = (newPeriod: string, range?: DateRange) => {
     setPeriod(newPeriod);
     if (range) {
-      setDateRange(range);
+      // Normalize to full-day boundaries
+      setDateRange({
+        from: range.from ? startOfDay(range.from) : range.from,
+        to: range.to ? endOfDay(range.to) : range.to,
+      });
     } else if (newPeriod === '7d') {
-      setDateRange({ from: subDays(new Date(), 7), to: new Date() });
+      setDateRange({ from: startOfDay(subDays(new Date(), 7)), to: endOfDay(new Date()) });
     } else if (newPeriod === '30d') {
-      setDateRange({ from: subDays(new Date(), 30), to: new Date() });
+      setDateRange({ from: startOfDay(subDays(new Date(), 30)), to: endOfDay(new Date()) });
     }
   };
 
