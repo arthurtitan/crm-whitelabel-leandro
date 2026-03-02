@@ -1,61 +1,46 @@
 
 
-## Correção Definitiva: Credenciais Chatwoot + Tratamento de Erros
+## Criar Documentacao das Metricas do Dashboard
 
-### Problema Raiz
-O backend lê as credenciais do Chatwoot (URL, Account ID, API Key) da tabela `accounts` no PostgreSQL. O token armazenado está incorreto ou ausente, causando **HTTP 401 "Invalid Access Token"** em todas as chamadas de métricas.
+Criar o arquivo `docs/METRICAS_DASHBOARD.md` com a documentacao completa de cada metrica exibida no Dashboard de Atendimento.
 
-A importação de agentes funciona porque usa credenciais digitadas na hora (endpoint `POST /api/chatwoot/agents/fetch`), mas o dashboard de métricas usa as credenciais do banco.
+### Conteudo do documento
 
-### Problema Secundário
-O frontend não exibe a mensagem de erro correta ("Erro desconhecido" em vez de "Token inválido") porque o `apiClient` lança erros no formato `{ message, status }`, mas o hook tenta acessar `err.response.data.error` (formato Axios), que não existe.
+O documento cobrira todas as metricas organizadas em secoes:
 
----
+**1. Arquitetura de duas camadas**
+- Camada 1 (Tempo Real): conversas com status `open`, ignora filtro de data
+- Camada 2 (Historico): conversas filtradas pelo periodo selecionado
 
-### Correções (3 arquivos)
+**2. KPIs Principais (6 cards)**
+- **Total de Leads**: COUNT(DISTINCT sender.id) das conversas no periodo
+- **Novos Leads**: Contatos cujo primeiro contato historico cai dentro do periodo. Prioriza coluna `first_resolved_at` da tabela `contacts`, com fallback para inferencia via conversa mais antiga do sender
+- **Retornos no Periodo**: MAX(0, Total de Leads - Novos Leads)
+- **Agendamentos**: Eventos tipo `meeting`/`appointment` do calendario local no periodo
+- **Tempo Medio de Resposta**: Media de `(first_reply_created_at - created_at)` para conversas com agente humano
+- **Taxa de Transbordo**: `transbordo / (resolucoes_IA + transbordo) * 100`
 
-**1. Migration automática para atualizar credenciais**
-Arquivo: `backend/prisma/migrations/0005_update_chatwoot_credentials/migration.sql`
+**3. Atendimento em Tempo Real**
+- Classificacao do handler atual via `classifyCurrentHandler` com 6 niveis de prioridade (human_active, AgentBot, ai_responded, etc.)
 
-Cria uma migration SQL que atualiza as credenciais do Chatwoot para todas as contas existentes. Esta migration será executada automaticamente pelo `prisma migrate deploy` no startup do container (via `start.sh`), sem intervenção manual.
+**4. Resolucao (Historico)**
+- Fonte primaria: tabela `resolution_logs` (PostgreSQL)
+- Fallback: classificacao via `classifyResolver` com 7 niveis de prioridade
+- Detalhamento: IA explicita, bot nativo, inferida, humano explicito, humano inferido, nao classificado
 
-```sql
-UPDATE accounts
-SET chatwoot_base_url = 'https://atendimento.gleps.com.br',
-    chatwoot_account_id = '1',
-    chatwoot_api_key = 'UjBMtqZSRxPB72qSm8Fi1hh1'
-WHERE chatwoot_base_url IS NOT NULL
-   OR chatwoot_account_id IS NOT NULL;
-```
+**5. Taxas Calculadas**
+- % Resolucao IA, % Resolucao Humano, Taxa de Transbordo, Eficiencia da IA
 
-Para contas sem nenhuma configuração Chatwoot, a migration não altera nada (WHERE garante que só atualiza contas que já tinham integração parcial).
+**6. Pico por Hora, Backlog, Performance de Agentes, Qualidade**
+- Cada metrica com formula, fonte e criterio de inclusao
 
-**2. Corrigir parsing de erro no frontend**
-Arquivo: `src/hooks/useChatwootMetrics.ts`
+**7. Filtros e Periodo**
+- Normalizacao para inicio/fim do dia
+- Criterio de inclusao: `created_at` OU `last_activity_at` dentro do intervalo
 
-O `apiClient` lança objetos `{ message, status }` diretamente (não `{ response: { data, status } }` como Axios). Corrigir a detecção:
+**8. Glossario**
+- Sender, Assignee, AgentBot, Transbordo, Resolution Log, custom_attributes
 
-```typescript
-// ANTES (formato Axios — errado):
-const errorMsg = err?.response?.data?.error || err?.message || '...';
-const isChatwootDown = err?.response?.status === 502;
-
-// DEPOIS (formato apiClient — correto):
-const errorMsg = err?.message || '...';
-const isChatwootDown = err?.status === 502;
-```
-
-**3. Log de diagnóstico no backend**
-Arquivo: `backend/src/services/chatwoot-metrics.service.ts`
-
-Adicionar log com preview do token (primeiros 4 caracteres) antes de chamar a API do Chatwoot, para facilitar diagnóstico futuro sem expor a chave completa.
-
----
-
-### Fluxo Pós-Deploy
-1. `docker compose build` reconstroi os containers
-2. Backend inicia, `prisma migrate deploy` aplica a migration `0005`
-3. As credenciais corretas ficam no banco automaticamente
-4. Dashboard carrega métricas normalmente
-5. Em caso de erro futuro, a mensagem real aparece na tela (ex: "Token inválido") em vez de "Erro desconhecido"
+### Arquivo a criar
+- `docs/METRICAS_DASHBOARD.md`
 
