@@ -1,61 +1,90 @@
 
-## Correção: Sincronização de Leads do Chatwoot para o Kanban
 
-### Problema Raiz
+## Correcao: Dashboard KPIs inflados + Kanban sync incompleto
 
-Dois bugs no método `syncContacts` em `backend/src/services/chatwoot.service.ts`:
+### Problema 1 -- Dashboard: metricas infladas por etiquetas
 
-**Bug 1 - Matching de labels falha por formatação**
+**Linha 474 de `chatwoot-metrics.service.ts`:**
 
-O Chatwoot normaliza títulos de labels usando hífens (`novo-lead`, `em-atendimento`), mas os slugs das tags no banco usam underscores (`novo_lead`, `em_atendimento`). O código compara diretamente sem normalizar, então nenhum label é reconhecido como etapa do Kanban.
-
-```text
-Chatwoot label:  "novo-lead"
-Tag slug no DB:  "novo_lead"
-tagBySlug.get("novo-lead") → undefined  (sem match)
-tagByName.get("novo-lead") → undefined  (nome é "Novo Lead" → "novo lead")
+```typescript
+return (createdAt >= dateFromParsed && createdAt <= dateToParsed) ||
+       (activityDate >= dateFromParsed && activityDate <= dateToParsed);
 ```
 
-**Bug 2 - Resposta não inclui contagem de lead_tags aplicadas**
+Quando uma etiqueta do Kanban e adicionada/movida, o Chatwoot atualiza `last_activity_at` da conversa para "agora". Isso faz conversas antigas (criadas ha meses) aparecerem no "Total de Leads" do periodo atual. Cada etiqueta adicionada = +1 no Total de Leads.
 
-O método retorna apenas `contacts_created/updated/deleted`, mas nunca reporta `lead_tags_applied`. O frontend verifica esse campo para decidir se houve mudanças - como é sempre `undefined`, mostra "tudo sincronizado" mesmo quando deveria ter aplicado tags.
+**Correcao:** Filtrar conversas historicas APENAS por `created_at`. Atividade administrativa (labels, atribuicoes) nao deve alterar contagem de leads.
+
+```typescript
+// Antes (linha 474):
+return (createdAt >= dateFromParsed && createdAt <= dateToParsed) ||
+       (activityDate >= dateFromParsed && activityDate <= dateToParsed);
+
+// Depois:
+return (createdAt >= dateFromParsed && createdAt <= dateToParsed);
+```
+
+**Arquivo:** `backend/src/services/chatwoot-metrics.service.ts` (linhas 463-476)
+
+Remover completamente o calculo de `activityDate` (linhas 468-472) e simplificar o filtro.
 
 ---
 
-### Correção (1 arquivo)
+### Problema 2 -- Kanban: sync nao busca todas as conversas
 
-**Arquivo:** `backend/src/services/chatwoot.service.ts` - método `syncContacts` (linhas 710-850)
-
-**Mudança 1:** Normalizar labels para comparação, convertendo hífens para underscores (e vice-versa) antes de fazer o match:
+**Linha 740 de `chatwoot.service.ts`:**
 
 ```typescript
-// Criar mapa adicional normalizado
-const normalize = (s: string) => s.toLowerCase().replace(/-/g, '_');
-const tagByNormalizedSlug = new Map(stageTags.map(t => [normalize(t.slug), t]));
-
-// Na comparação (linha 789):
-const normalized = normalize(label);
-const matchedTag = tagBySlug.get(label) 
-  || tagByNormalizedSlug.get(normalized) 
-  || tagByName.get(label.toLowerCase().replace(/-/g, ' '));
+const response = await this.makeRequest<any>(config, `/conversations?page=${page}`);
 ```
 
-**Mudança 2:** Adicionar contador `lead_tags_applied` ao retorno:
+Sem `status=all`, a API do Chatwoot retorna apenas conversas `open`. Leads com conversas resolvidas/pendentes que possuem labels sao ignorados.
+
+**Correcao:**
 
 ```typescript
-let leadTagsApplied = 0;
-// ... dentro do loop, ao criar leadTag:
-leadTagsApplied++;
-
-return {
-  contacts_created: created,
-  contacts_updated: updated,
-  contacts_deleted: deleted,
-  lead_tags_applied: leadTagsApplied,
-};
+const response = await this.makeRequest<any>(config, `/conversations?status=all&page=${page}`);
 ```
 
-Isso garante que:
-- Labels `novo-lead` do Chatwoot casam com o slug `novo_lead` da tag
-- O frontend recebe a contagem real de tags aplicadas e mostra o feedback correto
-- O rebuild aplica a correção sem intervenção manual
+**Arquivo:** `backend/src/services/chatwoot.service.ts` (linha 740)
+
+---
+
+### Problema 3 -- Documentacao desatualizada
+
+**Arquivo:** `docs/METRICAS_DASHBOARD.md` (linhas 257-263)
+
+O documento diz que conversas sao incluidas se `created_at` OU `last_activity_at` esta no periodo. Precisa ser atualizado para refletir que apenas `created_at` e usado.
+
+**Antes:**
+```
+Uma conversa e incluida no periodo se:
+- created_at esta dentro do intervalo OU
+- last_activity_at esta dentro do intervalo
+```
+
+**Depois:**
+```
+Uma conversa e incluida no periodo se:
+- created_at esta dentro do intervalo
+
+Mudancas administrativas (etiquetas, atribuicoes de agente) NAO alteram
+a contagem de leads no periodo pois nao modificam o created_at.
+```
+
+---
+
+### Resumo
+
+| Arquivo | Mudanca |
+|---------|---------|
+| `backend/src/services/chatwoot-metrics.service.ts` | Remover `last_activity_at` do filtro de conversas historicas (linhas 463-476) |
+| `backend/src/services/chatwoot.service.ts` | Adicionar `status=all` ao endpoint de sync (linha 740) |
+| `docs/METRICAS_DASHBOARD.md` | Atualizar criterio de inclusao (linhas 257-263) |
+
+### Impacto
+
+- **Dashboard**: Total de Leads refletira apenas conversas CRIADAS no periodo -- etiquetas nao inflam mais
+- **Kanban**: Sync buscara TODAS as conversas (abertas, resolvidas, pendentes, snoozed), importando leads com labels corretamente
+- **Atendimento ao Vivo e Backlog**: Nao afetados (ja usam filtros separados de conversas abertas)
+
