@@ -1,90 +1,70 @@
 
 
-## Correcao: Dashboard KPIs inflados + Kanban sync incompleto
+## Reverter filtro do Dashboard para o comportamento original
 
-### Problema 1 -- Dashboard: metricas infladas por etiquetas
+### O que aconteceu
 
-**Linha 474 de `chatwoot-metrics.service.ts`:**
+A alteração anterior removeu incorretamente o filtro `last_activity_at` do backend Express (`chatwoot-metrics.service.ts`). Isso quebrou os KPIs do dashboard, que devem mostrar conversas criadas OU com atividade no periodo selecionado.
 
-```typescript
-return (createdAt >= dateFromParsed && createdAt <= dateToParsed) ||
-       (activityDate >= dateFromParsed && activityDate <= dateToParsed);
-```
+A Edge Function (`fetch-chatwoot-metrics/index.ts`) nao foi alterada e ja esta correta com ambos os filtros.
 
-Quando uma etiqueta do Kanban e adicionada/movida, o Chatwoot atualiza `last_activity_at` da conversa para "agora". Isso faz conversas antigas (criadas ha meses) aparecerem no "Total de Leads" do periodo atual. Cada etiqueta adicionada = +1 no Total de Leads.
+O unico fix necessario era o `status=all` no sync do Kanban, que ja esta aplicado.
 
-**Correcao:** Filtrar conversas historicas APENAS por `created_at`. Atividade administrativa (labels, atribuicoes) nao deve alterar contagem de leads.
+### Alteracoes
 
-```typescript
-// Antes (linha 474):
-return (createdAt >= dateFromParsed && createdAt <= dateToParsed) ||
-       (activityDate >= dateFromParsed && activityDate <= dateToParsed);
+#### 1. Reverter filtro no backend Express
 
-// Depois:
-return (createdAt >= dateFromParsed && createdAt <= dateToParsed);
-```
+**Arquivo:** `backend/src/services/chatwoot-metrics.service.ts` (linhas 463-472)
 
-**Arquivo:** `backend/src/services/chatwoot-metrics.service.ts` (linhas 463-476)
-
-Remover completamente o calculo de `activityDate` (linhas 468-472) e simplificar o filtro.
-
----
-
-### Problema 2 -- Kanban: sync nao busca todas as conversas
-
-**Linha 740 de `chatwoot.service.ts`:**
+Restaurar o filtro original que usa `created_at OR last_activity_at`:
 
 ```typescript
-const response = await this.makeRequest<any>(config, `/conversations?page=${page}`);
+// Restaurar para o comportamento original:
+const historyConversations = allConversations.filter((conv: any) => {
+  const rawCreatedAt = conv.created_at;
+  const createdAtMs = typeof rawCreatedAt === 'number' ? rawCreatedAt * 1000 : new Date(rawCreatedAt).getTime();
+  const createdAt = new Date(createdAtMs);
+
+  const rawActivityAt = conv.last_activity_at;
+  const activityAtMs = rawActivityAt
+    ? (typeof rawActivityAt === 'number' ? rawActivityAt * 1000 : new Date(rawActivityAt).getTime())
+    : createdAtMs;
+  const activityDate = new Date(activityAtMs);
+
+  return (createdAt >= dateFromParsed && createdAt <= dateToParsed) ||
+         (activityDate >= dateFromParsed && activityDate <= dateToParsed);
+});
 ```
 
-Sem `status=all`, a API do Chatwoot retorna apenas conversas `open`. Leads com conversas resolvidas/pendentes que possuem labels sao ignorados.
+#### 2. Reverter documentacao
 
-**Correcao:**
+**Arquivo:** `docs/METRICAS_DASHBOARD.md` (linhas 257-262)
 
-```typescript
-const response = await this.makeRequest<any>(config, `/conversations?status=all&page=${page}`);
-```
+Restaurar o criterio original:
 
-**Arquivo:** `backend/src/services/chatwoot.service.ts` (linha 740)
-
----
-
-### Problema 3 -- Documentacao desatualizada
-
-**Arquivo:** `docs/METRICAS_DASHBOARD.md` (linhas 257-263)
-
-O documento diz que conversas sao incluidas se `created_at` OU `last_activity_at` esta no periodo. Precisa ser atualizado para refletir que apenas `created_at` e usado.
-
-**Antes:**
 ```
 Uma conversa e incluida no periodo se:
 - created_at esta dentro do intervalo OU
 - last_activity_at esta dentro do intervalo
+
+Isso garante que conversas criadas antes do periodo mas com atividade recente tambem sejam contabilizadas.
 ```
 
-**Depois:**
-```
-Uma conversa e incluida no periodo se:
-- created_at esta dentro do intervalo
+#### 3. Manter fix do Kanban (ja aplicado)
 
-Mudancas administrativas (etiquetas, atribuicoes de agente) NAO alteram
-a contagem de leads no periodo pois nao modificam o created_at.
-```
-
----
+O `status=all` em `chatwoot.service.ts` linha 740 permanece — este era o unico fix necessario.
 
 ### Resumo
 
-| Arquivo | Mudanca |
-|---------|---------|
-| `backend/src/services/chatwoot-metrics.service.ts` | Remover `last_activity_at` do filtro de conversas historicas (linhas 463-476) |
-| `backend/src/services/chatwoot.service.ts` | Adicionar `status=all` ao endpoint de sync (linha 740) |
-| `docs/METRICAS_DASHBOARD.md` | Atualizar criterio de inclusao (linhas 257-263) |
+| Arquivo | Acao |
+|---------|------|
+| `backend/src/services/chatwoot-metrics.service.ts` | REVERTER para `created_at OR last_activity_at` |
+| `docs/METRICAS_DASHBOARD.md` | REVERTER para criterio original |
+| `backend/src/services/chatwoot.service.ts` | MANTER `status=all` (ja aplicado) |
+| `supabase/functions/fetch-chatwoot-metrics/index.ts` | Nenhuma alteracao (ja esta correto) |
 
-### Impacto
+### Resultado
 
-- **Dashboard**: Total de Leads refletira apenas conversas CRIADAS no periodo -- etiquetas nao inflam mais
-- **Kanban**: Sync buscara TODAS as conversas (abertas, resolvidas, pendentes, snoozed), importando leads com labels corretamente
-- **Atendimento ao Vivo e Backlog**: Nao afetados (ja usam filtros separados de conversas abertas)
-
+- Dashboard volta a funcionar como antes, exibindo conversas com atividade no periodo
+- Kanban sync busca todas as conversas independente de status
+- Paridade entre backend Express e Edge Function restaurada
