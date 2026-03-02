@@ -54,13 +54,13 @@ Total de Leads = COUNT(DISTINCT sender.id) das conversas no período
 
 | Campo | Detalhe |
 |-------|---------|
-| **O que mostra** | Contatos que tiveram seu **primeiro contato histórico** dentro do período |
-| **Cálculo (prioridade 1)** | Se a tabela `contacts` tem a coluna `first_resolved_at`: conta contatos cujo `first_resolved_at` cai dentro do período |
-| **Cálculo (prioridade 2 — fallback)** | Agrupa todas as conversas por `sender.id`, encontra a conversa mais antiga de cada contato. Se a mais antiga foi criada dentro do período, é "Novo Lead" |
-| **Fonte** | Tabela `contacts` (PostgreSQL) ou inferência via API do Chatwoot |
+| **O que mostra** | Contatos que **nunca fizeram contato antes** — seu primeiro contato em todo o histórico do Chatwoot foi criado dentro do período |
+| **Cálculo** | Para cada contato com conversa no período, encontra a conversa MAIS ANTIGA dele em **todo o histórico** do Chatwoot (`allConversations`). Se essa conversa mais antiga foi criada dentro do período selecionado, o contato é um Novo Lead |
+| **Fonte** | Exclusivamente o histórico completo de conversas da API do Chatwoot — não depende de tabelas do banco (`contacts`, `first_resolved_at`) |
 
 ```
-Novos Leads = contatos cujo primeiro contato registrado está dentro do período
+Novos Leads = contatos cujo primeiro contato em TODO o histórico
+              do Chatwoot foi criado dentro do período selecionado
 ```
 
 ### 3. Retornos no Período
@@ -291,4 +291,4 @@ Ações administrativas (etiquetas, atribuições de agente, mudanças de status
 | **Resolution Log** | Registro persistente no banco de dados indicando quem resolveu cada conversa |
 | **custom_attributes** | Campos personalizados da conversa no Chatwoot (usados por n8n/automações) |
 | **additional_attributes** | Campos adicionais da conversa no Chatwoot |
-| **first_resolved_at** | Data do primeiro contato do lead, usada para distinguir novos leads de retornos |
+| **first_resolved_at** | *(Legado — não mais usado para cálculo de Novos Leads)* Data do primeiro contato do lead, anteriormente usada para distinguir novos leads de retornos. Substituída pela análise do histórico completo de conversas via API do Chatwoot |
