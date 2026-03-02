@@ -737,7 +737,7 @@ class ChatwootService {
     while (page <= maxPages) {
       let conversations: any[];
       try {
-        const response = await this.makeRequest<any>(config, `/conversations?page=${page}`);
+        const response = await this.makeRequest<any>(config, `/conversations?status=all&page=${page}`);
         conversations = response?.data?.payload || [];
       } catch (error) {
         logger.error('[SyncContacts] Failed to fetch conversations page', { page, error });
