@@ -54,13 +54,13 @@ Total de Leads = COUNT(DISTINCT sender.id) das conversas no período
 
 | Campo | Detalhe |
 |-------|---------|
-| **O que mostra** | Contatos que **nunca fizeram contato antes** — seu primeiro contato em todo o histórico do Chatwoot foi criado dentro do período |
-| **Cálculo** | Para cada contato com conversa no período, encontra a conversa MAIS ANTIGA dele em **todo o histórico** do Chatwoot (`allConversations`). Se essa conversa mais antiga foi criada dentro do período selecionado, o contato é um Novo Lead |
-| **Fonte** | Exclusivamente o histórico completo de conversas da API do Chatwoot — não depende de tabelas do banco (`contacts`, `first_resolved_at`) |
+| **O que mostra** | Contatos que **nunca fizeram contato antes** — foram registrados no Chatwoot dentro do período |
+| **Cálculo** | Para cada contato com conversa no período, busca o `created_at` do contato via **API de Contatos do Chatwoot** (`GET /api/v1/accounts/{id}/contacts/{contact_id}`). Se `contact.created_at` está dentro do período selecionado, o contato é um Novo Lead |
+| **Fonte** | Campo `created_at` da API de Contatos do Chatwoot — imutável, representa a data de registro do contato na plataforma. Não depende de paginação de conversas nem de tabelas do banco (`contacts`, `first_resolved_at`) |
 
 ```
-Novos Leads = contatos cujo primeiro contato em TODO o histórico
-              do Chatwoot foi criado dentro do período selecionado
+Novos Leads = contatos cujo created_at na API de Contatos do Chatwoot
+              está dentro do período selecionado
 ```
 
 ### 3. Retornos no Período
