@@ -174,7 +174,7 @@ async function fetchContactDetails(
     const url = `${baseUrl}/api/v1/accounts/${accountId}/contacts/${contactId}`;
     const response = await fetchWithRetry(url, headers, 1);
     if (!response.ok) return null;
-    return await response.json();
+    return await response.json() as { id: number; created_at: string };
   } catch {
     return null;
   }
