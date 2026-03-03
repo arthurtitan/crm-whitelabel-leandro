@@ -1,35 +1,47 @@
 
-## Correção Definitiva: Novos Leads via histórico completo do Chatwoot
+
+## Correção: Novos Leads via API de Contatos do Chatwoot
 
 ### Problema
 
-A lógica atual de "Novos Leads" tem 3 caminhos que geram resultados inconsistentes:
+O cálculo atual de "Novos Leads" usa `allConversations` para encontrar a conversa mais antiga de cada contato. Porém, `allConversations` é limitado a **500 conversas** (10 páginas x 50). Se a conta tem mais conversas que isso, contatos antigos parecem "novos" porque suas conversas mais antigas não foram carregadas.
 
-1. **Caminho DB (Prisma/Postgres)**: Usa `first_resolved_at` da tabela `contacts` — campo frequentemente NULL, fazendo contatos antigos parecerem "novos"
-2. **Fallback allConversations**: Lógica correta, mas só roda quando `novosLeads === 0`
-3. **Edge Function (Supabase)**: Mesma lógica com os mesmos problemas
+Resultado na imagem: Novos Leads = 22, Total de Leads = 22 (100% novos — incorreto).
 
 ### Solução
 
-Substituir os 3 caminhos por **uma única lógica** que usa `allConversations` (já carregado na memória) para determinar se um contato é novo:
-
-```
-Para cada contato com conversa criada no período:
-  → Encontrar sua conversa MAIS ANTIGA em TODO o histórico
-  → Se essa conversa mais antiga foi criada dentro do período = NOVO LEAD
-  → Caso contrário = RETORNO
-```
+Usar a **API de Contatos do Chatwoot** (`GET /api/v1/accounts/{id}/contacts/{contact_id}`) para obter o `created_at` de cada contato. Este campo é imutável e representa quando o contato foi registrado pela primeira vez — independente de paginação.
 
 ### Alterações
 
 #### 1. Backend Express — `backend/src/services/chatwoot-metrics.service.ts`
 
-**Linhas 599-731**: Substituir toda a lógica multi-caminho por:
+**Adicionar função** `fetchContactDetails` (após `fetchWithRetry`, ~linha 161):
 
 ```typescript
-// NOVOS LEADS: Contatos cuja conversa MAIS ANTIGA em todo o histórico
-// do Chatwoot foi criada dentro do período.
-let novosLeads = (() => {
+async function fetchContactDetails(
+  baseUrl: string,
+  accountId: string,
+  contactId: number,
+  headers: Record<string, string>
+): Promise<{ id: number; created_at: string } | null> {
+  try {
+    const url = `${baseUrl}/api/v1/accounts/${accountId}/contacts/${contactId}`;
+    const response = await fetchWithRetry(url, headers, 1);
+    if (!response.ok) return null;
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+```
+
+**Substituir o bloco novosLeads** (linhas 600-635) — tornar `async` e usar a API de contatos:
+
+```typescript
+// NOVOS LEADS: Contatos cujo created_at na API de Contatos do Chatwoot
+// está dentro do período. O created_at é imutável e não depende de paginação.
+let novosLeads = await (async () => {
   const contactIdsInPeriod = [...new Set(
     finalConversations
       .map((c: any) => c.meta?.sender?.id)
@@ -38,74 +50,48 @@ let novosLeads = (() => {
 
   if (contactIdsInPeriod.length === 0) return 0;
 
-  const earliestByContact = new Map<number, number>();
-  for (const conv of allConversations) {
-    const sid = conv.meta?.sender?.id;
-    if (!sid) continue;
-    const raw = conv.created_at;
-    const ms = typeof raw === 'number' ? raw * 1000 : new Date(raw).getTime();
-    const current = earliestByContact.get(sid);
-    if (!current || ms < current) {
-      earliestByContact.set(sid, ms);
+  let count = 0;
+  const batchSize = 5;
+  for (let i = 0; i < contactIdsInPeriod.length; i += batchSize) {
+    const batch = contactIdsInPeriod.slice(i, i + batchSize);
+    const results = await Promise.all(
+      batch.map(id => fetchContactDetails(baseUrl, chatwootAccountId, id, headers))
+    );
+    for (const contact of results) {
+      if (!contact?.created_at) { count++; continue; }
+      const contactCreatedAt = new Date(contact.created_at);
+      if (contactCreatedAt >= dateFromParsed) { count++; }
     }
   }
 
-  let count = 0;
-  for (const contactId of contactIdsInPeriod) {
-    const earliest = earliestByContact.get(contactId);
-    if (!earliest || earliest >= dateFromParsed.getTime()) {
-      count++;
-    }
-  }
+  logger.info(`[Metrics] Novos Leads: ${count}/${contactIdsInPeriod.length} (via Contacts API)`);
   return count;
 })();
 ```
 
-Isso remove:
-- A query ao Postgres via Prisma para `first_resolved_at` (linhas 669-698)
-- O fallback `allConversations` condicional (linhas 701-731)
-- As variáveis `firstResolvedAtAvailable` e sua verificação
-
-O sync de `resolution_logs` via Prisma (linhas 626-667) continua intacto — ele alimenta as métricas de resolução, não os leads.
-
 #### 2. Edge Function — `supabase/functions/fetch-chatwoot-metrics/index.ts`
 
-**Linhas 614-803**: Mesma substituição. Remover:
-- Query ao Supabase para `contacts.first_resolved_at` (linhas 729-758)
-- Fallback condicional (linhas 770-803)
-- Logs de debug do caminho antigo
-
-Substituir por a mesma lógica `allConversations` acima.
+Mesma lógica: adicionar `fetchContactDetails` e substituir o bloco `novosLeads` (linhas 615-650) pela versão com API de contatos. A função `fetchWithRetry` já existe no arquivo.
 
 #### 3. Documentação — `docs/METRICAS_DASHBOARD.md`
 
-Atualizar a seção "Novos Leads" (KPI 2):
+Atualizar a seção "Novos Leads" para refletir que a métrica usa `contact.created_at` da API de Contatos, não o histórico de conversas.
 
-```text
-Novos Leads = contatos cujo primeiro contato em TODO o histórico
-do Chatwoot foi criado dentro do período selecionado.
+### Performance
 
-Não depende de tabelas do banco (contacts, first_resolved_at).
-Usa exclusivamente o histórico completo de conversas da API do Chatwoot.
-```
+Para 22 contatos: 5 lotes de ~5 requests paralelos = ~5 chamadas sequenciais. Com ~200ms cada, adiciona ~1s ao tempo total. Polling é a cada 30s, então é aceitável.
 
-### Exemplo prático
+### Resultado esperado
 
-Conta com 50 conversas totais, período de 7 dias com 3 conversas criadas:
-- Contato A: conversa criada em 28/02 (mais antiga dele: 15/01) → **Retorno**
-- Contato B: conversa criada em 01/03 (mais antiga dele: 01/03) → **Novo Lead**
-- Contato C: conversa criada em 02/03 (mais antiga dele: 02/03) → **Novo Lead**
-
-Resultado: Total = 3, Novos = 2, Retornos = 1
+Com os dados da imagem (30 dias, 22 leads totais):
+- Total de Leads: 22 (contatos com conversas criadas no período)
+- Novos Leads: apenas os que têm `contact.created_at` dentro dos 30 dias
+- Retornos: 22 - Novos Leads
 
 ### Arquivos alterados
 
 | Arquivo | Ação |
 |---------|------|
-| `backend/src/services/chatwoot-metrics.service.ts` | Simplificar novosLeads — única lógica via allConversations |
-| `supabase/functions/fetch-chatwoot-metrics/index.ts` | Mesma simplificação |
-| `docs/METRICAS_DASHBOARD.md` | Documentar regra definitiva |
-
-### Nota sobre produção
-
-O backend em produção (`360.gleps.com.br`) usa Postgres via Prisma. As alterações no sync de `resolution_logs` (Prisma) permanecem intactas. A mudança remove apenas a dependência do campo `first_resolved_at` para cálculo de novos leads — essa métrica passa a ser 100% baseada na API do Chatwoot.
+| `backend/src/services/chatwoot-metrics.service.ts` | Adicionar `fetchContactDetails`, substituir lógica novosLeads |
+| `supabase/functions/fetch-chatwoot-metrics/index.ts` | Mesma alteração |
+| `docs/METRICAS_DASHBOARD.md` | Documentar regra via Contacts API |
