@@ -169,12 +169,15 @@ async function fetchContactDetails(
   accountId: string,
   contactId: number,
   headers: Record<string, string>
-): Promise<{ id: number; created_at: string } | null> {
+): Promise<{ id: number; created_at: number } | null> {
   try {
     const url = `${baseUrl}/api/v1/accounts/${accountId}/contacts/${contactId}`;
     const response = await fetchWithRetry(url, headers, 1);
     if (!response.ok) return null;
-    return await response.json() as { id: number; created_at: string };
+    const data = await response.json() as any;
+    const contact = data?.payload || data;
+    if (!contact?.created_at) return null;
+    return { id: contact.id, created_at: contact.created_at };
   } catch {
     return null;
   }
@@ -638,9 +641,11 @@ class ChatwootMetricsService {
           batch.map(id => fetchContactDetails(baseUrl, chatwootAccountId, id, headers))
         );
         for (const contact of results) {
-          if (!contact?.created_at) { count++; continue; }
-          const contactCreatedAt = new Date(contact.created_at);
-          if (contactCreatedAt >= dateFromParsed) { count++; }
+          if (!contact?.created_at) continue; // sem dados = NÃO conta como novo
+          const createdAtMs = typeof contact.created_at === 'number'
+            ? contact.created_at * 1000
+            : new Date(contact.created_at).getTime();
+          if (createdAtMs >= dateFromParsed.getTime()) { count++; }
         }
       }
 
