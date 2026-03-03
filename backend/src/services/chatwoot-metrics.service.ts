@@ -161,6 +161,26 @@ async function fetchWithRetry(url: string, headers: Record<string, string>, retr
 }
 
 /**
+ * Fetch contact details from Chatwoot Contacts API.
+ * Returns the contact's created_at (immutable registration date).
+ */
+async function fetchContactDetails(
+  baseUrl: string,
+  accountId: string,
+  contactId: number,
+  headers: Record<string, string>
+): Promise<{ id: number; created_at: string } | null> {
+  try {
+    const url = `${baseUrl}/api/v1/accounts/${accountId}/contacts/${contactId}`;
+    const response = await fetchWithRetry(url, headers, 1);
+    if (!response.ok) return null;
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Strategy A: Fetch all conversations with status=all (paginated).
  * Returns { conversations, healthy, pagesFetched, errors }.
  */
@@ -598,10 +618,10 @@ class ChatwootMetricsService {
     let historicoResolucoes = { totalIA: 0, totalHumano: 0, transbordoCount: 0, percentualIA: 0, percentualHumano: 0 };
 
     // ========================================================================
-    // NOVOS LEADS: Contatos cuja conversa MAIS ANTIGA em todo o histórico
-    // do Chatwoot foi criada dentro do período. Não depende de tabelas do banco.
+    // NOVOS LEADS: Contatos cujo created_at na API de Contatos do Chatwoot
+    // está dentro do período. O created_at é imutável e não depende de paginação.
     // ========================================================================
-    let novosLeads = (() => {
+    let novosLeads = await (async () => {
       const contactIdsInPeriod = [...new Set(
         finalConversations
           .map((c: any) => c.meta?.sender?.id)
@@ -610,29 +630,23 @@ class ChatwootMetricsService {
 
       if (contactIdsInPeriod.length === 0) return 0;
 
-      const earliestByContact = new Map<number, number>();
-      for (const conv of allConversations) {
-        const sid = conv.meta?.sender?.id;
-        if (!sid) continue;
-        const raw = conv.created_at;
-        const ms = typeof raw === 'number' ? raw * 1000 : new Date(raw).getTime();
-        const current = earliestByContact.get(sid);
-        if (!current || ms < current) {
-          earliestByContact.set(sid, ms);
+      let count = 0;
+      const batchSize = 5;
+      for (let i = 0; i < contactIdsInPeriod.length; i += batchSize) {
+        const batch = contactIdsInPeriod.slice(i, i + batchSize);
+        const results = await Promise.all(
+          batch.map(id => fetchContactDetails(baseUrl, chatwootAccountId, id, headers))
+        );
+        for (const contact of results) {
+          if (!contact?.created_at) { count++; continue; }
+          const contactCreatedAt = new Date(contact.created_at);
+          if (contactCreatedAt >= dateFromParsed) { count++; }
         }
       }
 
-      let count = 0;
-      for (const contactId of contactIdsInPeriod) {
-        const earliest = earliestByContact.get(contactId);
-        if (!earliest || earliest >= dateFromParsed.getTime()) {
-          count++;
-        }
-      }
+      logger.info(`[Metrics] Novos Leads: ${count}/${contactIdsInPeriod.length} (via Contacts API created_at)`);
       return count;
     })();
-
-    logger.info(`[Metrics] Novos Leads: ${novosLeads} (via allConversations histórico completo)`);
 
     let resolutionLogsAvailable = false;
 
