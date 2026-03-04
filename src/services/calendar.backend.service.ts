@@ -49,6 +49,8 @@ export const calendarBackendService = {
 
   getGoogleStatus: async (): Promise<{
     connected: boolean;
+    configured: boolean;
+    missing: string[];
     email: string | null;
     needsReauth: boolean;
   }> => {
