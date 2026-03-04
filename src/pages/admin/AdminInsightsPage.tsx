@@ -451,7 +451,7 @@ export default function AdminInsightsPage() {
 
       return {
         id: profile.user_id,
-        name: profile.nome,
+        name: profile.nome || profile.email || 'Sem nome',
         totalSales,
         totalRevenue,
         avgTicket,
@@ -632,6 +632,7 @@ export default function AdminInsightsPage() {
   };
 
   const getInitials = (name: string) => {
+    if (!name) return '??';
     return name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
   };
 
