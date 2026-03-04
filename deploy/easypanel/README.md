@@ -1,12 +1,7 @@
 # GLEPS CRM - Deploy no EasyPanel
 
-## Pré-requisitos
-
-- VPS com EasyPanel instalado
-- Repositório Git acessível pelo EasyPanel
-- Domínio configurado (DNS apontando para o IP da VPS)
-
----
+> **IMPORTANTE**: O compose unificado está na **raiz do projeto** (`docker-compose.yml`).
+> Este diretório contém apenas documentação de referência.
 
 ## Passo a Passo
 
@@ -14,14 +9,13 @@
 
 1. Acesse o painel do EasyPanel
 2. Clique em **"Create App"** → **"Docker Compose"**
-3. No campo de configuração, cole o conteúdo de `deploy/easypanel/docker-compose.yml`
-   - **Ou** configure o repositório Git e aponte para o path `deploy/easypanel/docker-compose.yml`
+3. Aponte para o `docker-compose.yml` **na raiz** do repositório
 
 ### 2. Configurar Variáveis de Ambiente
 
-No painel do EasyPanel, vá em **Environment Variables** e configure todas as variáveis listadas em `.env.example`. As variáveis GOOGLE_* são mapeadas na seção `environment:` do compose e substituídas pelo EasyPanel automaticamente.
+No painel do EasyPanel, vá em **Environment Variables** e configure:
 
-**⚠️ OBRIGATÓRIAS (o app não sobe sem elas):**
+**⚠️ OBRIGATÓRIAS:**
 
 | Variável | Exemplo |
 |----------|---------|
@@ -32,6 +26,16 @@ No painel do EasyPanel, vá em **Environment Variables** e configure todas as va
 | `JWT_SECRET` | (gere com `openssl rand -base64 32`) |
 | `REFRESH_TOKEN_SECRET` | (gere com `openssl rand -base64 32`) |
 
+**Opcionais (Google Calendar):**
+
+| Variável | Descrição |
+|----------|-----------|
+| `GOOGLE_CLIENT_ID` | Client ID do Google Cloud Console |
+| `GOOGLE_CLIENT_SECRET` | Client Secret do Google Cloud Console |
+| `GOOGLE_REDIRECT_URI` | `https://seudominio.com.br/api/calendar/google/callback` |
+
+> As variáveis são injetadas via substituição do Compose (`${VAR:-}`). Se não definidas, o backend trata como "não configurado".
+
 ### 3. Mapear Domínio
 
 1. No EasyPanel, vá no serviço **`frontend`**
@@ -40,31 +44,11 @@ No painel do EasyPanel, vá em **Environment Variables** e configure todas as va
 4. **Porta interna: `80`**
 5. Ative HTTPS/SSL automático
 
-> ⚠️ **IMPORTANTE**: O domínio deve apontar APENAS para o serviço `frontend`, porta `80`. O Nginx dentro do frontend faz o proxy para o backend automaticamente.
+> ⚠️ O domínio aponta APENAS para o `frontend`. O Nginx faz proxy automático de `/api` para o backend.
 
 ### 4. Deploy
 
 Clique em **"Deploy"** ou **"Rebuild"** no EasyPanel.
-
----
-
-## Checklist Pós-Deploy
-
-Após o deploy, verifique na aba **Logs** do EasyPanel:
-
-### Backend (verificar nos logs do serviço `backend`):
-- [ ] `✅ Database connection established` (banco acessível)
-- [ ] `✅ Migrations applied successfully` (schema ok)
-- [ ] `🚀 Server running on port 3000` (API rodando)
-
-### Frontend (verificar nos logs do serviço `frontend`):
-- [ ] Nginx iniciou sem erros
-
-### Teste funcional:
-- [ ] Acessar `https://seudominio.com.br` → Tela de login aparece
-- [ ] Acessar `https://seudominio.com.br/health` → Retorna "OK"
-- [ ] Login com credenciais seed funciona
-- [ ] Após login, dashboard carrega dados
 
 ---
 
@@ -98,6 +82,6 @@ postgres:5432
 
 ---
 
-## Troubleshooting Rápido
+## Troubleshooting
 
-Se algo falhar, consulte o arquivo `diagnostics.md` nesta mesma pasta.
+Consulte `diagnostics.md` nesta pasta.
