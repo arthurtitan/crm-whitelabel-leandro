@@ -303,7 +303,13 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
     } catch (error: any) {
       console.error('Connect error:', error);
       setConnection(defaultConnection);
-      toast.error(error.message || 'Erro ao conectar com Google Calendar');
+      
+      const msg = error?.message || error?.response?.data?.error?.message || '';
+      if (msg.includes('não configurado') || msg.includes('not configured')) {
+        toast.error('Google Calendar ainda não foi configurado pelo administrador do sistema. Entre em contato com o suporte.');
+      } else {
+        toast.error(msg || 'Erro ao conectar com Google Calendar');
+      }
     }
   }, []);
 
