@@ -69,8 +69,7 @@ import {
   ArrowRight,
   ArrowLeft,
 } from 'lucide-react';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { safeFormatDateBR } from '@/utils/dateUtils';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ChatwootAgentImport, EmbeddedUserCreationForm, UserCreationData } from '@/components/chatwoot';
@@ -853,7 +852,7 @@ export default function SuperAdminAccountsPage() {
                         )}
                       </TableCell>
                       <TableCell className="text-muted-foreground text-sm">
-                        {format(new Date(account.created_at), "dd/MM/yyyy", { locale: ptBR })}
+                        {safeFormatDateBR(account.created_at, "dd/MM/yyyy")}
                       </TableCell>
                       <TableCell className="text-right">
                         <DropdownMenu>

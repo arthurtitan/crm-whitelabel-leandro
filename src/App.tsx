@@ -18,6 +18,7 @@ import { TagProvider } from "@/contexts/TagContext";
 import { ProductProvider } from "@/contexts/ProductContext";
 import { CalendarProvider } from "@/contexts/CalendarContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 // Pages
 import LoginPage from "./pages/LoginPage";
@@ -77,24 +78,24 @@ const App = () => (
             <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
             {/* Super Admin Routes */}
-            <Route path="/super-admin" element={<ProtectedRoute requireSuperAdmin><SuperAdminLayout><SuperAdminDashboard /></SuperAdminLayout></ProtectedRoute>} />
-            <Route path="/super-admin/accounts" element={<ProtectedRoute requireSuperAdmin><SuperAdminLayout><SuperAdminAccountsPage /></SuperAdminLayout></ProtectedRoute>} />
-            <Route path="/super-admin/accounts/:accountId" element={<ProtectedRoute requireSuperAdmin><SuperAdminLayout><SuperAdminAccountDetailPage /></SuperAdminLayout></ProtectedRoute>} />
-            <Route path="/super-admin/users" element={<ProtectedRoute requireSuperAdmin><SuperAdminLayout><SuperAdminUsersPage /></SuperAdminLayout></ProtectedRoute>} />
+            <Route path="/super-admin" element={<ProtectedRoute requireSuperAdmin><SuperAdminLayout><ErrorBoundary><SuperAdminDashboard /></ErrorBoundary></SuperAdminLayout></ProtectedRoute>} />
+            <Route path="/super-admin/accounts" element={<ProtectedRoute requireSuperAdmin><SuperAdminLayout><ErrorBoundary><SuperAdminAccountsPage /></ErrorBoundary></SuperAdminLayout></ProtectedRoute>} />
+            <Route path="/super-admin/accounts/:accountId" element={<ProtectedRoute requireSuperAdmin><SuperAdminLayout><ErrorBoundary><SuperAdminAccountDetailPage /></ErrorBoundary></SuperAdminLayout></ProtectedRoute>} />
+            <Route path="/super-admin/users" element={<ProtectedRoute requireSuperAdmin><SuperAdminLayout><ErrorBoundary><SuperAdminUsersPage /></ErrorBoundary></SuperAdminLayout></ProtectedRoute>} />
 
             {/* Admin Routes */}
-            <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}><AdminFinanceWrapper><AdminLayout><AdminDashboard /></AdminLayout></AdminFinanceWrapper></ProtectedRoute>} />
-            <Route path="/admin/kanban" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}><AdminFinanceWrapper><AdminLayout><AdminKanbanPage /></AdminLayout></AdminFinanceWrapper></ProtectedRoute>} />
-            <Route path="/admin/leads" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}><AdminFinanceWrapper><AdminLayout><AdminLeadsPage /></AdminLayout></AdminFinanceWrapper></ProtectedRoute>} />
-            <Route path="/admin/sales" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}><AdminFinanceWrapper><AdminLayout><AdminSalesPage /></AdminLayout></AdminFinanceWrapper></ProtectedRoute>} />
-            <Route path="/admin/events" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}><AdminFinanceWrapper><AdminLayout><AdminEventsPage /></AdminLayout></AdminFinanceWrapper></ProtectedRoute>} />
-            <Route path="/admin/finance" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}><AdminFinanceWrapper><AdminLayout><AdminFinancePage /></AdminLayout></AdminFinanceWrapper></ProtectedRoute>} />
-            <Route path="/admin/products" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}><AdminFinanceWrapper><AdminLayout><AdminProductsPage /></AdminLayout></AdminFinanceWrapper></ProtectedRoute>} />
-            <Route path="/admin/agenda" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}><AdminFinanceWrapper><AdminLayout><AdminAgendaPage /></AdminLayout></AdminFinanceWrapper></ProtectedRoute>} />
-            <Route path="/admin/insights" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}><AdminFinanceWrapper><AdminLayout><AdminInsightsPage /></AdminLayout></AdminFinanceWrapper></ProtectedRoute>} />
+            <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}><AdminFinanceWrapper><AdminLayout><ErrorBoundary><AdminDashboard /></ErrorBoundary></AdminLayout></AdminFinanceWrapper></ProtectedRoute>} />
+            <Route path="/admin/kanban" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}><AdminFinanceWrapper><AdminLayout><ErrorBoundary><AdminKanbanPage /></ErrorBoundary></AdminLayout></AdminFinanceWrapper></ProtectedRoute>} />
+            <Route path="/admin/leads" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}><AdminFinanceWrapper><AdminLayout><ErrorBoundary><AdminLeadsPage /></ErrorBoundary></AdminLayout></AdminFinanceWrapper></ProtectedRoute>} />
+            <Route path="/admin/sales" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}><AdminFinanceWrapper><AdminLayout><ErrorBoundary><AdminSalesPage /></ErrorBoundary></AdminLayout></AdminFinanceWrapper></ProtectedRoute>} />
+            <Route path="/admin/events" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}><AdminFinanceWrapper><AdminLayout><ErrorBoundary><AdminEventsPage /></ErrorBoundary></AdminLayout></AdminFinanceWrapper></ProtectedRoute>} />
+            <Route path="/admin/finance" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}><AdminFinanceWrapper><AdminLayout><ErrorBoundary><AdminFinancePage /></ErrorBoundary></AdminLayout></AdminFinanceWrapper></ProtectedRoute>} />
+            <Route path="/admin/products" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}><AdminFinanceWrapper><AdminLayout><ErrorBoundary><AdminProductsPage /></ErrorBoundary></AdminLayout></AdminFinanceWrapper></ProtectedRoute>} />
+            <Route path="/admin/agenda" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}><AdminFinanceWrapper><AdminLayout><ErrorBoundary><AdminAgendaPage /></ErrorBoundary></AdminLayout></AdminFinanceWrapper></ProtectedRoute>} />
+            <Route path="/admin/insights" element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'agent']}><AdminFinanceWrapper><AdminLayout><ErrorBoundary><AdminInsightsPage /></ErrorBoundary></AdminLayout></AdminFinanceWrapper></ProtectedRoute>} />
             
             {/* Agent Routes */}
-            <Route path="/agent" element={<ProtectedRoute allowedRoles={['agent', 'admin', 'super_admin']}><AdminFinanceWrapper><AdminLayout><AdminKanbanPage /></AdminLayout></AdminFinanceWrapper></ProtectedRoute>} />
+            <Route path="/agent" element={<ProtectedRoute allowedRoles={['agent', 'admin', 'super_admin']}><AdminFinanceWrapper><AdminLayout><ErrorBoundary><AdminKanbanPage /></ErrorBoundary></AdminLayout></AdminFinanceWrapper></ProtectedRoute>} />
 
             {/* Default redirect */}
             <Route path="/" element={<Navigate to="/login" replace />} />

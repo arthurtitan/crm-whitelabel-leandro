@@ -78,8 +78,7 @@ import {
   Lightbulb,
   Loader2,
 } from 'lucide-react';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { safeFormatDateBR } from '@/utils/dateUtils';
 import { toast } from 'sonner';
 
 // Extend Profile to match User type expectations
@@ -773,9 +772,7 @@ export default function SuperAdminUsersPage() {
                   </TableCell>
                   <TableCell className="text-muted-foreground hidden sm:table-cell">
                     {user.last_login_at
-                      ? format(new Date(user.last_login_at), "dd/MM/yyyy 'às' HH:mm", {
-                          locale: ptBR,
-                        })
+                      ? safeFormatDateBR(user.last_login_at, "dd/MM/yyyy 'às' HH:mm")
                       : 'Nunca'}
                   </TableCell>
                   <TableCell className="text-right">
