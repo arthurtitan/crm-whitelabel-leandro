@@ -1,57 +1,66 @@
 
 
-## Fix: Novos Leads - Corrigir parsing da API de Contatos do Chatwoot
+## Correção: Páginas em branco na navegação interna
 
-### Problema
+### Causa raiz
 
-Dois bugs na implementacao atual fazem com que **todos os contatos** sejam contados como "novos", independente do periodo:
+O sistema **não possui Error Boundary** (React). Qualquer erro JavaScript durante a renderização derruba toda a árvore de componentes, resultando em página em branco sem feedback visual.
 
-1. **Resposta aninhada em `payload`**: A API `GET /contacts/{id}` retorna `{ payload: { id, created_at, ... } }`. O codigo atual faz `return response.json()` e tenta ler `contact.created_at` diretamente — que e `undefined` porque o campo esta dentro de `payload`.
+Os logs do backend mostram respostas 200/304 normais — o problema é **exclusivamente no frontend**.
 
-2. **Fallback incorreto**: Quando `created_at` e `undefined`, o codigo executa `count++` (conta como novo). Resultado: 100% dos contatos sao "novos".
+### Ponto de crash confirmado
 
-3. **Timestamp em segundos**: O Chatwoot retorna `created_at` como Unix epoch em **segundos** (ex: `1709510400`). `new Date(1709510400)` interpreta como milissegundos e gera uma data em 1970, fazendo a comparacao falhar.
+**`src/pages/admin/AdminLeadsPage.tsx` linha 383:**
+```typescript
+{format(new Date(contact.created_at), 'dd/MM/yyyy', { locale: ptBR })}
+```
+Se qualquer contato tiver `created_at` como `null`, `undefined` ou formato inválido, `date-fns format()` lança uma exceção que derruba a página inteira.
 
-### Correcao (ambos os arquivos)
+O mesmo padrão inseguro existe em mais 5 arquivos (50 ocorrências no total).
 
-#### 1. Backend — `backend/src/services/chatwoot-metrics.service.ts`
+### Plano de correção
 
-**`fetchContactDetails`** (linhas 167-181): Extrair `data.payload`, retornar `created_at` como numero:
+#### 1. Criar componente ErrorBoundary
+**Novo arquivo:** `src/components/ErrorBoundary.tsx`
+
+Componente React class que captura erros de renderização e exibe UI de recuperação ("Tentar novamente") em vez de tela branca.
+
+#### 2. Criar helper de formatação segura de datas
+**Novo arquivo:** `src/utils/dateUtils.ts`
 
 ```typescript
-async function fetchContactDetails(...): Promise<{ id: number; created_at: number } | null> {
-  // ...
-  const data = await response.json() as any;
-  const contact = data?.payload || data;
-  if (!contact?.created_at) return null;
-  return { id: contact.id, created_at: contact.created_at };
+export function safeFormatDate(date: string | number | Date | null | undefined, fmt: string, options?: { locale?: Locale }): string {
+  if (!date) return '-';
+  try {
+    const d = date instanceof Date ? date : new Date(date);
+    if (isNaN(d.getTime())) return '-';
+    return format(d, fmt, options);
+  } catch { return '-'; }
 }
 ```
 
-**Bloco novosLeads** (linhas 640-644): Converter segundos para ms, e nao contar como novo quando sem dados:
+#### 3. Aplicar ErrorBoundary nas rotas
+**Arquivo:** `src/App.tsx`
 
-```typescript
-for (const contact of results) {
-  if (!contact?.created_at) continue;  // sem dados = NAO e novo
-  const createdAtMs = typeof contact.created_at === 'number'
-    ? contact.created_at * 1000
-    : new Date(contact.created_at).getTime();
-  if (createdAtMs >= dateFromParsed.getTime()) count++;
-}
-```
+Envolver cada rota admin e super-admin com `<ErrorBoundary>` para que crashes fiquem contidos por página.
 
-#### 2. Edge Function — `supabase/functions/fetch-chatwoot-metrics/index.ts`
+#### 4. Substituir `format(new Date(...))` inseguro em todas as páginas
 
-Mesma correcao em `fetchContactDetails` (linhas 144-158) e bloco novosLeads (linhas 655-659).
+| Arquivo | Linhas afetadas |
+|---------|----------------|
+| `src/pages/admin/AdminLeadsPage.tsx` | L383 |
+| `src/pages/admin/AdminKanbanPage.tsx` | L817 |
+| `src/pages/admin/AdminEventsPage.tsx` | L202, L455, L481, L586 |
+| `src/pages/super-admin/SuperAdminAccountsPage.tsx` | L856 |
+| `src/pages/super-admin/SuperAdminAccountDetailPage.tsx` | L432, L440, L448, L456 |
+| `src/pages/super-admin/SuperAdminUsersPage.tsx` | L776 |
 
-### Funciona para qualquer periodo
+Todas as chamadas `format(new Date(x), ...)` serão substituídas por `safeFormatDate(x, ...)`.
 
-A logica compara `contact.created_at` (data de registro do contato na plataforma) contra `dateFromParsed` (inicio do periodo selecionado). Funciona igual para 7 dias, 30 dias ou periodo customizado — o que muda e so o valor de `dateFromParsed`.
+### Resultado esperado
 
-### Arquivos alterados
-
-| Arquivo | Alteracao |
-|---------|-----------|
-| `backend/src/services/chatwoot-metrics.service.ts` | Fix `fetchContactDetails` (extrair payload, tipo numerico) + fix comparacao timestamp |
-| `supabase/functions/fetch-chatwoot-metrics/index.ts` | Mesma correcao |
+- Nenhuma página fica em branco — erros mostram UI de recuperação
+- Datas inválidas exibem "-" em vez de crashar
+- Navegação entre todas as páginas admin funciona normalmente
+- Zero impacto em dados válidos — formatação idêntica quando os dados existem
 
