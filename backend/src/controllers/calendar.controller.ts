@@ -136,7 +136,7 @@ export class CalendarController {
    */
   async connectGoogle(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const authUrl = calendarService.getGoogleAuthUrl(req.user!.accountId!);
+      const authUrl = await calendarService.getGoogleAuthUrl(req.user!.accountId!);
 
       res.json({ data: { authUrl } });
     } catch (error) {

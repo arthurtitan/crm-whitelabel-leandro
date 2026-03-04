@@ -10,6 +10,9 @@ export interface Account {
   chatwoot_base_url: string | null;
   chatwoot_account_id: string | null;
   chatwoot_api_key: string | null;
+  google_client_id?: string | null;
+  google_client_secret?: string | null;
+  google_redirect_uri?: string | null;
   created_at: string;
   updated_at: string;
   users_count?: number;
@@ -30,6 +33,9 @@ export interface UpdateAccountInput {
   chatwoot_base_url?: string;
   chatwoot_account_id?: string;
   chatwoot_api_key?: string;
+  google_client_id?: string;
+  google_client_secret?: string;
+  google_redirect_uri?: string;
 }
 
 export const accountsCloudService = {

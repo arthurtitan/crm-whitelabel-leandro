@@ -56,6 +56,10 @@ interface EditFormData {
   chatwootBaseUrl: string;
   chatwootAccountId: string;
   chatwootApiKey: string;
+  googleEnabled: boolean;
+  googleClientId: string;
+  googleClientSecret: string;
+  googleRedirectUri: string;
 }
 
 type ConnectionStatus = 'idle' | 'loading' | 'success' | 'error';
@@ -83,6 +87,10 @@ export default function SuperAdminAccountDetailPage() {
     chatwootBaseUrl: '',
     chatwootAccountId: '',
     chatwootApiKey: '',
+    googleEnabled: false,
+    googleClientId: '',
+    googleClientSecret: '',
+    googleRedirectUri: '',
   });
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('idle');
 
@@ -151,6 +159,10 @@ export default function SuperAdminAccountDetailPage() {
       chatwootBaseUrl: account.chatwoot_base_url || '',
       chatwootAccountId: account.chatwoot_account_id || '',
       chatwootApiKey: account.chatwoot_api_key || '',
+      googleEnabled: !!(account.google_client_id || account.google_client_secret || account.google_redirect_uri),
+      googleClientId: account.google_client_id || '',
+      googleClientSecret: account.google_client_secret || '',
+      googleRedirectUri: account.google_redirect_uri || '',
     });
     setConnectionStatus('idle');
     setIsControlOpen(true);
@@ -215,6 +227,9 @@ export default function SuperAdminAccountDetailPage() {
         chatwoot_base_url: editFormData.chatwootEnabled ? editFormData.chatwootBaseUrl : undefined,
         chatwoot_account_id: editFormData.chatwootEnabled ? editFormData.chatwootAccountId : undefined,
         chatwoot_api_key: editFormData.chatwootEnabled ? editFormData.chatwootApiKey : undefined,
+        google_client_id: editFormData.googleEnabled ? editFormData.googleClientId : undefined,
+        google_client_secret: editFormData.googleEnabled ? editFormData.googleClientSecret : undefined,
+        google_redirect_uri: editFormData.googleEnabled ? editFormData.googleRedirectUri : undefined,
       });
       setAccount({
         ...account,
@@ -223,6 +238,9 @@ export default function SuperAdminAccountDetailPage() {
         chatwoot_base_url: editFormData.chatwootEnabled ? editFormData.chatwootBaseUrl : undefined,
         chatwoot_account_id: editFormData.chatwootEnabled ? editFormData.chatwootAccountId : undefined,
         chatwoot_api_key: editFormData.chatwootEnabled ? editFormData.chatwootApiKey : undefined,
+        google_client_id: editFormData.googleEnabled ? editFormData.googleClientId : undefined,
+        google_client_secret: editFormData.googleEnabled ? editFormData.googleClientSecret : undefined,
+        google_redirect_uri: editFormData.googleEnabled ? editFormData.googleRedirectUri : undefined,
         updated_at: new Date().toISOString(),
       });
       setIsPasswordConfirmOpen(false);
@@ -624,6 +642,57 @@ export default function SuperAdminAccountDetailPage() {
                     )}
                     {connectionStatus === 'loading' ? 'Testando...' : 'Testar Conexão e Buscar Agentes'}
                   </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Google Calendar Integration */}
+            <div className="space-y-4 pt-4 border-t border-border/50">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="edit-google">Google Calendar</Label>
+                  <p className="text-xs text-muted-foreground">Habilitar OAuth do Google Calendar para esta conta</p>
+                </div>
+                <Switch
+                  id="edit-google"
+                  checked={editFormData.googleEnabled}
+                  onCheckedChange={(checked) => setEditFormData({ ...editFormData, googleEnabled: checked })}
+                />
+              </div>
+              
+              {editFormData.googleEnabled && (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-google-client-id">Client ID</Label>
+                    <Input
+                      id="edit-google-client-id"
+                      value={editFormData.googleClientId}
+                      onChange={(e) => setEditFormData({ ...editFormData, googleClientId: e.target.value })}
+                      placeholder="xxxx.apps.googleusercontent.com"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-google-client-secret">Client Secret</Label>
+                    <Input
+                      id="edit-google-client-secret"
+                      type="password"
+                      value={editFormData.googleClientSecret}
+                      onChange={(e) => setEditFormData({ ...editFormData, googleClientSecret: e.target.value })}
+                      placeholder="GOCSPX-..."
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-google-redirect-uri">Redirect URI</Label>
+                    <Input
+                      id="edit-google-redirect-uri"
+                      value={editFormData.googleRedirectUri}
+                      onChange={(e) => setEditFormData({ ...editFormData, googleRedirectUri: e.target.value })}
+                      placeholder="https://seudominio.com/api/calendar/google/callback"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Deve corresponder ao URI autorizado no Google Cloud Console
+                    </p>
+                  </div>
                 </div>
               )}
             </div>

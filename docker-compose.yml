@@ -19,8 +19,10 @@
 #   JWT_SECRET, REFRESH_TOKEN_SECRET
 #
 # Variáveis opcionais:
-#   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI
 #   CORS_ORIGINS, RUN_SEED, BACKEND_UPSTREAM, LOG_LEVEL
+#
+# Google Calendar e Chatwoot: credenciais armazenadas no banco
+# de dados (por conta), configuráveis via UI do Super Admin.
 # ============================================
 
 services:
@@ -62,9 +64,6 @@ services:
       RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-900000}
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-100}
       CHATWOOT_WEBHOOK_SECRET: ${CHATWOOT_WEBHOOK_SECRET:-}
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       RUN_SEED: ${RUN_SEED:-true}
     expose:

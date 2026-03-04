@@ -32,11 +32,6 @@ const envSchema = z.object({
   // Chatwoot (optional)
   CHATWOOT_WEBHOOK_SECRET: z.string().optional(),
 
-  // Google Calendar (optional)
-  GOOGLE_CLIENT_ID: z.string().optional(),
-  GOOGLE_CLIENT_SECRET: z.string().optional(),
-  GOOGLE_REDIRECT_URI: z.string().optional(),
-
   // Logging
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 });

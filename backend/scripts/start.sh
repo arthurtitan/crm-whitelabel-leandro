@@ -2,10 +2,6 @@
 # ============================================
 # GLEPS CRM - Backend Startup Script
 # ============================================
-# Este script garante que o backend só inicia
-# APÓS o banco estar pronto e as migrations
-# terem sido aplicadas.
-# ============================================
 
 echo "============================================"
 echo "GLEPS CRM - Backend Starting"
@@ -41,11 +37,9 @@ MIGRATE_EXIT=$?
 if [ $MIGRATE_EXIT -ne 0 ]; then
     echo "⚠️  Primeira tentativa de migration falhou (exit=$MIGRATE_EXIT)"
 
-    # Check if it's a P3009 (failed migration blocking)
     if echo "$MIGRATE_OUTPUT" | grep -q "P3009"; then
         echo "🔧 Detectado P3009 — tentando resolver migration falhada..."
 
-        # Try to resolve each known migration that could be stuck
         for MIGRATION_NAME in "0003_add_resolution_unique" "0002_add_resolution_logs"; do
             echo "   Resolvendo $MIGRATION_NAME como rolled-back..."
             npx prisma migrate resolve --rolled-back "$MIGRATION_NAME" 2>/dev/null || true
@@ -84,52 +78,11 @@ else
     echo "⏭️  Seed desabilitado (RUN_SEED=false)"
 fi
 
-# ---- 4. Diagnóstico e validação Google Calendar ----
+# ---- 4. Diagnóstico ----
 echo ""
-echo "🔍 Diagnóstico Google Calendar:"
-echo "   [DEBUG] Variáveis GOOGLE_* no container:"
-env | grep GOOGLE || echo "   (nenhuma variável GOOGLE_* encontrada)"
-echo ""
-
-GOOGLE_VARS_SET=0
-GOOGLE_VARS_MISSING=""
-
-if [ -n "$GOOGLE_CLIENT_ID" ]; then
-    echo "   ✅ GOOGLE_CLIENT_ID presente (${#GOOGLE_CLIENT_ID} chars)"
-    GOOGLE_VARS_SET=$((GOOGLE_VARS_SET + 1))
-else
-    echo "   ❌ GOOGLE_CLIENT_ID vazia ou ausente"
-    GOOGLE_VARS_MISSING="$GOOGLE_VARS_MISSING GOOGLE_CLIENT_ID"
-fi
-if [ -n "$GOOGLE_CLIENT_SECRET" ]; then
-    echo "   ✅ GOOGLE_CLIENT_SECRET presente (${#GOOGLE_CLIENT_SECRET} chars)"
-    GOOGLE_VARS_SET=$((GOOGLE_VARS_SET + 1))
-else
-    echo "   ❌ GOOGLE_CLIENT_SECRET vazia ou ausente"
-    GOOGLE_VARS_MISSING="$GOOGLE_VARS_MISSING GOOGLE_CLIENT_SECRET"
-fi
-if [ -n "$GOOGLE_REDIRECT_URI" ]; then
-    echo "   ✅ GOOGLE_REDIRECT_URI = $GOOGLE_REDIRECT_URI"
-    GOOGLE_VARS_SET=$((GOOGLE_VARS_SET + 1))
-else
-    echo "   ❌ GOOGLE_REDIRECT_URI vazia ou ausente"
-    GOOGLE_VARS_MISSING="$GOOGLE_VARS_MISSING GOOGLE_REDIRECT_URI"
-fi
-
-# Validação de consistência: parcial = erro fatal
-if [ "$GOOGLE_VARS_SET" -gt 0 ] && [ "$GOOGLE_VARS_SET" -lt 3 ]; then
-    echo ""
-    echo "⚠️  AVISO: Configuração parcial do Google Calendar!"
-    echo "   Variáveis presentes: $GOOGLE_VARS_SET/3"
-    echo "   Faltando:$GOOGLE_VARS_MISSING"
-    echo "   Todas as 3 variáveis devem estar configuradas ou nenhuma."
-    echo "   Google Calendar ficará DESABILITADO até a correção."
-    echo "   📅 Google Calendar: desabilitado (configuração incompleta)"
-elif [ "$GOOGLE_VARS_SET" -eq 3 ]; then
-    echo "   📅 Google Calendar: totalmente configurado ✅"
-else
-    echo "   📅 Google Calendar: não configurado (opcional)"
-fi
+echo "🔍 Diagnóstico:"
+echo "   📅 Google Calendar: credenciais armazenadas no banco de dados (por conta)"
+echo "   💬 Chatwoot: credenciais armazenadas no banco de dados (por conta)"
 
 # ---- 5. Iniciar servidor ----
 echo ""

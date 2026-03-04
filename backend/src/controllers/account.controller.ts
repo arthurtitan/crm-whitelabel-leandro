@@ -13,6 +13,9 @@ const createAccountSchema = z.object({
   chatwootBaseUrl: z.string().url().optional(),
   chatwootAccountId: z.string().optional(),
   chatwootApiKey: z.string().optional(),
+  googleClientId: z.string().optional(),
+  googleClientSecret: z.string().optional(),
+  googleRedirectUri: z.string().url().optional(),
 });
 
 const updateAccountSchema = createAccountSchema.partial().extend({
