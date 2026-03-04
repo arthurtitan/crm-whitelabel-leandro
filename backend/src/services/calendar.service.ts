@@ -326,7 +326,7 @@ class CalendarService {
 
     let accessToken = token.accessToken;
     if (token.expiresAt < new Date()) {
-      accessToken = await this.refreshGoogleToken(accountId, token.refreshToken);
+      accessToken = await this.refreshGoogleToken(accountId, userId, token.refreshToken);
     }
 
     const now = new Date();
@@ -391,7 +391,7 @@ class CalendarService {
     return event?.id || null;
   }
 
-  private async refreshGoogleToken(accountId: string, refreshToken: string): Promise<string> {
+  private async refreshGoogleToken(accountId: string, userId: string, refreshToken: string): Promise<string> {
     const creds = await this.getGoogleCredentials(accountId);
     if (!creds) {
       throw new AppError('Google Calendar não configurado para esta conta.', 422, 'GOOGLE_NOT_CONFIGURED');
@@ -413,7 +413,7 @@ class CalendarService {
     const tokens: any = await response.json();
 
     await prisma.googleCalendarToken.update({
-      where: { accountId },
+      where: { userId },
       data: {
         accessToken: tokens.access_token,
         expiresAt: new Date(Date.now() + tokens.expires_in * 1000),
