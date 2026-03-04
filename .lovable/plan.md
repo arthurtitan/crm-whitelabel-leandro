@@ -1,53 +1,37 @@
 
 
-## Correção definitiva: Google Calendar — erro 500 mascarado em produção
+## Diagnóstico: variáveis sendo sobrescritas por string vazia
 
-### Causa raiz identificada
+### Causa raiz
 
-O problema não está nas variáveis de ambiente (sua configuração está correta). O problema é que o backend **mascara** o erro real em produção:
+O problema é na mecânica do docker-compose + EasyPanel:
 
-1. `calendar.service.ts` lança um `Error('Google Calendar não configurado')` genérico
-2. O `errorHandler` em produção **esconde** a mensagem de qualquer `Error` que não seja `AppError`, retornando apenas `"Erro interno do servidor"` (linha 127)
-3. O frontend nunca recebe a mensagem real, então o toast de mensagem amigável que adicionamos anteriormente nunca dispara
-
-### Correções (3 arquivos)
-
-**1. `backend/src/services/calendar.service.ts`** — Usar `AppError` em vez de `Error` genérico
-
-Nas linhas 193-194 e 218-219, trocar:
-```typescript
-// ANTES
-throw new Error('Google Calendar não configurado');
-
-// DEPOIS
-throw new AppError('Google Calendar não configurado no servidor. Configure GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET e GOOGLE_REDIRECT_URI.', 422, 'GOOGLE_NOT_CONFIGURED');
+```text
+Fluxo atual:
+1. EasyPanel injeta GOOGLE_CLIENT_ID=231653... no container backend
+2. docker-compose.yml tem: GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+3. A substituição ${GOOGLE_CLIENT_ID:-} acontece no NÍVEL DO COMPOSE (não do container)
+4. Como no nível do compose a variável não existe, resolve para "" (string vazia)
+5. O environment: explícito SOBRESCREVE o valor injetado pelo EasyPanel
+6. Resultado: GOOGLE_CLIENT_ID="" dentro do container
 ```
 
-Isso garante que o middleware retorna status 422 com a mensagem real, em vez de 500 genérico.
+O `:-` (default vazio) no docker-compose está **anulando** o valor que o EasyPanel injeta diretamente no container.
 
-**2. `backend/src/server.ts`** — Log de diagnóstico no startup
+### Correção
 
-Adicionar após o bootstrap um log que confirma se o Google Calendar está configurado:
-```typescript
-logger.info(`📅 Google Calendar: ${env.GOOGLE_CLIENT_ID ? 'configurado' : 'NÃO configurado'}`);
-```
+Remover as 3 variáveis GOOGLE_* da seção `environment:` do docker-compose do EasyPanel. Assim o EasyPanel injeta os valores diretamente no container sem que o compose os sobrescreva com string vazia.
 
-Assim, após cada rebuild, o log mostra imediatamente se as variáveis chegaram ao container.
+Também adicionar diagnóstico no `start.sh` para confirmar visualmente no log se as variáveis chegaram.
 
-**3. `src/contexts/CalendarContext.tsx`** — Capturar também o código `GOOGLE_NOT_CONFIGURED`
+### Arquivos alterados
 
-Ajustar a detecção de erro para também verificar o campo `code` da resposta, não apenas a string da mensagem:
-```typescript
-const code = error?.response?.data?.error?.code || '';
-const msg = error?.response?.data?.error?.message || error?.message || '';
-if (code === 'GOOGLE_NOT_CONFIGURED' || msg.includes('não configurado')) {
-  toast.error('Google Calendar ainda não foi configurado...');
-}
-```
+| Arquivo | Alteração |
+|---------|-----------|
+| `deploy/easypanel/docker-compose.yml` | Remover GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI do `environment:` do backend |
+| `backend/scripts/start.sh` | Adicionar log de diagnóstico das variáveis GOOGLE antes de iniciar o servidor |
 
-### Resultado após rebuild
+### Resultado
 
-- Se as variáveis estiverem no container: a conexão funciona normalmente
-- Se não estiverem: o log de startup mostra `📅 Google Calendar: NÃO configurado` e o frontend exibe mensagem amigável em vez de "Erro interno do servidor"
-- Zero intervenção manual necessária
+Após rebuild, o EasyPanel injeta as variáveis Google diretamente no container sem interferência. O log de startup mostra o status, e a conexão funciona.
 
