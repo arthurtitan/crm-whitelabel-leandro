@@ -87,6 +87,9 @@ fi
 # ---- 4. Diagnóstico e validação Google Calendar ----
 echo ""
 echo "🔍 Diagnóstico Google Calendar:"
+echo "   [DEBUG] Variáveis GOOGLE_* no container:"
+env | grep GOOGLE || echo "   (nenhuma variável GOOGLE_* encontrada)"
+echo ""
 
 GOOGLE_VARS_SET=0
 GOOGLE_VARS_MISSING=""
