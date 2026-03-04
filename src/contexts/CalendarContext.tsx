@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode, useEffect, useRef } from 'react';
 import { useBackend } from '@/config/backend.config';
 import { supabase } from '@/integrations/supabase/client';
 import { calendarBackendService } from '@/services/calendar.backend.service';
@@ -226,8 +226,12 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
 
   // ============= INITIAL LOAD =============
 
+  const initRef = useRef(false);
+
   useEffect(() => {
     if (!accountId) return;
+    if (initRef.current) return;
+    initRef.current = true;
 
     const init = async () => {
       console.log('[Calendar] Initializing context...');
@@ -237,8 +241,6 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
       console.log('[Calendar] Context initialized');
     };
     init();
-    return () => {
-    };
   }, [accountId, checkConnectionStatus, loadEvents]);
 
   // ============= AUTO-SYNC POLLING =============
