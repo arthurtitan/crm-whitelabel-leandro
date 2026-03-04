@@ -60,6 +60,15 @@ const paymentMethodLabels: Record<string, string> = {
   unknown: 'Não informado',
 };
 
+// Safe date parser — returns null for invalid/missing dates instead of crashing
+const safeParse = (val: string | null | undefined): Date | null => {
+  if (!val) return null;
+  try {
+    const d = parseISO(val);
+    return isNaN(d.getTime()) ? null : d;
+  } catch { return null; }
+};
+
 export default function AdminInsightsPage() {
   const { user } = useAuth();
   const { isAdmin } = useRoleAccess();
@@ -112,7 +121,8 @@ export default function AdminInsightsPage() {
   // Filter sales based on date range and user permissions
   const filteredSales = useMemo(() => {
     return sales.filter((sale) => {
-      const saleDate = parseISO(sale.created_at);
+      const saleDate = safeParse(sale.created_at);
+      if (!saleDate) return false;
       const inDateRange = isWithinInterval(saleDate, {
         start: startOfDay(dateRange.from),
         end: endOfDay(dateRange.to),
@@ -136,7 +146,8 @@ export default function AdminInsightsPage() {
   // Filter contacts (leads) based on date range
   const filteredLeads = useMemo(() => {
     return contacts.filter((contact) => {
-      const contactDate = parseISO(contact.created_at);
+      const contactDate = safeParse(contact.created_at);
+      if (!contactDate) return false;
       return isWithinInterval(contactDate, {
         start: startOfDay(dateRange.from),
         end: endOfDay(dateRange.to),
@@ -149,7 +160,8 @@ export default function AdminInsightsPage() {
     return events.filter((event) => {
       if (event.type !== 'meeting' && event.type !== 'appointment') return false;
 
-      const eventDate = parseISO(event.start);
+      const eventDate = safeParse(event.start);
+      if (!eventDate) return false;
       const inDateRange = isWithinInterval(eventDate, {
         start: startOfDay(dateRange.from),
         end: endOfDay(dateRange.to),
@@ -254,9 +266,11 @@ export default function AdminInsightsPage() {
     const weekdayMap: Record<number, { total: number; count: number }> = {};
     
     paidSales.forEach((sale) => {
-      const date = format(parseISO(sale.created_at), 'yyyy-MM-dd');
-      const hour = parseISO(sale.created_at).getHours();
-      const weekday = getDay(parseISO(sale.created_at));
+      const parsedDate = safeParse(sale.created_at);
+      if (!parsedDate) return;
+      const date = format(parsedDate, 'yyyy-MM-dd');
+      const hour = parsedDate.getHours();
+      const weekday = getDay(parsedDate);
       
       if (!dailyMap[date]) {
         dailyMap[date] = { valor: 0, count: 0 };
@@ -330,8 +344,9 @@ export default function AdminInsightsPage() {
     paidSales.forEach((sale) => {
       const contact = contacts.find(c => c.id === sale.contact_id);
       if (contact && sale.paid_at) {
-        const leadDate = parseISO(contact.created_at);
-        const paidDate = parseISO(sale.paid_at);
+        const leadDate = safeParse(contact.created_at);
+        const paidDate = safeParse(sale.paid_at);
+        if (!leadDate || !paidDate) return;
         const days = differenceInDays(paidDate, leadDate);
         if (days >= 0 && days < 365) {
           totalCycleDays += days;
@@ -368,7 +383,10 @@ export default function AdminInsightsPage() {
     paidSales.forEach((sale) => {
       const contact = contacts.find(c => c.id === sale.contact_id);
       if (contact && sale.paid_at) {
-        const days = differenceInDays(parseISO(sale.paid_at), parseISO(contact.created_at));
+        const paidD = safeParse(sale.paid_at);
+        const contactD = safeParse(contact.created_at);
+        if (!paidD || !contactD) return;
+        const days = differenceInDays(paidD, contactD);
         if (days >= 0 && days < 365) {
           total++;
           for (let i = 0; i < bucketDefs.length; i++) {
@@ -516,7 +534,8 @@ export default function AdminInsightsPage() {
     
     // Temporal insights
     if (temporalData.bestWeekday && temporalData.worstDay) {
-      const worstWeekday = weekdayNames[getDay(parseISO(temporalData.worstDay.date))];
+      const worstParsed = safeParse(temporalData.worstDay.date);
+      const worstWeekday = worstParsed ? weekdayNames[getDay(worstParsed)] : null;
       if (worstWeekday !== temporalData.bestWeekday.day) {
         insights.push({
           id: 'weekday-opportunity',
