@@ -1,51 +1,43 @@
 
 
-## Diagnóstico Real
+## Diagnóstico: Por que a integração Google Calendar não funciona
 
-O problema não é de código, é de **arquitetura**. O Docker Compose interpola `${GOOGLE_CLIENT_ID:-}` para `""` porque o EasyPanel não disponibiliza essas variáveis para interpolação do YAML (mesmo que estejam cadastradas). Não há como resolver isso de forma confiável — a interpolação do Compose é um mecanismo frágil que depende de como cada plataforma injeta variáveis.
+Existem **3 bugs críticos** que impedem o fluxo completo:
 
-**A prova**: Chatwoot funciona perfeitamente porque as credenciais são salvas **no banco de dados** via UI, não via variáveis de ambiente. O Google Calendar deve seguir o mesmo padrão.
+### Bug 1: Callback do Google bloqueado por autenticação
+O arquivo `backend/src/routes/calendar.routes.ts` aplica `router.use(authenticate)` e `router.use(requireAccountId)` em **todas** as rotas, incluindo `/google/callback`. Quando o Google redireciona o usuário de volta para `https://360.gleps.com.br/api/calendar/google/callback?code=...&state=...`, não há JWT token no request → o middleware retorna 401 e o fluxo morre.
 
-## Solução Definitiva: Credenciais Google no Banco de Dados
+### Bug 2: State do OAuth não inclui o userId
+O método `getGoogleAuthUrl` no `calendar.service.ts` (linha 206) passa apenas `state: accountId`. Mas para isolamento por usuário (tokens vinculados ao user), o callback precisa saber **qual usuário** iniciou o fluxo. O `handleGoogleCallback` também não recebe o userId.
 
-Exatamente como o Chatwoot já funciona — credenciais armazenadas na tabela `accounts`, configuráveis pela UI do Super Admin.
+### Bug 3: Callback não redireciona no erro
+O `googleCallback` no controller usa `next(error)` em caso de erro, retornando JSON em vez de redirecionar para o frontend com `?error=...`.
 
-### O que muda
+---
 
-| Componente | Alteração |
-|-----------|-----------|
-| **Prisma Schema** | Adicionar `google_client_id`, `google_client_secret`, `google_redirect_uri` na model Account |
-| **Migration SQL** | `ALTER TABLE accounts ADD COLUMN google_client_id VARCHAR(500), ...` |
-| **`calendar.service.ts`** | Ler credenciais do DB (`account.googleClientId`) em vez de `env.GOOGLE_*` |
-| **`env.ts`** | Remover GOOGLE_* do schema Zod (não são mais env vars) |
-| **`docker-compose.yml`** | Remover as 3 linhas GOOGLE_* |
-| **`start.sh`** | Remover diagnóstico de GOOGLE_* (não existe mais em env) |
-| **SuperAdminAccountDetailPage** | Adicionar seção "Google Calendar" no painel de controle da conta (idêntico ao Chatwoot) com campos Client ID, Client Secret, Redirect URI e botão de teste |
-| **Account service/controller** | Aceitar os novos campos no update da conta |
+## Plano de Correção (4 arquivos)
 
-### Fluxo final
+### 1. `backend/src/routes/calendar.routes.ts`
+Mover o `/google/callback` para **antes** do `router.use(authenticate)`, ou registrá-lo sem os middlewares de auth. O callback do Google é uma requisição de redirecionamento sem token JWT.
 
-1. Super Admin acessa Conta → Controle
-2. Ativa "Google Calendar", preenche Client ID, Client Secret, Redirect URI
-3. Salva → credenciais vão para o banco
-4. Admin da conta acessa Agenda → botão "Sincronizar" aparece (backend lê do DB)
-5. Clica → OAuth flow funciona
+### 2. `backend/src/services/calendar.service.ts`
+- `getGoogleAuthUrl`: receber `userId` além de `accountId`, codificar ambos no `state` (base64 JSON)
+- `handleGoogleCallback`: decodificar o state para extrair `accountId` e `userId`, salvar o token vinculado ao user
 
-### Vantagens
+### 3. `backend/src/controllers/calendar.controller.ts`
+- `connectGoogle`: passar `req.user.id` para o service
+- `googleCallback`: decodificar state, tratar erros com redirect para frontend em vez de `next(error)`, usar `FRONTEND_URL` do env
 
-- Funciona em **qualquer hospedagem** sem depender de env vars
-- Segue o padrão **já existente** (Chatwoot)
-- Configurável por **conta** (multi-tenant)
-- Zero dependência de interpolação de Docker Compose
+### 4. `backend/prisma/schema.prisma` (verificação)
+O model `GoogleCalendarToken` precisa ter `unique` por `userId` (não apenas `accountId`) para suportar múltiplos usuários por conta. Preciso verificar o schema atual.
 
-### Arquivos a criar/alterar
+---
 
-1. **Nova migration Prisma** — adicionar 3 colunas na tabela accounts
-2. **`backend/prisma/schema.prisma`** — adicionar campos google_* no model Account
-3. **`backend/src/services/calendar.service.ts`** — ler credenciais do DB
-4. **`backend/src/config/env.ts`** — remover GOOGLE_*
-5. **`docker-compose.yml`** — remover GOOGLE_* do environment
-6. **`backend/scripts/start.sh`** — remover diagnóstico Google
-7. **`src/pages/super-admin/SuperAdminAccountDetailPage.tsx`** — adicionar seção Google Calendar
-8. **`backend/src/controllers/account.controller.ts`** — aceitar novos campos no update
+## Resultado esperado
+
+1. Super Admin configura credenciais Google na conta via UI (já funciona)
+2. Admin acessa Agenda → vê botão "Sincronizar" (já funciona se credentials no DB)
+3. Clica → redirect para Google OAuth → autoriza
+4. Google redireciona para `/api/calendar/google/callback` → **rota sem auth** → troca code por tokens → salva no DB → redireciona para `/admin/agenda?google_connected=true`
+5. Frontend detecta `google_connected=true` → sincroniza eventos
 
