@@ -1,76 +1,51 @@
 
 
-## Diagnóstico Definitivo — Causa Raiz Encontrada
+## Diagnóstico Real
 
-### A Prova Está nos Logs
+O problema não é de código, é de **arquitetura**. O Docker Compose interpola `${GOOGLE_CLIENT_ID:-}` para `""` porque o EasyPanel não disponibiliza essas variáveis para interpolação do YAML (mesmo que estejam cadastradas). Não há como resolver isso de forma confiável — a interpolação do Compose é um mecanismo frágil que depende de como cada plataforma injeta variáveis.
 
-```text
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-GOOGLE_REDIRECT_URI=http://localhost:3000/api/calendar/google/callback
-```
+**A prova**: Chatwoot funciona perfeitamente porque as credenciais são salvas **no banco de dados** via UI, não via variáveis de ambiente. O Google Calendar deve seguir o mesmo padrão.
 
-A `GOOGLE_REDIRECT_URI` mostra `http://localhost:3000/...` — esse valor **não vem do EasyPanel** (onde você configurou `https://360.gleps.com.br/...`). Esse valor vem do arquivo `backend/.env` que está dentro do repositório:
+## Solução Definitiva: Credenciais Google no Banco de Dados
 
-```text
-# backend/.env (linha 33)
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-GOOGLE_REDIRECT_URI=http://localhost:3000/api/calendar/google/callback
-```
+Exatamente como o Chatwoot já funciona — credenciais armazenadas na tabela `accounts`, configuráveis pela UI do Super Admin.
 
-### O Que Acontece
+### O que muda
 
-Na última alteração, adicionamos `env_file: ./backend/.env` ao `docker-compose.yml`. O Docker Compose carrega esse arquivo **primeiro**, e como ele contém `GOOGLE_CLIENT_ID=` (vazio) e `GOOGLE_REDIRECT_URI=http://localhost:3000/...`, esses valores sobrescrevem qualquer coisa que o EasyPanel tente injetar.
+| Componente | Alteração |
+|-----------|-----------|
+| **Prisma Schema** | Adicionar `google_client_id`, `google_client_secret`, `google_redirect_uri` na model Account |
+| **Migration SQL** | `ALTER TABLE accounts ADD COLUMN google_client_id VARCHAR(500), ...` |
+| **`calendar.service.ts`** | Ler credenciais do DB (`account.googleClientId`) em vez de `env.GOOGLE_*` |
+| **`env.ts`** | Remover GOOGLE_* do schema Zod (não são mais env vars) |
+| **`docker-compose.yml`** | Remover as 3 linhas GOOGLE_* |
+| **`start.sh`** | Remover diagnóstico de GOOGLE_* (não existe mais em env) |
+| **SuperAdminAccountDetailPage** | Adicionar seção "Google Calendar" no painel de controle da conta (idêntico ao Chatwoot) com campos Client ID, Client Secret, Redirect URI e botão de teste |
+| **Account service/controller** | Aceitar os novos campos no update da conta |
 
-```text
-Ordem de prioridade (Docker Compose):
-1. environment: (seção do compose) → mais alta
-2. env_file: → segunda  
-3. Docker API (EasyPanel) → mais baixa
+### Fluxo final
 
-Resultado:
-- GOOGLE_CLIENT_ID="" (do backend/.env via env_file) → sobrescreve EasyPanel
-- GOOGLE_REDIRECT_URI="http://localhost:3000/..." (do backend/.env) → sobrescreve EasyPanel
-```
+1. Super Admin acessa Conta → Controle
+2. Ativa "Google Calendar", preenche Client ID, Client Secret, Redirect URI
+3. Salva → credenciais vão para o banco
+4. Admin da conta acessa Agenda → botão "Sincronizar" aparece (backend lê do DB)
+5. Clica → OAuth flow funciona
 
-### Consequência Crítica: Backend em Loop
+### Vantagens
 
-Como `GOOGLE_REDIRECT_URI` tem valor (do .env local) mas `GOOGLE_CLIENT_ID` está vazio, o script detecta "configuração parcial" (1/3) e faz `exit 1`. O Docker reinicia o container infinitamente por causa do `restart: unless-stopped`.
+- Funciona em **qualquer hospedagem** sem depender de env vars
+- Segue o padrão **já existente** (Chatwoot)
+- Configurável por **conta** (multi-tenant)
+- Zero dependência de interpolação de Docker Compose
 
-### Plano de Correção
+### Arquivos a criar/alterar
 
-#### 1. `docker-compose.yml` — Remover env_file E adicionar GOOGLE vars de volta
-
-A diretiva `env_file` foi a causa direta. Removê-la e re-adicionar as variáveis Google na seção `environment:` — mas **sem default vazio** para que o EasyPanel possa injetá-las. Usar a mesma sintaxe das outras variáveis que funcionam (como JWT_SECRET):
-
-```yaml
-# Remover:
-env_file:
-  - path: ./backend/.env
-    required: false
-
-# Na seção environment, adicionar:
-GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
-GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
-```
-
-**Porém**, isso já tentamos antes e não funcionou. A razão é que as variáveis do EasyPanel são definidas no nível do **app Compose**, onde o Compose as interpola. Se o EasyPanel disponibiliza as variáveis para interpolação do YAML, `${GOOGLE_CLIENT_ID:-}` deveria funcionar — e de fato **agora sabemos que o problema era o env_file sobrescrevendo**. Com o env_file removido, a interpolação `${VAR:-}` deve funcionar corretamente.
-
-#### 2. `backend/.env` — Remover variáveis Google
-
-Para evitar que o arquivo `.env` (que é commitado no repo) interfira em produção, remover as linhas `GOOGLE_*` dele. O desenvolvimento local usará variáveis de ambiente do shell ou um `.env.local` não commitado.
-
-#### 3. `start.sh` — Não fazer exit 1 em configuração parcial
-
-Como medida de segurança adicional, trocar o `exit 1` por um **warning** quando há configuração parcial. Assim o backend sempre inicia, mesmo com Google parcialmente configurado (a funcionalidade Google simplesmente não funcionará).
-
-### Arquivos a alterar
-
-| Arquivo | Alteração |
-|---------|-----------|
-| `docker-compose.yml` | Remover `env_file`, re-adicionar `GOOGLE_*: ${VAR:-}` no environment |
-| `backend/.env` | Remover linhas GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI |
-| `backend/scripts/start.sh` | Trocar `exit 1` por warning na validação parcial do Google |
+1. **Nova migration Prisma** — adicionar 3 colunas na tabela accounts
+2. **`backend/prisma/schema.prisma`** — adicionar campos google_* no model Account
+3. **`backend/src/services/calendar.service.ts`** — ler credenciais do DB
+4. **`backend/src/config/env.ts`** — remover GOOGLE_*
+5. **`docker-compose.yml`** — remover GOOGLE_* do environment
+6. **`backend/scripts/start.sh`** — remover diagnóstico Google
+7. **`src/pages/super-admin/SuperAdminAccountDetailPage.tsx`** — adicionar seção Google Calendar
+8. **`backend/src/controllers/account.controller.ts`** — aceitar novos campos no update
 
