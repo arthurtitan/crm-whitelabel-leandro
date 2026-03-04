@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import { CalendarView, GoogleConnectModal } from '@/components/calendar';
 import { useCalendar } from '@/contexts/CalendarContext';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -30,16 +29,25 @@ export default function AdminAgendaPage() {
   } = useCalendar();
   
   const [showConnectModal, setShowConnectModal] = useState(false);
-  const [searchParams, setSearchParams] = useSearchParams();
   
   // Ref to track if we've already attempted sync for this callback
   const syncAttemptedRef = useRef(false);
 
-  // Handle OAuth callback - sync events automatically after connection
+  // Handle OAuth callback - runs once on mount, uses window.location to avoid re-render loops
   useEffect(() => {
-    const googleConnected = searchParams.get('google_connected') || searchParams.get('google');
-    const forceSync = searchParams.get('force_sync');
-    const error = searchParams.get('error');
+    if (syncAttemptedRef.current) return;
+    
+    const params = new URLSearchParams(window.location.search);
+    const googleConnected = params.get('google_connected') || params.get('google');
+    const forceSync = params.get('force_sync');
+    const error = params.get('error');
+
+    // Nothing to handle
+    if (!error && !googleConnected && !forceSync) return;
+
+    // Clear URL immediately without causing re-render
+    window.history.replaceState({}, '', window.location.pathname);
+    syncAttemptedRef.current = true;
 
     // Handle errors first
     if (error) {
@@ -54,26 +62,12 @@ export default function AdminAgendaPage() {
         unknown: 'Erro desconhecido',
       };
       toast.error(errorMessages[error] || 'Erro ao conectar');
-      setSearchParams({});
       return;
     }
 
     // Handle successful OAuth callback
-    if ((googleConnected === 'true' || googleConnected === 'connected') && !syncAttemptedRef.current) {
+    if (googleConnected === 'true' || googleConnected === 'connected') {
       console.log('[Agenda] OAuth callback detected, google_connected:', googleConnected);
-      
-      // Clear URL immediately to prevent re-triggering
-      setSearchParams({});
-      
-      // Wait for context to be fully initialized before attempting sync
-      if (!isInitialized) {
-        console.log('[Agenda] Waiting for context to initialize...');
-        return;
-      }
-      
-      // Mark as attempted to prevent multiple executions
-      syncAttemptedRef.current = true;
-      
       toast.success('Google Calendar conectado! Sincronizando eventos...');
       
       const runSync = async () => {
@@ -84,22 +78,13 @@ export default function AdminAgendaPage() {
         console.log('[Agenda] Post-OAuth sync complete');
       };
       
-      // Small delay to ensure stability after redirect
       setTimeout(runSync, 500);
-    } else if (forceSync === 'true' && !syncAttemptedRef.current) {
-      // Handle force_sync parameter
+    } else if (forceSync === 'true') {
       console.log('[Agenda] force_sync detected');
-      setSearchParams({});
-      
-      if (!isInitialized) {
-        console.log('[Agenda] Waiting for context to initialize for force_sync...');
-        return;
-      }
-      
-      syncAttemptedRef.current = true;
       setTimeout(() => syncNow(), 500);
     }
-  }, [searchParams, setSearchParams, checkConnectionStatus, syncNow, loadEvents, isInitialized]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const isSyncing = connection.status === 'syncing';
   const isConnecting = connection.status === 'connecting';
