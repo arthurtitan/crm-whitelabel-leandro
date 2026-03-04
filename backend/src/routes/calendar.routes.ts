@@ -1,10 +1,13 @@
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { calendarController } from '../controllers/calendar.controller';
 import { authenticate, requirePermission, requireAdmin, requireAccountId } from '../middlewares/auth.middleware';
 
 const router = Router();
 
-// All routes require authentication + accountId
+// Google callback must be PUBLIC (no JWT — Google redirects here)
+router.get('/google/callback', (req: Request, res: Response, next: NextFunction) => calendarController.googleCallback(req as any, res, next));
+
+// All other routes require authentication + accountId
 router.use(authenticate);
 router.use(requireAccountId);
 
@@ -16,7 +19,6 @@ router.delete('/events/:id', requirePermission('agenda'), (req, res, next) => ca
 
 // Google Calendar integration (Admin only)
 router.post('/google/connect', requireAdmin, (req, res, next) => calendarController.connectGoogle(req, res, next));
-router.get('/google/callback', (req, res, next) => calendarController.googleCallback(req, res, next));
 router.post('/google/disconnect', requireAdmin, (req, res, next) => calendarController.disconnectGoogle(req, res, next));
 router.post('/google/sync', requireAdmin, (req, res, next) => calendarController.syncGoogle(req, res, next));
 router.get('/google/status', (req, res, next) => calendarController.getGoogleStatus(req, res, next));

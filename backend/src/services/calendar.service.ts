@@ -184,7 +184,7 @@ class CalendarService {
   /**
    * Get Google OAuth URL — credentials from DB
    */
-  async getGoogleAuthUrl(accountId: string): Promise<string> {
+  async getGoogleAuthUrl(accountId: string, userId: string): Promise<string> {
     const creds = await this.getGoogleCredentials(accountId);
     if (!creds) {
       throw new AppError(
@@ -195,6 +195,7 @@ class CalendarService {
     }
 
     const scopes = ['https://www.googleapis.com/auth/calendar.readonly'];
+    const statePayload = Buffer.from(JSON.stringify({ accountId, userId })).toString('base64');
     const params = new URLSearchParams({
       client_id: creds.clientId,
       redirect_uri: creds.redirectUri,
@@ -202,7 +203,7 @@ class CalendarService {
       scope: scopes.join(' '),
       access_type: 'offline',
       prompt: 'consent',
-      state: accountId,
+      state: statePayload,
     });
 
     return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
@@ -211,7 +212,19 @@ class CalendarService {
   /**
    * Handle Google OAuth callback — credentials from DB
    */
-  async handleGoogleCallback(code: string, accountId: string) {
+  async handleGoogleCallback(code: string, stateBase64: string) {
+    // Decode state to extract accountId and userId
+    let accountId: string;
+    let userId: string;
+    try {
+      const decoded = JSON.parse(Buffer.from(stateBase64, 'base64').toString('utf-8'));
+      accountId = decoded.accountId;
+      userId = decoded.userId;
+      if (!accountId || !userId) throw new Error('Missing fields');
+    } catch {
+      throw new AppError('State OAuth inválido', 400, 'INVALID_STATE');
+    }
+
     const creds = await this.getGoogleCredentials(accountId);
     if (!creds) {
       throw new AppError('Google Calendar não configurado para esta conta.', 422, 'GOOGLE_NOT_CONFIGURED');
@@ -240,10 +253,12 @@ class CalendarService {
     });
     const userInfo: any = await userInfoResponse.json();
 
+    // Upsert by userId (each user has their own token)
     await prisma.googleCalendarToken.upsert({
-      where: { accountId },
+      where: { userId },
       create: {
         accountId,
+        userId,
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token,
         expiresAt: new Date(Date.now() + tokens.expires_in * 1000),
@@ -264,10 +279,10 @@ class CalendarService {
   /**
    * Disconnect Google Calendar
    */
-  async disconnectGoogle(accountId: string) {
-    await prisma.googleCalendarToken.delete({ where: { accountId } }).catch(() => {});
+  async disconnectGoogle(accountId: string, userId: string) {
+    await prisma.googleCalendarToken.delete({ where: { userId } }).catch(() => {});
     await prisma.calendarEvent.updateMany({
-      where: { accountId },
+      where: { accountId, source: 'google', createdById: userId },
       data: { googleEventId: null, googleCalendarId: null },
     });
   }
@@ -275,7 +290,7 @@ class CalendarService {
   /**
    * Get Google Calendar connection status — credentials from DB
    */
-  async getGoogleStatus(accountId: string) {
+  async getGoogleStatus(accountId: string, userId: string) {
     const creds = await this.getGoogleCredentials(accountId);
 
     if (!creds) {
@@ -286,7 +301,7 @@ class CalendarService {
       };
     }
 
-    const token = await prisma.googleCalendarToken.findUnique({ where: { accountId } });
+    const token = await prisma.googleCalendarToken.findUnique({ where: { userId } });
 
     if (!token) {
       return { connected: false, configured: true, missing: [] };
@@ -305,8 +320,8 @@ class CalendarService {
   /**
    * Sync with Google Calendar — credentials from DB
    */
-  async syncWithGoogle(accountId: string) {
-    const token = await prisma.googleCalendarToken.findUnique({ where: { accountId } });
+  async syncWithGoogle(accountId: string, userId: string) {
+    const token = await prisma.googleCalendarToken.findUnique({ where: { userId } });
     if (!token) throw new Error('Google Calendar não conectado');
 
     let accessToken = token.accessToken;
@@ -344,6 +359,7 @@ class CalendarService {
         where: { id: await this.getEventIdByGoogleId(gEvent.id, accountId) || 'new' },
         create: {
           accountId,
+          createdById: userId,
           title: gEvent.summary || 'Sem título',
           startTime: new Date(startTime),
           endTime: new Date(endTime),

@@ -136,7 +136,7 @@ export class CalendarController {
    */
   async connectGoogle(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const authUrl = await calendarService.getGoogleAuthUrl(req.user!.accountId!);
+      const authUrl = await calendarService.getGoogleAuthUrl(req.user!.accountId!, req.user!.id);
 
       res.json({ data: { authUrl } });
     } catch (error) {
@@ -148,25 +148,26 @@ export class CalendarController {
    * GET /calendar/google/callback
    */
   async googleCallback(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8080';
     try {
-      const { code, state } = req.query;
+      const { code, state, error: oauthError } = req.query;
 
-      if (!code || !state) {
-        res.status(400).json({
-          error: { code: 'VALIDATION_ERROR', message: 'Código ou estado inválido' },
-        });
+      if (oauthError) {
+        res.redirect(`${frontendUrl}/admin/agenda?google_error=${encodeURIComponent(oauthError as string)}`);
         return;
       }
 
-      const result = await calendarService.handleGoogleCallback(
-        code as string,
-        state as string
-      );
+      if (!code || !state) {
+        res.redirect(`${frontendUrl}/admin/agenda?google_error=missing_params`);
+        return;
+      }
 
-      // Redirect to frontend with success
-      res.redirect(`${process.env.FRONTEND_URL}/admin/agenda?google_connected=true`);
-    } catch (error) {
-      next(error);
+      await calendarService.handleGoogleCallback(code as string, state as string);
+
+      res.redirect(`${frontendUrl}/admin/agenda?google_connected=true`);
+    } catch (error: any) {
+      console.error('Google OAuth callback error:', error);
+      res.redirect(`${frontendUrl}/admin/agenda?google_error=${encodeURIComponent(error.message || 'unknown')}`);
     }
   }
 
@@ -175,7 +176,7 @@ export class CalendarController {
    */
   async disconnectGoogle(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      await calendarService.disconnectGoogle(req.user!.accountId!);
+      await calendarService.disconnectGoogle(req.user!.accountId!, req.user!.id);
 
       res.json({ data: { success: true } });
     } catch (error) {
@@ -188,7 +189,7 @@ export class CalendarController {
    */
   async syncGoogle(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const result = await calendarService.syncWithGoogle(req.user!.accountId!);
+      const result = await calendarService.syncWithGoogle(req.user!.accountId!, req.user!.id);
 
       res.json({ data: result });
     } catch (error) {
@@ -201,7 +202,7 @@ export class CalendarController {
    */
   async getGoogleStatus(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const result = await calendarService.getGoogleStatus(req.user!.accountId!);
+      const result = await calendarService.getGoogleStatus(req.user!.accountId!, req.user!.id);
 
       res.json({ data: result });
     } catch (error) {
