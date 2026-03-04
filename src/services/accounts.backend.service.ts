@@ -23,6 +23,9 @@ function mapAccount(raw: any): Account {
     chatwoot_base_url: raw.chatwootBaseUrl ?? raw.chatwoot_base_url ?? null,
     chatwoot_account_id: raw.chatwootAccountId ?? raw.chatwoot_account_id ?? null,
     chatwoot_api_key: raw.chatwootApiKey ?? raw.chatwoot_api_key ?? null,
+    google_client_id: raw.googleClientId ?? raw.google_client_id ?? null,
+    google_client_secret: raw.googleClientSecret ?? raw.google_client_secret ?? null,
+    google_redirect_uri: raw.googleRedirectUri ?? raw.google_redirect_uri ?? null,
     created_at: raw.createdAt ?? raw.created_at ?? new Date().toISOString(),
     updated_at: raw.updatedAt ?? raw.updated_at ?? new Date().toISOString(),
     users_count: raw.usersCount ?? raw.users_count ?? 0,
@@ -63,6 +66,9 @@ export const accountsBackendService = {
       chatwootBaseUrl: input.chatwoot_base_url,
       chatwootAccountId: input.chatwoot_account_id,
       chatwootApiKey: input.chatwoot_api_key,
+      googleClientId: input.google_client_id,
+      googleClientSecret: input.google_client_secret,
+      googleRedirectUri: input.google_redirect_uri,
     });
     const raw = response?.data ?? response;
     return mapAccount(raw);

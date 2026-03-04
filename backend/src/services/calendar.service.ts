@@ -3,7 +3,6 @@ import { CalendarEventType, CalendarEventStatus } from '@prisma/client';
 import { PaginationParams, DateRangeFilter } from '../types';
 import { NotFoundError, AppError } from '../utils/errors';
 import { getPaginationMeta } from '../utils/helpers';
-import { env } from '../config/env';
 
 export interface CreateCalendarEventInput {
   accountId: string;
@@ -38,7 +37,37 @@ export interface CalendarEventFilters extends DateRangeFilter {
   contactId?: string;
 }
 
+interface GoogleCredentials {
+  clientId: string;
+  clientSecret: string;
+  redirectUri: string;
+}
+
 class CalendarService {
+  /**
+   * Get Google OAuth credentials from the account's DB record
+   */
+  private async getGoogleCredentials(accountId: string): Promise<GoogleCredentials | null> {
+    const account = await prisma.account.findUnique({
+      where: { id: accountId },
+      select: {
+        googleClientId: true,
+        googleClientSecret: true,
+        googleRedirectUri: true,
+      },
+    });
+
+    if (!account?.googleClientId || !account?.googleClientSecret || !account?.googleRedirectUri) {
+      return null;
+    }
+
+    return {
+      clientId: account.googleClientId,
+      clientSecret: account.googleClientSecret,
+      redirectUri: account.googleRedirectUri,
+    };
+  }
+
   /**
    * List calendar events
    */
@@ -47,26 +76,14 @@ class CalendarService {
       accountId: filters.accountId,
     };
 
-    if (filters.type) {
-      where.type = filters.type;
-    }
-
-    if (filters.status) {
-      where.status = filters.status;
-    }
-
-    if (filters.contactId) {
-      where.contactId = filters.contactId;
-    }
+    if (filters.type) where.type = filters.type;
+    if (filters.status) where.status = filters.status;
+    if (filters.contactId) where.contactId = filters.contactId;
 
     if (filters.startDate || filters.endDate) {
       where.startTime = {};
-      if (filters.startDate) {
-        where.startTime.gte = filters.startDate;
-      }
-      if (filters.endDate) {
-        where.startTime.lte = filters.endDate;
-      }
+      if (filters.startDate) where.startTime.gte = filters.startDate;
+      if (filters.endDate) where.startTime.lte = filters.endDate;
     }
 
     const [events, total] = await Promise.all([
@@ -76,12 +93,8 @@ class CalendarService {
         skip: pagination.offset,
         take: pagination.limit,
         include: {
-          contact: {
-            select: { id: true, nome: true, telefone: true },
-          },
-          createdBy: {
-            select: { id: true, nome: true },
-          },
+          contact: { select: { id: true, nome: true, telefone: true } },
+          createdBy: { select: { id: true, nome: true } },
           attendees: true,
         },
       }),
@@ -99,27 +112,18 @@ class CalendarService {
    */
   async getById(id: string, accountId?: string) {
     const where: any = { id };
-    if (accountId) {
-      where.accountId = accountId;
-    }
+    if (accountId) where.accountId = accountId;
 
     const event = await prisma.calendarEvent.findFirst({
       where,
       include: {
-        contact: {
-          select: { id: true, nome: true, telefone: true, email: true },
-        },
-        createdBy: {
-          select: { id: true, nome: true, email: true },
-        },
+        contact: { select: { id: true, nome: true, telefone: true, email: true } },
+        createdBy: { select: { id: true, nome: true, email: true } },
         attendees: true,
       },
     });
 
-    if (!event) {
-      throw new NotFoundError('Evento');
-    }
-
+    if (!event) throw new NotFoundError('Evento');
     return event;
   }
 
@@ -139,15 +143,10 @@ class CalendarService {
         contactId: input.contactId,
         notes: input.notes,
         createdById: input.createdById,
-        attendees: input.attendees ? {
-          create: input.attendees,
-        } : undefined,
+        attendees: input.attendees ? { create: input.attendees } : undefined,
       },
-      include: {
-        attendees: true,
-      },
+      include: { attendees: true },
     });
-
     return event;
   }
 
@@ -156,7 +155,6 @@ class CalendarService {
    */
   async update(id: string, input: UpdateCalendarEventInput, accountId: string) {
     await this.getById(id, accountId);
-
     const event = await prisma.calendarEvent.update({
       where: { id },
       data: {
@@ -170,11 +168,8 @@ class CalendarService {
         contactId: input.contactId,
         notes: input.notes,
       },
-      include: {
-        attendees: true,
-      },
+      include: { attendees: true },
     });
-
     return event;
   }
 
@@ -187,20 +182,22 @@ class CalendarService {
   }
 
   /**
-   * Get Google OAuth URL
+   * Get Google OAuth URL — credentials from DB
    */
-  getGoogleAuthUrl(accountId: string): string {
-    if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_REDIRECT_URI) {
-      throw new AppError('Google Calendar não configurado no servidor. Configure GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET e GOOGLE_REDIRECT_URI.', 422, 'GOOGLE_NOT_CONFIGURED');
+  async getGoogleAuthUrl(accountId: string): Promise<string> {
+    const creds = await this.getGoogleCredentials(accountId);
+    if (!creds) {
+      throw new AppError(
+        'Google Calendar não configurado para esta conta. O Super Admin deve configurar as credenciais Google na página de controle da conta.',
+        422,
+        'GOOGLE_NOT_CONFIGURED'
+      );
     }
 
-    const scopes = [
-      'https://www.googleapis.com/auth/calendar.readonly',
-    ];
-
+    const scopes = ['https://www.googleapis.com/auth/calendar.readonly'];
     const params = new URLSearchParams({
-      client_id: env.GOOGLE_CLIENT_ID,
-      redirect_uri: env.GOOGLE_REDIRECT_URI,
+      client_id: creds.clientId,
+      redirect_uri: creds.redirectUri,
       response_type: 'code',
       scope: scopes.join(' '),
       access_type: 'offline',
@@ -212,25 +209,23 @@ class CalendarService {
   }
 
   /**
-   * Handle Google OAuth callback
+   * Handle Google OAuth callback — credentials from DB
    */
   async handleGoogleCallback(code: string, accountId: string) {
-    if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET || !env.GOOGLE_REDIRECT_URI) {
-      throw new AppError('Google Calendar não configurado no servidor. Configure GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET e GOOGLE_REDIRECT_URI.', 422, 'GOOGLE_NOT_CONFIGURED');
+    const creds = await this.getGoogleCredentials(accountId);
+    if (!creds) {
+      throw new AppError('Google Calendar não configurado para esta conta.', 422, 'GOOGLE_NOT_CONFIGURED');
     }
 
-    // Exchange code for tokens
     const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
-        client_id: env.GOOGLE_CLIENT_ID,
-        client_secret: env.GOOGLE_CLIENT_SECRET,
+        client_id: creds.clientId,
+        client_secret: creds.clientSecret,
         code,
         grant_type: 'authorization_code',
-        redirect_uri: env.GOOGLE_REDIRECT_URI,
+        redirect_uri: creds.redirectUri,
       }),
     });
 
@@ -240,16 +235,11 @@ class CalendarService {
 
     const tokens: any = await tokenResponse.json();
 
-    // Get user info
     const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-      headers: {
-        Authorization: `Bearer ${tokens.access_token}`,
-      },
+      headers: { Authorization: `Bearer ${tokens.access_token}` },
     });
-
     const userInfo: any = await userInfoResponse.json();
 
-    // Save tokens
     await prisma.googleCalendarToken.upsert({
       where: { accountId },
       create: {
@@ -275,50 +265,28 @@ class CalendarService {
    * Disconnect Google Calendar
    */
   async disconnectGoogle(accountId: string) {
-    await prisma.googleCalendarToken.delete({
-      where: { accountId },
-    }).catch(() => {
-      // Ignore if not exists
-    });
-
-    // Remove google event IDs from events
+    await prisma.googleCalendarToken.delete({ where: { accountId } }).catch(() => {});
     await prisma.calendarEvent.updateMany({
       where: { accountId },
-      data: {
-        googleEventId: null,
-        googleCalendarId: null,
-      },
+      data: { googleEventId: null, googleCalendarId: null },
     });
   }
 
   /**
-   * Check if Google Calendar environment is fully configured
-   */
-  getGoogleConfigStatus(): { configured: boolean; missing: string[] } {
-    const missing: string[] = [];
-    if (!env.GOOGLE_CLIENT_ID) missing.push('GOOGLE_CLIENT_ID');
-    if (!env.GOOGLE_CLIENT_SECRET) missing.push('GOOGLE_CLIENT_SECRET');
-    if (!env.GOOGLE_REDIRECT_URI) missing.push('GOOGLE_REDIRECT_URI');
-    return { configured: missing.length === 0, missing };
-  }
-
-  /**
-   * Get Google Calendar connection status
+   * Get Google Calendar connection status — credentials from DB
    */
   async getGoogleStatus(accountId: string) {
-    const configStatus = this.getGoogleConfigStatus();
+    const creds = await this.getGoogleCredentials(accountId);
 
-    if (!configStatus.configured) {
+    if (!creds) {
       return {
         connected: false,
         configured: false,
-        missing: configStatus.missing,
+        missing: ['google_client_id', 'google_client_secret', 'google_redirect_uri'],
       };
     }
 
-    const token = await prisma.googleCalendarToken.findUnique({
-      where: { accountId },
-    });
+    const token = await prisma.googleCalendarToken.findUnique({ where: { accountId } });
 
     if (!token) {
       return { connected: false, configured: true, missing: [] };
@@ -335,24 +303,17 @@ class CalendarService {
   }
 
   /**
-   * Sync with Google Calendar
+   * Sync with Google Calendar — credentials from DB
    */
   async syncWithGoogle(accountId: string) {
-    const token = await prisma.googleCalendarToken.findUnique({
-      where: { accountId },
-    });
+    const token = await prisma.googleCalendarToken.findUnique({ where: { accountId } });
+    if (!token) throw new Error('Google Calendar não conectado');
 
-    if (!token) {
-      throw new Error('Google Calendar não conectado');
-    }
-
-    // Check if token needs refresh
     let accessToken = token.accessToken;
     if (token.expiresAt < new Date()) {
       accessToken = await this.refreshGoogleToken(accountId, token.refreshToken);
     }
 
-    // Fetch events from Google
     const now = new Date();
     const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     const oneMonthAhead = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -365,33 +326,22 @@ class CalendarService {
         singleEvents: 'true',
         orderBy: 'startTime',
       }),
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      }
+      { headers: { Authorization: `Bearer ${accessToken}` } }
     );
 
-    if (!response.ok) {
-      throw new Error('Falha ao sincronizar com Google Calendar');
-    }
+    if (!response.ok) throw new Error('Falha ao sincronizar com Google Calendar');
 
     const data: any = await response.json();
     const googleEvents = data.items || [];
 
-    // Sync events
     for (const gEvent of googleEvents) {
       if (gEvent.status === 'cancelled') continue;
-
       const startTime = gEvent.start?.dateTime || gEvent.start?.date;
       const endTime = gEvent.end?.dateTime || gEvent.end?.date;
-
       if (!startTime || !endTime) continue;
 
       await prisma.calendarEvent.upsert({
-        where: {
-          id: await this.getEventIdByGoogleId(gEvent.id, accountId) || 'new',
-        },
+        where: { id: await this.getEventIdByGoogleId(gEvent.id, accountId) || 'new' },
         create: {
           accountId,
           title: gEvent.summary || 'Sem título',
@@ -426,26 +376,23 @@ class CalendarService {
   }
 
   private async refreshGoogleToken(accountId: string, refreshToken: string): Promise<string> {
-    if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
-      throw new AppError('Google Calendar não configurado no servidor. Configure GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET.', 422, 'GOOGLE_NOT_CONFIGURED');
+    const creds = await this.getGoogleCredentials(accountId);
+    if (!creds) {
+      throw new AppError('Google Calendar não configurado para esta conta.', 422, 'GOOGLE_NOT_CONFIGURED');
     }
 
     const response = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
-        client_id: env.GOOGLE_CLIENT_ID,
-        client_secret: env.GOOGLE_CLIENT_SECRET,
+        client_id: creds.clientId,
+        client_secret: creds.clientSecret,
         refresh_token: refreshToken,
         grant_type: 'refresh_token',
       }),
     });
 
-    if (!response.ok) {
-      throw new Error('Falha ao renovar token do Google');
-    }
+    if (!response.ok) throw new Error('Falha ao renovar token do Google');
 
     const tokens: any = await response.json();
 

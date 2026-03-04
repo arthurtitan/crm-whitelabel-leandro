@@ -20,6 +20,9 @@ export type Database = {
           chatwoot_api_key: string | null
           chatwoot_base_url: string | null
           created_at: string | null
+          google_client_id: string | null
+          google_client_secret: string | null
+          google_redirect_uri: string | null
           id: string
           limite_usuarios: number | null
           nome: string
@@ -33,6 +36,9 @@ export type Database = {
           chatwoot_api_key?: string | null
           chatwoot_base_url?: string | null
           created_at?: string | null
+          google_client_id?: string | null
+          google_client_secret?: string | null
+          google_redirect_uri?: string | null
           id?: string
           limite_usuarios?: number | null
           nome: string
@@ -46,6 +52,9 @@ export type Database = {
           chatwoot_api_key?: string | null
           chatwoot_base_url?: string | null
           created_at?: string | null
+          google_client_id?: string | null
+          google_client_secret?: string | null
+          google_redirect_uri?: string | null
           id?: string
           limite_usuarios?: number | null
           nome?: string

@@ -13,6 +13,9 @@ export interface CreateAccountInput {
   chatwootBaseUrl?: string;
   chatwootAccountId?: string;
   chatwootApiKey?: string;
+  googleClientId?: string;
+  googleClientSecret?: string;
+  googleRedirectUri?: string;
 }
 
 export interface UpdateAccountInput extends Partial<CreateAccountInput> {
@@ -117,6 +120,9 @@ class AccountService {
         chatwootBaseUrl: input.chatwootBaseUrl,
         chatwootAccountId: input.chatwootAccountId,
         chatwootApiKey: input.chatwootApiKey,
+        googleClientId: input.googleClientId,
+        googleClientSecret: input.googleClientSecret,
+        googleRedirectUri: input.googleRedirectUri,
       },
     });
 
@@ -160,6 +166,9 @@ class AccountService {
         chatwootBaseUrl: input.chatwootBaseUrl,
         chatwootAccountId: input.chatwootAccountId,
         chatwootApiKey: input.chatwootApiKey,
+        googleClientId: input.googleClientId,
+        googleClientSecret: input.googleClientSecret,
+        googleRedirectUri: input.googleRedirectUri,
       },
     });
 
