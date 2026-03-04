@@ -1,7 +1,7 @@
 import { prisma } from '../config/database';
 import { CalendarEventType, CalendarEventStatus } from '@prisma/client';
 import { PaginationParams, DateRangeFilter } from '../types';
-import { NotFoundError } from '../utils/errors';
+import { NotFoundError, AppError } from '../utils/errors';
 import { getPaginationMeta } from '../utils/helpers';
 import { env } from '../config/env';
 
@@ -191,7 +191,7 @@ class CalendarService {
    */
   getGoogleAuthUrl(accountId: string): string {
     if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_REDIRECT_URI) {
-      throw new Error('Google Calendar não configurado');
+      throw new AppError('Google Calendar não configurado no servidor. Configure GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET e GOOGLE_REDIRECT_URI.', 422, 'GOOGLE_NOT_CONFIGURED');
     }
 
     const scopes = [
@@ -216,7 +216,7 @@ class CalendarService {
    */
   async handleGoogleCallback(code: string, accountId: string) {
     if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET || !env.GOOGLE_REDIRECT_URI) {
-      throw new Error('Google Calendar não configurado');
+      throw new AppError('Google Calendar não configurado no servidor. Configure GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET e GOOGLE_REDIRECT_URI.', 422, 'GOOGLE_NOT_CONFIGURED');
     }
 
     // Exchange code for tokens
@@ -404,7 +404,7 @@ class CalendarService {
 
   private async refreshGoogleToken(accountId: string, refreshToken: string): Promise<string> {
     if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
-      throw new Error('Google Calendar não configurado');
+      throw new AppError('Google Calendar não configurado no servidor. Configure GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET.', 422, 'GOOGLE_NOT_CONFIGURED');
     }
 
     const response = await fetch('https://oauth2.googleapis.com/token', {

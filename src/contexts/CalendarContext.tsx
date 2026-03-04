@@ -304,8 +304,9 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
       console.error('Connect error:', error);
       setConnection(defaultConnection);
       
-      const msg = error?.message || error?.response?.data?.error?.message || '';
-      if (msg.includes('não configurado') || msg.includes('not configured')) {
+      const code = error?.response?.data?.error?.code || error?.code || '';
+      const msg = error?.response?.data?.error?.message || error?.message || '';
+      if (code === 'GOOGLE_NOT_CONFIGURED' || msg.includes('não configurado') || msg.includes('not configured')) {
         toast.error('Google Calendar ainda não foi configurado pelo administrador do sistema. Entre em contato com o suporte.');
       } else {
         toast.error(msg || 'Erro ao conectar com Google Calendar');
