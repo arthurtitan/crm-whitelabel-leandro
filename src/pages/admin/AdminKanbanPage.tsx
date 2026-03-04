@@ -51,8 +51,7 @@ import {
   ExternalLink,
   Upload,
 } from 'lucide-react';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { safeFormatDateBR } from '@/utils/dateUtils';
 import { toast } from 'sonner';
 import { tagsCloudService, type Tag as CloudTag, type LeadTag } from '@/services/tags.cloud.service';
 import { tagsBackendService } from '@/services/tags.backend.service';
@@ -814,7 +813,7 @@ export default function AdminKanbanPage() {
                   <div>
                     <p className="text-sm text-muted-foreground">Criado em</p>
                     <p className="font-medium">
-                      {format(new Date(selectedLead.created_at), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+                      {safeFormatDateBR(selectedLead.created_at, "dd 'de' MMMM 'de' yyyy")}
                     </p>
                   </div>
                 </div>

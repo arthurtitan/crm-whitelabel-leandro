@@ -56,8 +56,7 @@ import {
   Eye,
   ExternalLink,
 } from 'lucide-react';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { safeFormatDateBR } from '@/utils/dateUtils';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useBackend } from '@/config/backend.config';
@@ -380,7 +379,7 @@ export default function AdminLeadsPage() {
                       )}
                     </TableCell>
                     <TableCell className="text-muted-foreground hidden sm:table-cell">
-                      {format(new Date(contact.created_at), 'dd/MM/yyyy', { locale: ptBR })}
+                      {safeFormatDateBR(contact.created_at, 'dd/MM/yyyy')}
                     </TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>

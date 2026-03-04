@@ -47,6 +47,7 @@ import {
 } from 'lucide-react';
 import { format, subDays, isAfter, differenceInMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { safeFormatDateBR } from '@/utils/dateUtils';
 import { cn } from '@/lib/utils';
 
 interface UserPerformance {
@@ -199,7 +200,7 @@ export default function AdminEventsPage() {
       }
 
       const perf = performanceMap.get(event.actor_id)!;
-      const dayKey = format(new Date(event.created_at), 'yyyy-MM-dd');
+      const dayKey = safeFormatDateBR(event.created_at, 'yyyy-MM-dd') || 'unknown';
 
       switch (event.event_type) {
         case 'auth.login.success':
@@ -452,7 +453,7 @@ export default function AdminEventsPage() {
                               {status.lastEventTime ? (
                                 <>
                                   <p className="text-sm text-muted-foreground">
-                                    {format(status.lastEventTime, "dd/MM 'às' HH:mm", { locale: ptBR })}
+                                    {safeFormatDateBR(status.lastEventTime, "dd/MM 'às' HH:mm")}
                                   </p>
                                   <p className="text-xs text-muted-foreground">
                                     Último acesso
@@ -478,7 +479,7 @@ export default function AdminEventsPage() {
                         ) : (
                           <div className="text-sm text-muted-foreground">
                             {status.lastEventTime ? (
-                              <span>Último acesso: {format(status.lastEventTime, "dd/MM 'às' HH:mm", { locale: ptBR })}</span>
+                              <span>Último acesso: {safeFormatDateBR(status.lastEventTime, "dd/MM 'às' HH:mm")}</span>
                             ) : (
                               <span>Sem atividade recente</span>
                             )}
@@ -583,9 +584,7 @@ export default function AdminEventsPage() {
                               <div className="flex flex-col items-end gap-1 text-xs text-muted-foreground">
                                 <div className="flex items-center gap-1.5">
                                   <Clock className="w-3 h-3" />
-                                  {format(new Date(event.created_at), "dd/MM/yyyy 'às' HH:mm:ss", {
-                                    locale: ptBR,
-                                  })}
+                                  {safeFormatDateBR(event.created_at, "dd/MM/yyyy 'às' HH:mm:ss")}
                                 </div>
                               </div>
                             </div>

@@ -43,8 +43,7 @@ import {
   CheckCircle2,
   XCircle,
 } from 'lucide-react';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { safeFormatDateBR } from '@/utils/dateUtils';
 import { toast } from 'sonner';
 
 type AccountStatus = 'active' | 'paused' | 'cancelled';
@@ -429,7 +428,7 @@ export default function SuperAdminAccountDetailPage() {
                 Criado em
               </span>
               <span className="font-medium">
-                {format(new Date(account.created_at), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+                {safeFormatDateBR(account.created_at, "dd 'de' MMMM 'de' yyyy")}
               </span>
             </div>
             <div className="flex items-center justify-between py-2 border-b border-border/50">
@@ -437,7 +436,7 @@ export default function SuperAdminAccountDetailPage() {
                 <Clock className="w-4 h-4" />
                 Hora de criação
               </span>
-              <span>{format(new Date(account.created_at), 'HH:mm:ss', { locale: ptBR })}</span>
+              <span>{safeFormatDateBR(account.created_at, 'HH:mm:ss')}</span>
             </div>
             <div className="flex items-center justify-between py-2 border-b border-border/50">
               <span className="text-muted-foreground flex items-center gap-2">
@@ -445,7 +444,7 @@ export default function SuperAdminAccountDetailPage() {
                 Última atualização
               </span>
               <span className="font-medium">
-                {format(new Date(account.updated_at), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+                {safeFormatDateBR(account.updated_at, "dd 'de' MMMM 'de' yyyy")}
               </span>
             </div>
             <div className="flex items-center justify-between py-2 border-b border-border/50">
@@ -453,7 +452,7 @@ export default function SuperAdminAccountDetailPage() {
                 <Clock className="w-4 h-4" />
                 Hora da atualização
               </span>
-              <span>{format(new Date(account.updated_at), 'HH:mm:ss', { locale: ptBR })}</span>
+              <span>{safeFormatDateBR(account.updated_at, 'HH:mm:ss')}</span>
             </div>
           </CardContent>
         </Card>
