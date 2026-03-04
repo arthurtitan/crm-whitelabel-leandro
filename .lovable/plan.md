@@ -1,62 +1,76 @@
 
 
-## Diagnóstico Completo
+## Diagnóstico Definitivo — Causa Raiz Encontrada
 
-### Problema 1: Variáveis Google vazias
-
-A saída do debug confirma:
-```
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-GOOGLE_REDIRECT_URI=
-```
-
-As variáveis EXISTEM no ambiente do EasyPanel (você confirmou com valores corretos), mas chegam **vazias** no container. O mecanismo:
+### A Prova Está nos Logs
 
 ```text
-1. EasyPanel armazena as variáveis
-2. docker-compose.yml tem: GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
-3. Compose interpola ${GOOGLE_CLIENT_ID:-} → "" (vazio, pois a var não está disponível no contexto de interpolação)
-4. O valor "" é escrito no environment do container
-5. EasyPanel TAMBÉM tenta injetar via Docker API, mas o valor "" do compose TEM PRIORIDADE
-6. Container recebe GOOGLE_CLIENT_ID="" (vazio)
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REDIRECT_URI=http://localhost:3000/api/calendar/google/callback
 ```
 
-Prova: `JWT_SECRET` funciona porque foi configurado ANTES do deploy ou porque o EasyPanel trata diferentemente variáveis com valor default vs. default vazio.
+A `GOOGLE_REDIRECT_URI` mostra `http://localhost:3000/...` — esse valor **não vem do EasyPanel** (onde você configurou `https://360.gleps.com.br/...`). Esse valor vem do arquivo `backend/.env` que está dentro do repositório:
 
-**Correção definitiva**: Remover GOOGLE_* da seção `environment` do compose. Assim, o compose não sobrescreve com vazio, e o EasyPanel injeta diretamente os valores via Docker API.
+```text
+# backend/.env (linha 33)
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REDIRECT_URI=http://localhost:3000/api/calendar/google/callback
+```
 
-### Problema 2: Loop de renderização na Agenda
+### O Que Acontece
 
-Os logs mostram `GET /admin/agenda` sendo requisitado a cada ~200ms — são recarregamentos completos da página, não apenas re-renders do React.
+Na última alteração, adicionamos `env_file: ./backend/.env` ao `docker-compose.yml`. O Docker Compose carrega esse arquivo **primeiro**, e como ele contém `GOOGLE_CLIENT_ID=` (vazio) e `GOOGLE_REDIRECT_URI=http://localhost:3000/...`, esses valores sobrescrevem qualquer coisa que o EasyPanel tente injetar.
 
-Após análise extensiva do código (AdminAgendaPage, CalendarContext, ProtectedRoute, BackendAuthProvider, ErrorBoundary, App.tsx), não encontrei uma causa óbvia no código-fonte. A correção anterior (remover `useSearchParams`) está correta, mas preciso confirmar que o **build de produção** inclui essa mudança.
+```text
+Ordem de prioridade (Docker Compose):
+1. environment: (seção do compose) → mais alta
+2. env_file: → segunda  
+3. Docker API (EasyPanel) → mais baixa
 
-Duas hipóteses restantes:
-- O build do frontend no Docker está usando cache e não inclui as últimas alterações
-- Há uma exceção em runtime no CalendarView que causa crash silencioso e reload
+Resultado:
+- GOOGLE_CLIENT_ID="" (do backend/.env via env_file) → sobrescreve EasyPanel
+- GOOGLE_REDIRECT_URI="http://localhost:3000/..." (do backend/.env) → sobrescreve EasyPanel
+```
 
-## Plano de Correção
+### Consequência Crítica: Backend em Loop
 
-### 1. `docker-compose.yml` — Remover Google vars do environment
+Como `GOOGLE_REDIRECT_URI` tem valor (do .env local) mas `GOOGLE_CLIENT_ID` está vazio, o script detecta "configuração parcial" (1/3) e faz `exit 1`. O Docker reinicia o container infinitamente por causa do `restart: unless-stopped`.
 
-Remover as 3 linhas de GOOGLE_* da seção `environment:` do backend. O EasyPanel as injetará diretamente via Docker API sem serem sobrescritas pelo compose.
+### Plano de Correção
 
-Para desenvolvimento local, adicionar `env_file: .env` (opcional) para que o Docker Compose passe as variáveis do `.env` diretamente para o container.
+#### 1. `docker-compose.yml` — Remover env_file E adicionar GOOGLE vars de volta
 
-### 2. `Dockerfile.frontend` — Forçar build sem cache
+A diretiva `env_file` foi a causa direta. Removê-la e re-adicionar as variáveis Google na seção `environment:` — mas **sem default vazio** para que o EasyPanel possa injetá-las. Usar a mesma sintaxe das outras variáveis que funcionam (como JWT_SECRET):
 
-Adicionar um `ARG CACHEBUST` para garantir que o frontend é reconstruído com o código mais recente em cada deploy.
+```yaml
+# Remover:
+env_file:
+  - path: ./backend/.env
+    required: false
 
-### 3. `CalendarContext.tsx` — Guard contra re-inicialização
+# Na seção environment, adicionar:
+GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
+```
 
-Adicionar um `useRef` para prevenir que o `useEffect` de inicialização execute mais de uma vez, mesmo que as dependências mudem por alguma razão em produção.
+**Porém**, isso já tentamos antes e não funcionou. A razão é que as variáveis do EasyPanel são definidas no nível do **app Compose**, onde o Compose as interpola. Se o EasyPanel disponibiliza as variáveis para interpolação do YAML, `${GOOGLE_CLIENT_ID:-}` deveria funcionar — e de fato **agora sabemos que o problema era o env_file sobrescrevendo**. Com o env_file removido, a interpolação `${VAR:-}` deve funcionar corretamente.
+
+#### 2. `backend/.env` — Remover variáveis Google
+
+Para evitar que o arquivo `.env` (que é commitado no repo) interfira em produção, remover as linhas `GOOGLE_*` dele. O desenvolvimento local usará variáveis de ambiente do shell ou um `.env.local` não commitado.
+
+#### 3. `start.sh` — Não fazer exit 1 em configuração parcial
+
+Como medida de segurança adicional, trocar o `exit 1` por um **warning** quando há configuração parcial. Assim o backend sempre inicia, mesmo com Google parcialmente configurado (a funcionalidade Google simplesmente não funcionará).
 
 ### Arquivos a alterar
 
 | Arquivo | Alteração |
 |---------|-----------|
-| `docker-compose.yml` | Remover GOOGLE_* do `environment`, adicionar `env_file` |
-| `Dockerfile.frontend` | Adicionar `ARG CACHEBUST` antes do build step |
-| `src/contexts/CalendarContext.tsx` | Adicionar guard ref na inicialização |
+| `docker-compose.yml` | Remover `env_file`, re-adicionar `GOOGLE_*: ${VAR:-}` no environment |
+| `backend/.env` | Remover linhas GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI |
+| `backend/scripts/start.sh` | Trocar `exit 1` por warning na validação parcial do Google |
 
