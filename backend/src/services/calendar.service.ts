@@ -292,19 +292,42 @@ class CalendarService {
   }
 
   /**
+   * Check if Google Calendar environment is fully configured
+   */
+  getGoogleConfigStatus(): { configured: boolean; missing: string[] } {
+    const missing: string[] = [];
+    if (!env.GOOGLE_CLIENT_ID) missing.push('GOOGLE_CLIENT_ID');
+    if (!env.GOOGLE_CLIENT_SECRET) missing.push('GOOGLE_CLIENT_SECRET');
+    if (!env.GOOGLE_REDIRECT_URI) missing.push('GOOGLE_REDIRECT_URI');
+    return { configured: missing.length === 0, missing };
+  }
+
+  /**
    * Get Google Calendar connection status
    */
   async getGoogleStatus(accountId: string) {
+    const configStatus = this.getGoogleConfigStatus();
+
+    if (!configStatus.configured) {
+      return {
+        connected: false,
+        configured: false,
+        missing: configStatus.missing,
+      };
+    }
+
     const token = await prisma.googleCalendarToken.findUnique({
       where: { accountId },
     });
 
     if (!token) {
-      return { connected: false };
+      return { connected: false, configured: true, missing: [] };
     }
 
     return {
       connected: true,
+      configured: true,
+      missing: [],
       email: token.connectedEmail,
       expiresAt: token.expiresAt,
       needsReauth: token.expiresAt < new Date(),

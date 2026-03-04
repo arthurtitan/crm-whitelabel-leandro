@@ -22,6 +22,8 @@ interface CalendarContextType {
   isConnected: boolean;
   isLoading: boolean;
   isInitialized: boolean; // true after initial load completes
+  googleConfigured: boolean; // true if server has all Google env vars
+  googleMissing: string[]; // list of missing env var names
   
   // Events
   events: CalendarEvent[];
@@ -88,6 +90,8 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
   const [viewMode, setViewMode] = useState<CalendarViewMode>('week');
   const [isLoading, setIsLoading] = useState(true);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [googleConfigured, setGoogleConfigured] = useState(true);
+  const [googleMissing, setGoogleMissing] = useState<string[]>([]);
 
   const isConnected = connection.status === 'connected';
 
@@ -163,6 +167,8 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
     try {
       if (useBackend) {
         const status = await calendarBackendService.getGoogleStatus();
+        setGoogleConfigured(status.configured ?? true);
+        setGoogleMissing(status.missing ?? []);
         if (status.needsReauth) {
           setConnection({ ...defaultConnection, status: 'error', email: status.email });
         } else if (status.connected) {
@@ -586,6 +592,8 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
     isConnected,
     isLoading,
     isInitialized,
+    googleConfigured,
+    googleMissing,
     events,
     selectedEvent,
     currentDate,
@@ -613,6 +621,8 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
     isConnected,
     isLoading,
     isInitialized,
+    googleConfigured,
+    googleMissing,
     events,
     selectedEvent,
     currentDate,

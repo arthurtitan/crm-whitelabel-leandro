@@ -24,7 +24,9 @@ export default function AdminAgendaPage() {
     connectGoogle, 
     disconnectGoogle, 
     syncNow,
-    checkConnectionStatus 
+    checkConnectionStatus,
+    googleConfigured,
+    googleMissing,
   } = useCalendar();
   
   const [showConnectModal, setShowConnectModal] = useState(false);
@@ -155,7 +157,12 @@ export default function AdminAgendaPage() {
           </p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          {!isEffectivelyConnected ? (
+          {!googleConfigured ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+              <span>Google Calendar não configurado no servidor</span>
+            </div>
+          ) : !isEffectivelyConnected ? (
             <Button
               variant={hasError ? "destructive" : "outline"}
               size="sm"
