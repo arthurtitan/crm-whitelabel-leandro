@@ -84,7 +84,26 @@ else
     echo "⏭️  Seed desabilitado (RUN_SEED=false)"
 fi
 
-# ---- 4. Iniciar servidor ----
+# ---- 4. Diagnóstico de variáveis Google ----
+echo ""
+echo "🔍 Diagnóstico Google Calendar:"
+if [ -n "$GOOGLE_CLIENT_ID" ]; then
+    echo "   ✅ GOOGLE_CLIENT_ID presente (${#GOOGLE_CLIENT_ID} chars)"
+else
+    echo "   ❌ GOOGLE_CLIENT_ID vazia ou ausente"
+fi
+if [ -n "$GOOGLE_CLIENT_SECRET" ]; then
+    echo "   ✅ GOOGLE_CLIENT_SECRET presente (${#GOOGLE_CLIENT_SECRET} chars)"
+else
+    echo "   ❌ GOOGLE_CLIENT_SECRET vazia ou ausente"
+fi
+if [ -n "$GOOGLE_REDIRECT_URI" ]; then
+    echo "   ✅ GOOGLE_REDIRECT_URI = $GOOGLE_REDIRECT_URI"
+else
+    echo "   ❌ GOOGLE_REDIRECT_URI vazia ou ausente"
+fi
+
+# ---- 5. Iniciar servidor ----
 echo ""
 echo "🚀 Iniciando servidor..."
 exec node dist/server.js
