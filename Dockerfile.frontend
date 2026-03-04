@@ -24,6 +24,9 @@ RUN npm install
 # Copy source code
 COPY . .
 
+# Cache bust to force rebuild
+ARG CACHEBUST=1
+
 # Build the application
 RUN npm run build
 
