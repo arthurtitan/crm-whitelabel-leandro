@@ -43,7 +43,7 @@ model Account {
   funnels             Funnel[]
   calendarEvents      CalendarEvent[]
   events              Event[]
-  googleCalendarToken GoogleCalendarToken?
+  googleCalendarTokens GoogleCalendarToken[]
 
   @@index([status])
   @@map("accounts")
