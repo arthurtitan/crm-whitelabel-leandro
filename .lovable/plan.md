@@ -1,66 +1,43 @@
 
 
-## Correção: Páginas em branco na navegação interna
+## Correção: Página Insights crashando — `Cannot read properties of undefined (reading 'split')`
 
 ### Causa raiz
 
-O sistema **não possui Error Boundary** (React). Qualquer erro JavaScript durante a renderização derruba toda a árvore de componentes, resultando em página em branco sem feedback visual.
-
-Os logs do backend mostram respostas 200/304 normais — o problema é **exclusivamente no frontend**.
-
-### Ponto de crash confirmado
-
-**`src/pages/admin/AdminLeadsPage.tsx` linha 383:**
-```typescript
-{format(new Date(contact.created_at), 'dd/MM/yyyy', { locale: ptBR })}
-```
-Se qualquer contato tiver `created_at` como `null`, `undefined` ou formato inválido, `date-fns format()` lança uma exceção que derruba a página inteira.
-
-O mesmo padrão inseguro existe em mais 5 arquivos (50 ocorrências no total).
-
-### Plano de correção
-
-#### 1. Criar componente ErrorBoundary
-**Novo arquivo:** `src/components/ErrorBoundary.tsx`
-
-Componente React class que captura erros de renderização e exibe UI de recuperação ("Tentar novamente") em vez de tela branca.
-
-#### 2. Criar helper de formatação segura de datas
-**Novo arquivo:** `src/utils/dateUtils.ts`
+A função `getInitials` na linha 635 de `AdminInsightsPage.tsx` recebe `name` como `undefined` quando algum perfil de agente tem `nome` nulo no banco de dados.
 
 ```typescript
-export function safeFormatDate(date: string | number | Date | null | undefined, fmt: string, options?: { locale?: Locale }): string {
-  if (!date) return '-';
-  try {
-    const d = date instanceof Date ? date : new Date(date);
-    if (isNaN(d.getTime())) return '-';
-    return format(d, fmt, options);
-  } catch { return '-'; }
-}
+// ATUAL — crasha com nome undefined
+const getInitials = (name: string) => {
+    return name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+};
 ```
 
-#### 3. Aplicar ErrorBoundary nas rotas
-**Arquivo:** `src/App.tsx`
+### Correção
 
-Envolver cada rota admin e super-admin com `<ErrorBoundary>` para que crashes fiquem contidos por página.
+Adicionar fallback defensivo na função `getInitials`:
 
-#### 4. Substituir `format(new Date(...))` inseguro em todas as páginas
+```typescript
+const getInitials = (name: string) => {
+    if (!name) return '??';
+    return name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+};
+```
 
-| Arquivo | Linhas afetadas |
-|---------|----------------|
-| `src/pages/admin/AdminLeadsPage.tsx` | L383 |
-| `src/pages/admin/AdminKanbanPage.tsx` | L817 |
-| `src/pages/admin/AdminEventsPage.tsx` | L202, L455, L481, L586 |
-| `src/pages/super-admin/SuperAdminAccountsPage.tsx` | L856 |
-| `src/pages/super-admin/SuperAdminAccountDetailPage.tsx` | L432, L440, L448, L456 |
-| `src/pages/super-admin/SuperAdminUsersPage.tsx` | L776 |
+E também proteger o `agent.name` no ranking para nunca ser undefined:
 
-Todas as chamadas `format(new Date(x), ...)` serão substituídas por `safeFormatDate(x, ...)`.
+```typescript
+// Linha 454 — adicionar fallback
+name: profile.nome || profile.email || 'Sem nome',
+```
 
-### Resultado esperado
+### Arquivo alterado
 
-- Nenhuma página fica em branco — erros mostram UI de recuperação
-- Datas inválidas exibem "-" em vez de crashar
-- Navegação entre todas as páginas admin funciona normalmente
-- Zero impacto em dados válidos — formatação idêntica quando os dados existem
+| Arquivo | Alteração |
+|---------|-----------|
+| `src/pages/admin/AdminInsightsPage.tsx` | Fallback em `getInitials` (L635) + fallback em `profile.nome` (L454) |
+
+### Resultado
+
+A página Insights carrega normalmente mesmo com perfis sem nome cadastrado.
 
