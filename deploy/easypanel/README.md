@@ -19,7 +19,9 @@
 
 ### 2. Configurar Variáveis de Ambiente
 
-No painel do EasyPanel, vá em **Environment Variables** e configure todas as variáveis listadas em `.env.example`.
+Crie um arquivo `.env` **no mesmo diretório** do `docker-compose.yml` utilizado pelo EasyPanel, com todas as variáveis listadas em `.env.example`.
+
+> ⚠️ **IMPORTANTE**: As variáveis `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` e `GOOGLE_REDIRECT_URI` são injetadas via `env_file` (não pela seção `environment:` do compose). Isso evita que o Compose resolva `${VAR}` para string vazia quando o `.env` não está no diretório de execução.
 
 **⚠️ OBRIGATÓRIAS (o app não sobe sem elas):**
 
