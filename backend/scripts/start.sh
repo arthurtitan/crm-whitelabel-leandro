@@ -119,12 +119,12 @@ fi
 # Validação de consistência: parcial = erro fatal
 if [ "$GOOGLE_VARS_SET" -gt 0 ] && [ "$GOOGLE_VARS_SET" -lt 3 ]; then
     echo ""
-    echo "🚫 ERRO FATAL: Configuração parcial do Google Calendar!"
+    echo "⚠️  AVISO: Configuração parcial do Google Calendar!"
     echo "   Variáveis presentes: $GOOGLE_VARS_SET/3"
     echo "   Faltando:$GOOGLE_VARS_MISSING"
     echo "   Todas as 3 variáveis devem estar configuradas ou nenhuma."
-    echo "   Corrija no painel de variáveis de ambiente e faça rebuild."
-    exit 1
+    echo "   Google Calendar ficará DESABILITADO até a correção."
+    echo "   📅 Google Calendar: desabilitado (configuração incompleta)"
 elif [ "$GOOGLE_VARS_SET" -eq 3 ]; then
     echo "   📅 Google Calendar: totalmente configurado ✅"
 else
