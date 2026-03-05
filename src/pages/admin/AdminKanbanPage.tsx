@@ -354,13 +354,31 @@ export default function AdminKanbanPage() {
     if (!deleteConfirmStage) return;
 
     try {
-      await tagsService.deleteTag(deleteConfirmStage.id);
+      const options: { force?: boolean; migrateToId?: string } = {};
+      if (deleteHasLeads) {
+        options.force = true;
+        if (deleteForceMode === 'migrate' && deleteMigrateToId) {
+          options.migrateToId = deleteMigrateToId;
+        }
+      }
+      await tagsService.deleteTag(deleteConfirmStage.id, options);
       toast.success(`Etapa "${deleteConfirmStage.name}" excluída!`);
       fetchTagsData(false);
+      if (deleteHasLeads && deleteForceMode === 'migrate') {
+        refetchContacts();
+      }
     } catch (error: any) {
+      if (error.message?.includes('leads') || error.message?.includes('TAG_HAS_LEADS')) {
+        // Show force options
+        setDeleteHasLeads(true);
+        return;
+      }
       toast.error(error.message || 'Erro ao excluir etapa');
     }
     setDeleteConfirmStage(null);
+    setDeleteHasLeads(false);
+    setDeleteForceMode(null);
+    setDeleteMigrateToId('');
   };
 
   const getInitials = (name: string | null) => {
