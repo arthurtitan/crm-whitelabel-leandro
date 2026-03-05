@@ -86,6 +86,9 @@ export default function AdminKanbanPage() {
   const [dragOverStage, setDragOverStage] = useState<string | null>(null);
   const [saleContactId, setSaleContactId] = useState<string | null>(null);
   const [deleteConfirmStage, setDeleteConfirmStage] = useState<CloudTag | null>(null);
+  const [deleteHasLeads, setDeleteHasLeads] = useState(false);
+  const [deleteMigrateToId, setDeleteMigrateToId] = useState<string>('');
+  const [deleteForceMode, setDeleteForceMode] = useState<'migrate' | 'detach' | null>(null);
   const [isSyncingChatwoot, setIsSyncingChatwoot] = useState(false);
   const [isPushingLabels, setIsPushingLabels] = useState(false);
   const [isCreatingTemplate, setIsCreatingTemplate] = useState(false);
