@@ -1,48 +1,42 @@
 
 
-## Problema
+## Diagnóstico final
 
-O erro **"Invalid time value"** ocorre no `LeadCard.tsx` (linha 146) ao tentar formatar a data:
+O `env_file: - .env` não funciona no EasyPanel porque ele **não monta** um arquivo `.env` no filesystem do container — ele injeta variáveis via Docker API. Porém, as variáveis declaradas na seção `environment` do Compose (com interpolação `${}`) têm **prioridade** e são resolvidas em build-time pelo Compose, onde as vars Google não existem, resultando em strings vazias.
 
-```typescript
-format(new Date(lead.updated_at), 'dd/MM', { locale: ptBR })
+A solução definitiva: hardcodar as credenciais Google diretamente no `environment` do Compose.
+
+## Alterações
+
+**Arquivo: `docker-compose.yml`** — adicionar as 3 variáveis Google com valores literais na seção `environment` do backend (após `LOG_LEVEL`):
+
+```yaml
+GOOGLE_CLIENT_ID: "231653132408-iv5b27dlf72ekmbvmviuevcruc6kqs8m.apps.googleusercontent.com"
+GOOGLE_CLIENT_SECRET: "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"
+GOOGLE_REDIRECT_URI: "https://360.gleps.com.br/api/calendar/google/callback"
 ```
 
-O backend Express/Prisma retorna os campos em **camelCase** (`updatedAt`, `createdAt`, `accountId`, `chatwootContactId`), mas o frontend espera **snake_case** (`updated_at`, `created_at`, `account_id`). Como `lead.updated_at` é `undefined`, `new Date(undefined)` gera um `Invalid Date` e `format()` lança a exceção.
+**Seu `.env` no EasyPanel deve ficar assim** (pode remover as 3 linhas do Google já que agora estão no Compose):
 
-## Correção
-
-### 1. `src/services/finance.backend.service.ts` — método `fetchContacts`
-
-Mapear os campos da resposta do backend de camelCase para snake_case, conforme a interface `Contact`:
-
-```typescript
-fetchContacts: async (accountId: string): Promise<Contact[]> => {
-  const res = await apiClient.get<ApiResponse<any[]>>(API_ENDPOINTS.CONTACTS.LIST);
-  return (res.data || []).map(c => ({
-    id: c.id,
-    account_id: c.accountId || c.account_id,
-    nome: c.nome,
-    telefone: c.telefone,
-    email: c.email,
-    origem: c.origem,
-    chatwoot_contact_id: c.chatwootContactId ?? c.chatwoot_contact_id ?? null,
-    chatwoot_conversation_id: c.chatwootConversationId ?? c.chatwoot_conversation_id ?? null,
-    created_at: c.createdAt || c.created_at,
-    updated_at: c.updatedAt || c.updated_at,
-  }));
-},
+```
+DB_USER=gleps
+DB_PASSWORD=SenhaForte2024!
+DB_NAME=gleps_crm
+FRONTEND_URL=https://360.gleps.com.br
+API_URL=http://backend:3000
+CORS_ORIGINS=https://360.gleps.com.br
+JWT_SECRET=k8Tj3mZvPqR7xYwN2sLfA9bCdEgHiKoU4nVrXuWyQ1M
+JWT_EXPIRES_IN=1h
+REFRESH_TOKEN_SECRET=Bp5GnSx8WqLm3TvRj7YcKfA2dHuE9oZiN6rXwMkJ4Qs
+REFRESH_TOKEN_EXPIRES_IN=7d
+BCRYPT_SALT_ROUNDS=12
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX=100
+BACKEND_UPSTREAM=backend:3000
+RUN_SEED=true
+LOG_LEVEL=info
+CHATWOOT_WEBHOOK_SECRET=
 ```
 
-### 2. `src/components/kanban/LeadCard.tsx` — linha 146
-
-Trocar `format(new Date(...))` por `safeFormatDateBR` para proteger contra datas inválidas:
-
-```typescript
-import { safeFormatDateBR } from '@/utils/dateUtils';
-// ...
-{safeFormatDateBR(lead.updated_at, 'dd/MM')}
-```
-
-A correção 1 resolve a causa raiz (mapeamento de campos). A correção 2 adiciona proteção defensiva para evitar crashes futuros caso algum campo de data venha nulo.
+As credenciais Google ficam no Compose (valores fixos, sem interpolação). Depois de mudar de domínio ou credenciais, basta atualizar o Compose e fazer rebuild.
 

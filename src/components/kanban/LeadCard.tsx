@@ -12,8 +12,7 @@ import {
   Check,
   RotateCcw,
 } from 'lucide-react';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { safeFormatDateBR } from '@/utils/dateUtils';
 import { cn } from '@/lib/utils';
 
 interface KanbanLead extends Contact {
@@ -143,7 +142,7 @@ export function LeadCard({ lead, stage, isDragging, isNew, onClick, onDragStart,
             {getOriginBadge(lead.origem)}
             <span className="text-[11px] text-muted-foreground flex items-center gap-1 flex-shrink-0">
               <Clock className="w-3 h-3" />
-              {format(new Date(lead.updated_at), 'dd/MM', { locale: ptBR })}
+              {safeFormatDateBR(lead.updated_at, 'dd/MM')}
             </span>
           </div>
         </div>

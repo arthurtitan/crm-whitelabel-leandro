@@ -72,8 +72,20 @@ export const financeBackendService = {
   // --- Contacts ---
 
   fetchContacts: async (accountId: string): Promise<Contact[]> => {
-    const res = await apiClient.get<ApiResponse<Contact[]>>(API_ENDPOINTS.CONTACTS.LIST);
-    return res.data || [];
+    const res = await apiClient.get<ApiResponse<any[]>>(API_ENDPOINTS.CONTACTS.LIST);
+    return (res.data || []).map(c => ({
+      id: c.id,
+      account_id: c.accountId || c.account_id,
+      nome: c.nome,
+      telefone: c.telefone,
+      email: c.email,
+      origem: c.origem,
+      chatwoot_contact_id: c.chatwootContactId ?? c.chatwoot_contact_id ?? null,
+      chatwoot_conversation_id: c.chatwootConversationId ?? c.chatwoot_conversation_id ?? null,
+      first_resolved_at: c.firstResolvedAt || c.first_resolved_at || null,
+      created_at: c.createdAt || c.created_at,
+      updated_at: c.updatedAt || c.updated_at,
+    }));
   },
 
   createContact: async (accountId: string, data: {
