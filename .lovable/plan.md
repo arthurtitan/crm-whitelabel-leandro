@@ -1,50 +1,42 @@
 
 
-## Análise
+## Diagnóstico final
 
-Hardcodar credenciais no `docker-compose.yml` funciona em qualquer lugar (EasyPanel, VPS, AWS, etc.), mas tem um problema: **segredos ficam versionados no Git**. Se o repositório for compartilhado ou se tornar público, as credenciais ficam expostas.
+O `env_file: - .env` não funciona no EasyPanel porque ele **não monta** um arquivo `.env` no filesystem do container — ele injeta variáveis via Docker API. Porém, as variáveis declaradas na seção `environment` do Compose (com interpolação `${}`) têm **prioridade** e são resolvidas em build-time pelo Compose, onde as vars Google não existem, resultando em strings vazias.
 
-## Solução universal (sem hardcode, funciona em qualquer orquestrador)
+A solução definitiva: hardcodar as credenciais Google diretamente no `environment` do Compose.
 
-A abordagem portátil é usar a diretiva `env_file` no Compose, que carrega variáveis de um arquivo `.env` local e as injeta no container **diretamente** — sem passar pela interpolação `${}` que causa o problema no EasyPanel.
+## Alterações
 
-**Arquivo: `docker-compose.yml`** — no serviço `backend`, adicionar `env_file` e remover qualquer referência direta às variáveis Google:
+**Arquivo: `docker-compose.yml`** — adicionar as 3 variáveis Google com valores literais na seção `environment` do backend (após `LOG_LEVEL`):
 
 ```yaml
-backend:
-  build:
-    context: ./backend
-    dockerfile: Dockerfile
-  restart: unless-stopped
-  env_file:
-    - .env          # <-- carrega TODAS as vars do .env direto no container
-  environment:
-    # Apenas overrides que precisam de interpolação Compose:
-    NODE_ENV: ${NODE_ENV:-production}
-    PORT: "3000"
-    DATABASE_URL: postgresql://${DB_USER:-gleps}:${DB_PASSWORD:-gleps_secret}@postgres:5432/${DB_NAME:-gleps_crm}?schema=public
-    API_URL: ${API_URL:-http://backend:3000}
-    FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
-    CORS_ORIGINS: ${CORS_ORIGINS:-}
-    # ... demais vars que precisam de defaults Compose
+GOOGLE_CLIENT_ID: "231653132408-iv5b27dlf72ekmbvmviuevcruc6kqs8m.apps.googleusercontent.com"
+GOOGLE_CLIENT_SECRET: "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"
+GOOGLE_REDIRECT_URI: "https://360.gleps.com.br/api/calendar/google/callback"
 ```
 
-Com `env_file`, todas as variáveis do `.env` (incluindo `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`) são injetadas diretamente no container. As variáveis em `environment` têm prioridade sobre `env_file`, então os defaults do Compose continuam funcionando para as que precisam de interpolação (como `DATABASE_URL`).
+**Seu `.env` no EasyPanel deve ficar assim** (pode remover as 3 linhas do Google já que agora estão no Compose):
 
-**Compatibilidade:**
-- **Local**: `.env` na raiz com as credenciais → funciona
-- **EasyPanel**: `.env` gerado pela UI ou injetado → funciona
-- **Qualquer VPS/cloud**: basta ter um `.env` ao lado do `docker-compose.yml` → funciona
-- **CI/CD**: variáveis de pipeline geram `.env` antes do deploy → funciona
-
-**Arquivo: `.env.example`** — atualizar para documentar as variáveis Google:
-
-```env
-# Google Calendar (opcional)
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-GOOGLE_REDIRECT_URI=https://seu-dominio.com/api/calendar/google/callback
+```
+DB_USER=gleps
+DB_PASSWORD=SenhaForte2024!
+DB_NAME=gleps_crm
+FRONTEND_URL=https://360.gleps.com.br
+API_URL=http://backend:3000
+CORS_ORIGINS=https://360.gleps.com.br
+JWT_SECRET=k8Tj3mZvPqR7xYwN2sLfA9bCdEgHiKoU4nVrXuWyQ1M
+JWT_EXPIRES_IN=1h
+REFRESH_TOKEN_SECRET=Bp5GnSx8WqLm3TvRj7YcKfA2dHuE9oZiN6rXwMkJ4Qs
+REFRESH_TOKEN_EXPIRES_IN=7d
+BCRYPT_SALT_ROUNDS=12
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX=100
+BACKEND_UPSTREAM=backend:3000
+RUN_SEED=true
+LOG_LEVEL=info
+CHATWOOT_WEBHOOK_SECRET=
 ```
 
-Nenhuma credencial fica no código. O `.env` já está no `.gitignore`.
+As credenciais Google ficam no Compose (valores fixos, sem interpolação). Depois de mudar de domínio ou credenciais, basta atualizar o Compose e fazer rebuild.
 
