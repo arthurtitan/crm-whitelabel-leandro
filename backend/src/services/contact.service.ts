@@ -560,7 +560,15 @@ class ContactService {
       },
     });
 
-    return leadTags;
+    return leadTags.map(lt => ({
+      id: lt.id,
+      contact_id: lt.contactId,
+      tag_id: lt.tagId,
+      applied_by_id: lt.appliedById,
+      source: lt.source,
+      created_at: (lt.createdAt as any)?.toISOString?.() ?? lt.createdAt,
+      tag: lt.tag,
+    }));
   }
 }
 
