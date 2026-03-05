@@ -48,6 +48,7 @@ class CalendarService {
    * Get Google OAuth credentials from the account's DB record
    */
   private async getGoogleCredentials(accountId: string): Promise<GoogleCredentials | null> {
+    // 1) Try DB first (per-account)
     const account = await prisma.account.findUnique({
       where: { id: accountId },
       select: {
@@ -57,15 +58,28 @@ class CalendarService {
       },
     });
 
-    if (!account?.googleClientId || !account?.googleClientSecret || !account?.googleRedirectUri) {
-      return null;
+    if (account?.googleClientId && account?.googleClientSecret && account?.googleRedirectUri) {
+      return {
+        clientId: account.googleClientId,
+        clientSecret: account.googleClientSecret,
+        redirectUri: account.googleRedirectUri,
+      };
     }
 
-    return {
-      clientId: account.googleClientId,
-      clientSecret: account.googleClientSecret,
-      redirectUri: account.googleRedirectUri,
-    };
+    // 2) Fallback to env vars (global)
+    const envClientId = process.env.GOOGLE_CLIENT_ID;
+    const envClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    const envRedirectUri = process.env.GOOGLE_REDIRECT_URI;
+
+    if (envClientId && envClientSecret && envRedirectUri) {
+      return {
+        clientId: envClientId,
+        clientSecret: envClientSecret,
+        redirectUri: envRedirectUri,
+      };
+    }
+
+    return null;
   }
 
   /**
