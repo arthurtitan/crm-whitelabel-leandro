@@ -54,7 +54,7 @@ export const calendarBackendService = {
     email: string | null;
     needsReauth: boolean;
   }> => {
-    const res = await apiClient.get<ApiResponse<any>>('/api/calendar/google/status');
+    const res = await apiClient.get<ApiResponse<any>>(`/api/calendar/google/status?_t=${Date.now()}`);
     return res.data;
   },
 

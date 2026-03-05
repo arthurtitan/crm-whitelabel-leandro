@@ -101,7 +101,8 @@ async function bootstrap() {
     logger.info(`🚀 Server running on port ${env.PORT}`);
     logger.info(`📍 Environment: ${env.NODE_ENV}`);
     logger.info(`🔗 API URL: ${env.API_URL}`);
-    logger.info(`📅 Google Calendar: credenciais no banco de dados (por conta)`);
+    const hasGoogleEnv = !!(process.env.GOOGLE_CLIENT_ID || '').trim();
+    logger.info(`📅 Google Calendar creds source: ${hasGoogleEnv ? 'env (fallback available)' : 'db-only (no env fallback)'}`);
   });
 }
 

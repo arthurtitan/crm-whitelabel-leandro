@@ -66,10 +66,10 @@ class CalendarService {
       };
     }
 
-    // 2) Fallback to env vars (global)
-    const envClientId = process.env.GOOGLE_CLIENT_ID;
-    const envClientSecret = process.env.GOOGLE_CLIENT_SECRET;
-    const envRedirectUri = process.env.GOOGLE_REDIRECT_URI;
+    // 2) Fallback to env vars (global), with trim to avoid whitespace issues
+    const envClientId = (process.env.GOOGLE_CLIENT_ID || '').trim();
+    const envClientSecret = (process.env.GOOGLE_CLIENT_SECRET || '').trim();
+    const envRedirectUri = (process.env.GOOGLE_REDIRECT_URI || '').trim();
 
     if (envClientId && envClientSecret && envRedirectUri) {
       return {
@@ -307,18 +307,28 @@ class CalendarService {
   async getGoogleStatus(accountId: string, userId: string) {
     const creds = await this.getGoogleCredentials(accountId);
 
+    // Determine credential source for diagnostics
+    const account = await prisma.account.findUnique({
+      where: { id: accountId },
+      select: { googleClientId: true },
+    });
+    const source = creds
+      ? (account?.googleClientId ? 'db' : 'env')
+      : 'none';
+
     if (!creds) {
       return {
         connected: false,
         configured: false,
         missing: ['google_client_id', 'google_client_secret', 'google_redirect_uri'],
+        source,
       };
     }
 
     const token = await prisma.googleCalendarToken.findUnique({ where: { userId } });
 
     if (!token) {
-      return { connected: false, configured: true, missing: [] };
+      return { connected: false, configured: true, missing: [], source };
     }
 
     return {
@@ -328,6 +338,7 @@ class CalendarService {
       email: token.connectedEmail,
       expiresAt: token.expiresAt,
       needsReauth: token.expiresAt < new Date(),
+      source,
     };
   }
 
