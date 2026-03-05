@@ -43,8 +43,11 @@ export const tagsBackendService = {
     return apiClient.put<Tag>(API_ENDPOINTS.TAGS.UPDATE(tagId), input);
   },
 
-  async deleteTag(tagId: string): Promise<void> {
-    return apiClient.delete(API_ENDPOINTS.TAGS.DELETE(tagId));
+  async deleteTag(tagId: string, options?: { force?: boolean; migrateToId?: string }): Promise<void> {
+    const params: Record<string, string> = {};
+    if (options?.force) params.force = 'true';
+    if (options?.migrateToId) params.migrateToId = options.migrateToId;
+    return apiClient.delete(API_ENDPOINTS.TAGS.DELETE(tagId), { params });
   },
 
   async swapTagOrder(tagId1: string, tagId2: string): Promise<void> {

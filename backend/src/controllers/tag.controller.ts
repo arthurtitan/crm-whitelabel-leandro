@@ -110,7 +110,13 @@ export class TagController {
   async delete(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const id = req.params.id as string;
-      await tagService.delete(id, req.user!.accountId!, req.user!.id);
+      const force = req.query.force === 'true';
+      const migrateToId = req.query.migrateToId as string | undefined;
+      
+      await tagService.delete(id, req.user!.accountId!, req.user!.id, {
+        force: force || undefined,
+        migrateToId: migrateToId || undefined,
+      });
 
       res.json({ data: { success: true } });
     } catch (error) {
