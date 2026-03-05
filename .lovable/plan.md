@@ -1,43 +1,50 @@
 
 
-## Diagnóstico
+## Análise
 
-O log confirma: `Google Calendar creds source: db-only (no env fallback)` — ou seja, `process.env.GOOGLE_CLIENT_ID` está **vazio** dentro do container, apesar de estar definido no EasyPanel.
+Hardcodar credenciais no `docker-compose.yml` funciona em qualquer lugar (EasyPanel, VPS, AWS, etc.), mas tem um problema: **segredos ficam versionados no Git**. Se o repositório for compartilhado ou se tornar público, as credenciais ficam expostas.
 
-### Causa raiz
+## Solução universal (sem hardcode, funciona em qualquer orquestrador)
 
-No `docker-compose.yml`, a linha `GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}` usa interpolação do Compose. Se o EasyPanel injeta variáveis no **nível do container** (e não no nível de interpolação do Compose), o Compose resolve `${GOOGLE_CLIENT_ID:-}` como string vazia `""` — e essa string vazia **sobrescreve** qualquer injeção posterior do EasyPanel.
+A abordagem portátil é usar a diretiva `env_file` no Compose, que carrega variáveis de um arquivo `.env` local e as injeta no container **diretamente** — sem passar pela interpolação `${}` que causa o problema no EasyPanel.
 
-As outras variáveis como `JWT_SECRET` funcionam porque têm defaults não-vazios (`${JWT_SECRET:-your-production-jwt-secret-min-32-characters}`) OU porque o EasyPanel as processa antes da interpolação do Compose.
+**Arquivo: `docker-compose.yml`** — no serviço `backend`, adicionar `env_file` e remover qualquer referência direta às variáveis Google:
 
-### Correção
-
-Remover as 3 linhas de Google do bloco `environment` do docker-compose.yml. Isso permite que o EasyPanel injete as variáveis diretamente no container sem que o Compose as sobrescreva com strings vazias.
-
-**Arquivo: `docker-compose.yml`** — remover linhas 67-69:
 ```yaml
-# REMOVER estas 3 linhas:
-GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
-GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
+backend:
+  build:
+    context: ./backend
+    dockerfile: Dockerfile
+  restart: unless-stopped
+  env_file:
+    - .env          # <-- carrega TODAS as vars do .env direto no container
+  environment:
+    # Apenas overrides que precisam de interpolação Compose:
+    NODE_ENV: ${NODE_ENV:-production}
+    PORT: "3000"
+    DATABASE_URL: postgresql://${DB_USER:-gleps}:${DB_PASSWORD:-gleps_secret}@postgres:5432/${DB_NAME:-gleps_crm}?schema=public
+    API_URL: ${API_URL:-http://backend:3000}
+    FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
+    CORS_ORIGINS: ${CORS_ORIGINS:-}
+    # ... demais vars que precisam de defaults Compose
 ```
 
-O backend já lê `process.env.GOOGLE_CLIENT_ID` diretamente no `calendar.service.ts`, então não precisa de mais nada. Para dev local, basta ter um `.env` na raiz (que o Compose lê automaticamente).
+Com `env_file`, todas as variáveis do `.env` (incluindo `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`) são injetadas diretamente no container. As variáveis em `environment` têm prioridade sobre `env_file`, então os defaults do Compose continuam funcionando para as que precisam de interpolação (como `DATABASE_URL`).
 
-### Diagnóstico adicional (segurança)
+**Compatibilidade:**
+- **Local**: `.env` na raiz com as credenciais → funciona
+- **EasyPanel**: `.env` gerado pela UI ou injetado → funciona
+- **Qualquer VPS/cloud**: basta ter um `.env` ao lado do `docker-compose.yml` → funciona
+- **CI/CD**: variáveis de pipeline geram `.env` antes do deploy → funciona
 
-**Arquivo: `backend/src/server.ts`** — expandir o log de bootstrap para mostrar os primeiros 8 chars de cada var Google (mascarados), permitindo confirmar se chegaram ou não:
+**Arquivo: `.env.example`** — atualizar para documentar as variáveis Google:
 
-```typescript
-const gId = (process.env.GOOGLE_CLIENT_ID || '').trim();
-const gSecret = (process.env.GOOGLE_CLIENT_SECRET || '').trim();
-const gRedirect = (process.env.GOOGLE_REDIRECT_URI || '').trim();
-logger.info(`📅 Google Calendar env: clientId=${gId ? gId.substring(0,8)+'...' : 'EMPTY'}, secret=${gSecret ? 'SET' : 'EMPTY'}, redirect=${gRedirect ? 'SET' : 'EMPTY'}`);
+```env
+# Google Calendar (opcional)
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REDIRECT_URI=https://seu-dominio.com/api/calendar/google/callback
 ```
 
-### Resultado esperado após deploy
-
-1. Log mostra `clientId=23165313..., secret=SET, redirect=SET`
-2. Agenda mostra botão de conectar/sincronizar
-3. Fluxo OAuth completo funciona
+Nenhuma credencial fica no código. O `.env` já está no `.gitignore`.
 
