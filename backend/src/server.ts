@@ -101,8 +101,10 @@ async function bootstrap() {
     logger.info(`🚀 Server running on port ${env.PORT}`);
     logger.info(`📍 Environment: ${env.NODE_ENV}`);
     logger.info(`🔗 API URL: ${env.API_URL}`);
-    const hasGoogleEnv = !!(process.env.GOOGLE_CLIENT_ID || '').trim();
-    logger.info(`📅 Google Calendar creds source: ${hasGoogleEnv ? 'env (fallback available)' : 'db-only (no env fallback)'}`);
+    const gId = (process.env.GOOGLE_CLIENT_ID || '').trim();
+    const gSecret = (process.env.GOOGLE_CLIENT_SECRET || '').trim();
+    const gRedirect = (process.env.GOOGLE_REDIRECT_URI || '').trim();
+    logger.info(`📅 Google Calendar env: clientId=${gId ? gId.substring(0, 8) + '...' : 'EMPTY'}, secret=${gSecret ? 'SET' : 'EMPTY'}, redirect=${gRedirect ? 'SET' : 'EMPTY'}`);
   });
 }
 
