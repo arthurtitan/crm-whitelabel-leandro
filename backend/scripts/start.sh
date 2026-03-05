@@ -37,10 +37,10 @@ MIGRATE_EXIT=$?
 if [ $MIGRATE_EXIT -ne 0 ]; then
     echo "⚠️  Primeira tentativa de migration falhou (exit=$MIGRATE_EXIT)"
 
-    if echo "$MIGRATE_OUTPUT" | grep -q "P3009"; then
-        echo "🔧 Detectado P3009 — tentando resolver migration falhada..."
+    if echo "$MIGRATE_OUTPUT" | grep -q "P3009\|P3018"; then
+        echo "🔧 Detectado P3009/P3018 — tentando resolver migration falhada..."
 
-        for MIGRATION_NAME in "0003_add_resolution_unique" "0002_add_resolution_logs"; do
+        for MIGRATION_NAME in "0007_google_token_user_isolation" "0003_add_resolution_unique" "0002_add_resolution_logs"; do
             echo "   Resolvendo $MIGRATION_NAME como rolled-back..."
             npx prisma migrate resolve --rolled-back "$MIGRATION_NAME" 2>/dev/null || true
         done
