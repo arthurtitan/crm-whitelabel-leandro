@@ -1,32 +1,54 @@
 
-Diagnóstico rápido (com base no código atual):
-- `backend/src/server.ts` já está corrigido na linha 104: `Google Calendar: credenciais no banco de dados (por conta)`.
-- `backend/src/config/env.ts` realmente não possui `GOOGLE_CLIENT_ID` (arquitetura nova: credenciais no banco por conta).
-- Portanto, o erro de build que você colou é de um commit/artefato antigo (stale source no deploy), não de uma falha ainda presente no código atual.
 
-Plano objetivo para resolver de vez:
+## Problema
 
-1) Confirmar origem do deploy (causa raiz)
-- Verificar no EasyPanel se o deploy está realmente puxando o commit mais recente do `main`.
-- Conferir se o hash/data exibidos no “Pulling data from origin/main” são posteriores à correção do `server.ts`.
+A migration `0007_google_token_user_isolation` falha porque tenta criar um índice único em `user_id`, mas essa coluna **nunca foi adicionada** à tabela `google_calendar_tokens`. A tabela original (migration 0001) só tem `account_id`, sem `user_id`.
 
-2) Forçar rebuild limpo (sem cache de camada)
-- Executar novo deploy com rebuild completo para evitar uso de camada antiga de Docker.
-- Garantir que o contexto usado seja o backend atualizado (arquivo `backend/src/server.ts` com a linha já corrigida).
+A migration 0007 atual faz apenas:
+```sql
+DROP INDEX IF EXISTS "google_calendar_tokens_account_id_key";
+CREATE UNIQUE INDEX "google_calendar_tokens_user_id_key" ON "google_calendar_tokens"("user_id");
+```
 
-3) Se ainda falhar após rebuild limpo
-- Validar no servidor de deploy o conteúdo real de `backend/src/server.ts` (deve estar sem `env.GOOGLE_CLIENT_ID`).
-- Se aparecer a versão antiga, o problema é sincronização do repositório (branch/remote incorreto), não código.
+Falta o `ALTER TABLE ADD COLUMN user_id`.
 
-4) Validação final pós-build
-- Confirmar que o backend sobe sem erro TS2339.
-- Testar ponta a ponta a Agenda:
-  1. abrir Agenda,
-  2. clicar conectar Google,
-  3. autorizar,
-  4. voltar com sucesso,
-  5. sincronizar eventos.
+## Correção
 
-Detalhe técnico (curto):
-- O TypeScript só gera esse erro se o código compilado ainda contém `env.GOOGLE_CLIENT_ID`.
-- Como o código atual já não contém essa referência, a solução é alinhar o deploy com a versão correta e rebuildar sem cache.
+Atualizar o arquivo `backend/prisma/migrations/0007_google_token_user_isolation/migration.sql` para incluir todos os passos necessários:
+
+1. Adicionar a coluna `user_id` à tabela
+2. Popular `user_id` com dados existentes (se houver tokens, usar um UUID placeholder ou o account owner)
+3. Tornar `user_id` NOT NULL
+4. Remover o unique index antigo de `account_id`
+5. Criar o unique index em `user_id`
+
+```sql
+-- Add user_id column (nullable first)
+ALTER TABLE "google_calendar_tokens" ADD COLUMN "user_id" UUID;
+
+-- For any existing rows, we need a value - delete orphaned tokens
+DELETE FROM "google_calendar_tokens" WHERE "user_id" IS NULL;
+
+-- Make user_id NOT NULL
+ALTER TABLE "google_calendar_tokens" ALTER COLUMN "user_id" SET NOT NULL;
+
+-- Drop old unique constraint on account_id
+DROP INDEX IF EXISTS "google_calendar_tokens_account_id_key";
+
+-- Add unique constraint on user_id
+CREATE UNIQUE INDEX "google_calendar_tokens_user_id_key" ON "google_calendar_tokens"("user_id");
+```
+
+### Passo adicional necessário
+
+Como a migration 0007 já foi parcialmente aplicada e falhou (P3018), o `start.sh` precisa resolver essa migration travada. O script já trata P3009, mas precisamos adicionar lógica para resolver 0007 também, **ou** instruir a resolução manual antes do próximo deploy.
+
+A abordagem mais segura: atualizar o `start.sh` para incluir `0007_google_token_user_isolation` na lista de migrations a resolver como rolled-back em caso de falha, e depois re-aplicar.
+
+### Resumo das alterações
+
+| Arquivo | Alteração |
+|---|---|
+| `backend/prisma/migrations/0007_.../migration.sql` | Adicionar `ADD COLUMN user_id` antes de criar o índice |
+| `backend/scripts/start.sh` | Adicionar `0007_google_token_user_isolation` na lista de auto-recovery do P3009/P3018 |
+
