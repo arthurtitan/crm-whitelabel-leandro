@@ -299,7 +299,7 @@ class ChatwootService {
     const body: Record<string, any> = {};
     if (input.title) body.title = input.title;
     if (input.description !== undefined) body.description = input.description;
-    if (input.color) body.color = input.color.replace('#', '');
+    if (input.color) body.color = input.color.startsWith('#') ? input.color : `#${input.color}`;
     if (input.show_on_sidebar !== undefined) body.show_on_sidebar = input.show_on_sidebar;
 
     const response = await this.makeRequest<ChatwootLabel>(config, `/labels/${labelId}`, {
