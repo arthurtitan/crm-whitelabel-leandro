@@ -204,6 +204,7 @@ export class CalendarController {
     try {
       const result = await calendarService.getGoogleStatus(req.user!.accountId!, req.user!.id);
 
+      res.set('Cache-Control', 'no-store');
       res.json({ data: result });
     } catch (error) {
       next(error);
