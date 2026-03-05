@@ -81,7 +81,13 @@ fi
 # ---- 4. Diagnóstico ----
 echo ""
 echo "🔍 Diagnóstico:"
-echo "   📅 Google Calendar: credenciais armazenadas no banco de dados (por conta)"
+
+if [ -n "$GOOGLE_CLIENT_ID" ]; then
+    echo "   📅 Google Calendar: env vars detectadas (fallback ativo) — client_id=${GOOGLE_CLIENT_ID:0:8}..."
+else
+    echo "   📅 Google Calendar: env vars NÃO detectadas — depende de credenciais no DB (por conta)"
+fi
+
 echo "   💬 Chatwoot: credenciais armazenadas no banco de dados (por conta)"
 
 # ---- 5. Iniciar servidor ----
