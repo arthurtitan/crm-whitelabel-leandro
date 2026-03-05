@@ -9,6 +9,13 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -86,6 +93,9 @@ export default function AdminKanbanPage() {
   const [dragOverStage, setDragOverStage] = useState<string | null>(null);
   const [saleContactId, setSaleContactId] = useState<string | null>(null);
   const [deleteConfirmStage, setDeleteConfirmStage] = useState<CloudTag | null>(null);
+  const [deleteHasLeads, setDeleteHasLeads] = useState(false);
+  const [deleteMigrateToId, setDeleteMigrateToId] = useState<string>('');
+  const [deleteForceMode, setDeleteForceMode] = useState<'migrate' | 'detach' | null>(null);
   const [isSyncingChatwoot, setIsSyncingChatwoot] = useState(false);
   const [isPushingLabels, setIsPushingLabels] = useState(false);
   const [isCreatingTemplate, setIsCreatingTemplate] = useState(false);
@@ -351,13 +361,31 @@ export default function AdminKanbanPage() {
     if (!deleteConfirmStage) return;
 
     try {
-      await tagsService.deleteTag(deleteConfirmStage.id);
+      const options: { force?: boolean; migrateToId?: string } = {};
+      if (deleteHasLeads) {
+        options.force = true;
+        if (deleteForceMode === 'migrate' && deleteMigrateToId) {
+          options.migrateToId = deleteMigrateToId;
+        }
+      }
+      await tagsService.deleteTag(deleteConfirmStage.id, options);
       toast.success(`Etapa "${deleteConfirmStage.name}" excluída!`);
       fetchTagsData(false);
+      if (deleteHasLeads && deleteForceMode === 'migrate') {
+        refetchContacts();
+      }
     } catch (error: any) {
+      if (error.message?.includes('leads') || error.message?.includes('TAG_HAS_LEADS')) {
+        // Show force options
+        setDeleteHasLeads(true);
+        return;
+      }
       toast.error(error.message || 'Erro ao excluir etapa');
     }
     setDeleteConfirmStage(null);
+    setDeleteHasLeads(false);
+    setDeleteForceMode(null);
+    setDeleteMigrateToId('');
   };
 
   const getInitials = (name: string | null) => {
@@ -835,29 +863,89 @@ export default function AdminKanbanPage() {
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
-      <AlertDialog open={!!deleteConfirmStage} onOpenChange={(open) => !open && setDeleteConfirmStage(null)}>
+      <AlertDialog open={!!deleteConfirmStage} onOpenChange={(open) => {
+        if (!open) {
+          setDeleteConfirmStage(null);
+          setDeleteHasLeads(false);
+          setDeleteForceMode(null);
+          setDeleteMigrateToId('');
+        }
+      }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir Etapa</AlertDialogTitle>
-            <AlertDialogDescription>
-              Tem certeza que deseja excluir a etapa "{deleteConfirmStage?.name}"?
-              {deleteConfirmStage?.chatwoot_label_id && (
-                <>
-                  <br /><br />
-                  <strong>Nota:</strong> Esta etapa está sincronizada com o Chatwoot. A label não será excluída automaticamente.
-                </>
-              )}
-              <br /><br />
-              <strong>Atenção:</strong> Etapas com leads não podem ser excluídas.
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                {!deleteHasLeads ? (
+                  <>
+                    <p>Tem certeza que deseja excluir a etapa "{deleteConfirmStage?.name}"?</p>
+                    {deleteConfirmStage?.chatwoot_label_id && (
+                      <p><strong>Nota:</strong> Esta etapa está sincronizada com o Chatwoot. A label será removida.</p>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <p>A etapa "{deleteConfirmStage?.name}" possui leads vinculados. Escolha o que fazer:</p>
+                    <div className="space-y-2 pt-2">
+                      <label className="flex items-start gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="deleteMode"
+                          checked={deleteForceMode === 'migrate'}
+                          onChange={() => setDeleteForceMode('migrate')}
+                          className="mt-1"
+                        />
+                        <div>
+                          <span className="font-medium text-foreground">Mover leads para outra etapa</span>
+                          <p className="text-xs text-muted-foreground">Os leads serão transferidos antes da exclusão</p>
+                        </div>
+                      </label>
+                      {deleteForceMode === 'migrate' && (
+                        <Select value={deleteMigrateToId} onValueChange={setDeleteMigrateToId}>
+                          <SelectTrigger className="ml-6">
+                            <SelectValue placeholder="Selecione a etapa destino" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {stageTags
+                              .filter(t => t.id !== deleteConfirmStage?.id)
+                              .map(t => (
+                                <SelectItem key={t.id} value={t.id}>
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: t.color }} />
+                                    {t.name}
+                                  </div>
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                      <label className="flex items-start gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="deleteMode"
+                          checked={deleteForceMode === 'detach'}
+                          onChange={() => setDeleteForceMode('detach')}
+                          className="mt-1"
+                        />
+                        <div>
+                          <span className="font-medium text-foreground">Desvincular leads e excluir</span>
+                          <p className="text-xs text-muted-foreground">Os leads ficarão sem etapa definida</p>
+                        </div>
+                      </label>
+                    </div>
+                  </>
+                )}
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteStage}
+              disabled={deleteHasLeads && (!deleteForceMode || (deleteForceMode === 'migrate' && !deleteMigrateToId))}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Excluir
+              {deleteHasLeads ? 'Confirmar Exclusão' : 'Excluir'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

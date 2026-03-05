@@ -227,9 +227,9 @@ class TagService {
   }
 
   /**
-   * Delete a tag (only if no leads)
+   * Delete a tag (force option allows removing/migrating leads first)
    */
-  async delete(id: string, accountId: string, deletedById: string) {
+  async delete(id: string, accountId: string, deletedById: string, options?: { force?: boolean; migrateToId?: string }) {
     const tag = await this.getById(id, accountId);
 
     // Check if tag has leads
@@ -237,8 +237,24 @@ class TagService {
       where: { tagId: id },
     });
 
-    if (leadsCount > 0) {
+    if (leadsCount > 0 && !options?.force) {
       throw new ValidationError(ErrorCodes.TAG_HAS_LEADS);
+    }
+
+    // Handle leads before deletion
+    if (leadsCount > 0 && options?.force) {
+      if (options.migrateToId) {
+        // Validate target tag exists and belongs to same account
+        await this.getById(options.migrateToId, accountId);
+        await prisma.leadTag.updateMany({
+          where: { tagId: id },
+          data: { tagId: options.migrateToId },
+        });
+        logger.info('Leads migrated before tag deletion', { fromTagId: id, toTagId: options.migrateToId, count: leadsCount });
+      } else {
+        await prisma.leadTag.deleteMany({ where: { tagId: id } });
+        logger.info('Lead tags removed before tag deletion', { tagId: id, count: leadsCount });
+      }
     }
 
     // Delete Chatwoot label if linked
@@ -272,7 +288,7 @@ class TagService {
       actorId: deletedById,
       entityType: 'tag',
       entityId: id,
-      payload: { name: tag.name },
+      payload: { name: tag.name, migratedTo: options?.migrateToId || null, leadsAffected: leadsCount },
     });
   }
 

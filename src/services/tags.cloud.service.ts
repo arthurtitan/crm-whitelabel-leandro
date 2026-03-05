@@ -267,7 +267,7 @@ export const tagsCloudService = {
   /**
    * Delete a tag (soft delete by setting ativo=false) and remove from Chatwoot
    */
-  async deleteTag(tagId: string): Promise<void> {
+  async deleteTag(tagId: string, options?: { force?: boolean; migrateToId?: string }): Promise<void> {
     // Get current tag first to get chatwoot_label_id and account_id
     const { data: currentTag } = await supabase
       .from('tags')
@@ -276,18 +276,38 @@ export const tagsCloudService = {
       .single();
 
     // Check if there are leads with this tag
-    const { data: leadTags, error: checkError } = await supabase
+    const { data: existingLeadTags, error: checkError } = await supabase
       .from('lead_tags')
       .select('id')
-      .eq('tag_id', tagId)
-      .limit(1);
+      .eq('tag_id', tagId);
 
     if (checkError) {
       throw new Error(checkError.message);
     }
 
-    if (leadTags && leadTags.length > 0) {
+    const hasLeads = existingLeadTags && existingLeadTags.length > 0;
+
+    if (hasLeads && !options?.force) {
       throw new Error('Não é possível excluir: existem leads nesta etapa');
+    }
+
+    // Handle leads before deletion
+    if (hasLeads && options?.force) {
+      if (options.migrateToId) {
+        // Move leads to another stage
+        const { error: migrateError } = await supabase
+          .from('lead_tags')
+          .update({ tag_id: options.migrateToId })
+          .eq('tag_id', tagId);
+        if (migrateError) throw new Error(migrateError.message);
+      } else {
+        // Remove all lead_tags
+        const { error: removeError } = await supabase
+          .from('lead_tags')
+          .delete()
+          .eq('tag_id', tagId);
+        if (removeError) throw new Error(removeError.message);
+      }
     }
 
     const { error } = await supabase
