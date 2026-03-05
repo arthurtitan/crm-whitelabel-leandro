@@ -277,7 +277,7 @@ class ChatwootService {
     const body = {
       title: input.title,
       description: input.description || `Etapa do Kanban: ${input.title}`,
-      color: (input.color || '#6366F1').replace('#', ''),
+      color: input.color && input.color.startsWith('#') ? input.color : `#${input.color || '6366F1'}`,
       show_on_sidebar: input.show_on_sidebar ?? true,
     };
 
