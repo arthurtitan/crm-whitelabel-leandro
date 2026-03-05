@@ -12,8 +12,7 @@ import {
   Check,
   RotateCcw,
 } from 'lucide-react';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { safeFormatDateBR } from '@/utils/dateUtils';
 import { cn } from '@/lib/utils';
 
 interface KanbanLead extends Contact {
