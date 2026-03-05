@@ -1,26 +1,20 @@
 
 
-## Erro de Validação do Prisma
+## Correção Rápida — Referência a `env.GOOGLE_CLIENT_ID` removida
 
-O problema é uma incompatibilidade entre o schema e a migration:
+O build falha porque `server.ts` linha 104 ainda referencia `env.GOOGLE_CLIENT_ID`, que foi removido do schema Zod em `env.ts` (já que credenciais Google agora vêm do banco).
 
-- O model `Account` declara `googleCalendarToken GoogleCalendarToken?` (relação **1:1**), que exige um `@unique` em `accountId` no model `GoogleCalendarToken`
-- A migration `0007` removeu o unique index de `account_id` e colocou em `user_id`
-- Prisma não consegue validar uma relação 1:1 sem unique na foreign key → erro de validação
+### Alteração
 
-### Correção (1 linha)
+**`backend/src/server.ts` linha 104** — substituir:
 
-**`backend/prisma/schema.prisma` linha 46**: Mudar de relação singular para lista:
-
-```prisma
+```typescript
 // De:
-googleCalendarToken GoogleCalendarToken?
+logger.info(`📅 Google Calendar: ${env.GOOGLE_CLIENT_ID ? 'configurado' : 'NÃO configurado'}`);
 
 // Para:
-googleCalendarTokens GoogleCalendarToken[]
+logger.info(`📅 Google Calendar: credenciais no banco de dados (por conta)`);
 ```
 
-Isso permite múltiplos tokens por conta (um por usuário), alinhado com o isolamento por usuário implementado na migration 0007.
-
-Também precisa atualizar qualquer referência a `googleCalendarToken` (singular) no código do backend para `googleCalendarTokens` (plural), se existir em queries Prisma.
+Uma única linha. Build vai passar.
 
