@@ -68,6 +68,9 @@ services:
       CHATWOOT_WEBHOOK_SECRET: ${CHATWOOT_WEBHOOK_SECRET:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       RUN_SEED: ${RUN_SEED:-true}
+      GOOGLE_CLIENT_ID: "231653132408-iv5b27dlf72ekmbvmviuevcruc6kqs8m.apps.googleusercontent.com"
+      GOOGLE_CLIENT_SECRET: "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"
+      GOOGLE_REDIRECT_URI: "https://360.gleps.com.br/api/calendar/google/callback"
     expose:
       - "3000"
     depends_on:
