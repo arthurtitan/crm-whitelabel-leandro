@@ -101,7 +101,7 @@ async function bootstrap() {
     logger.info(`🚀 Server running on port ${env.PORT}`);
     logger.info(`📍 Environment: ${env.NODE_ENV}`);
     logger.info(`🔗 API URL: ${env.API_URL}`);
-    logger.info(`📅 Google Calendar: ${env.GOOGLE_CLIENT_ID ? 'configurado' : 'NÃO configurado'}`);
+    logger.info(`📅 Google Calendar: credenciais no banco de dados (por conta)`);
   });
 }
 
