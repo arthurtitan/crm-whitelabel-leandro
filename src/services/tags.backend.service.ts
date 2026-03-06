@@ -52,7 +52,7 @@ export const tagsBackendService = {
 
   async swapTagOrder(tagId1: string, tagId2: string): Promise<void> {
     return apiClient.post(API_ENDPOINTS.TAGS.REORDER, {
-      tags: [{ id: tagId1 }, { id: tagId2 }],
+      tagIds: [tagId1, tagId2],
     });
   },
 

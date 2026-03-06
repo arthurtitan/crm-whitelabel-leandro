@@ -307,18 +307,35 @@ class TagService {
   }
 
   /**
-   * Reorder multiple tags
+   * Reorder multiple tags (swap mode when exactly 2 IDs)
    */
   async reorderBulk(tagIds: string[], accountId: string, reorderedById: string) {
-    // Update each tag's ordem based on position in array
-    await prisma.$transaction(
-      tagIds.map((id, index) =>
-        prisma.tag.update({
-          where: { id },
-          data: { ordem: index },
-        })
-      )
-    );
+    if (tagIds.length === 2) {
+      // Swap mode: exchange ordem values between the two tags
+      const [tag1, tag2] = await Promise.all([
+        prisma.tag.findUnique({ where: { id: tagIds[0] }, select: { id: true, ordem: true } }),
+        prisma.tag.findUnique({ where: { id: tagIds[1] }, select: { id: true, ordem: true } }),
+      ]);
+
+      if (!tag1 || !tag2) {
+        throw new NotFoundError('Uma ou ambas as tags não foram encontradas');
+      }
+
+      await prisma.$transaction([
+        prisma.tag.update({ where: { id: tag1.id }, data: { ordem: tag2.ordem } }),
+        prisma.tag.update({ where: { id: tag2.id }, data: { ordem: tag1.ordem } }),
+      ]);
+    } else {
+      // Full reorder: assign ordem based on array position
+      await prisma.$transaction(
+        tagIds.map((id, index) =>
+          prisma.tag.update({
+            where: { id },
+            data: { ordem: index },
+          })
+        )
+      );
+    }
 
     await eventService.create({
       eventType: 'funnel.stage.reordered',

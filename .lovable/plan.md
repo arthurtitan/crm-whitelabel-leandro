@@ -1,26 +1,42 @@
 
 
-## Problema
+## Diagnóstico final
 
-O frontend envia `{ tags: [{ id: tagId1 }, { id: tagId2 }] }` via `swapTagOrder`, mas o backend controller espera `{ tagIds: [...] }` (schema Zod: `reorderBulkSchema`). Isso causa o erro de validação `tagIds: Required`.
+O `env_file: - .env` não funciona no EasyPanel porque ele **não monta** um arquivo `.env` no filesystem do container — ele injeta variáveis via Docker API. Porém, as variáveis declaradas na seção `environment` do Compose (com interpolação `${}`) têm **prioridade** e são resolvidas em build-time pelo Compose, onde as vars Google não existem, resultando em strings vazias.
 
-Além disso, o `reorderBulk` do backend simplesmente reordena por posição no array — não faz swap de `ordem` entre duas tags específicas.
+A solução definitiva: hardcodar as credenciais Google diretamente no `environment` do Compose.
 
-## Correção
+## Alterações
 
-**`src/services/tags.backend.service.ts`** — método `swapTagOrder`:
+**Arquivo: `docker-compose.yml`** — adicionar as 3 variáveis Google com valores literais na seção `environment` do backend (após `LOG_LEVEL`):
 
-Alterar o payload enviado de `{ tags: [...] }` para `{ tagIds: [tagId1, tagId2] }`, alinhando com o schema esperado pelo backend:
-
-```typescript
-async swapTagOrder(tagId1: string, tagId2: string): Promise<void> {
-  return apiClient.post(API_ENDPOINTS.TAGS.REORDER, {
-    tagIds: [tagId1, tagId2],
-  });
-},
+```yaml
+GOOGLE_CLIENT_ID: "231653132408-iv5b27dlf72ekmbvmviuevcruc6kqs8m.apps.googleusercontent.com"
+GOOGLE_CLIENT_SECRET: "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"
+GOOGLE_REDIRECT_URI: "https://360.gleps.com.br/api/calendar/google/callback"
 ```
 
-**`backend/src/services/tag.service.ts`** — método `reorderBulk`:
+**Seu `.env` no EasyPanel deve ficar assim** (pode remover as 3 linhas do Google já que agora estão no Compose):
 
-Verificar se quando recebe exatamente 2 tagIds, ele faz o **swap dos valores de `ordem`** entre as duas tags (em vez de simplesmente atribuir posição 0 e 1). Isso garante que mover uma etapa para a esquerda/direita troque corretamente as posições.
+```
+DB_USER=gleps
+DB_PASSWORD=SenhaForte2024!
+DB_NAME=gleps_crm
+FRONTEND_URL=https://360.gleps.com.br
+API_URL=http://backend:3000
+CORS_ORIGINS=https://360.gleps.com.br
+JWT_SECRET=k8Tj3mZvPqR7xYwN2sLfA9bCdEgHiKoU4nVrXuWyQ1M
+JWT_EXPIRES_IN=1h
+REFRESH_TOKEN_SECRET=Bp5GnSx8WqLm3TvRj7YcKfA2dHuE9oZiN6rXwMkJ4Qs
+REFRESH_TOKEN_EXPIRES_IN=7d
+BCRYPT_SALT_ROUNDS=12
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX=100
+BACKEND_UPSTREAM=backend:3000
+RUN_SEED=true
+LOG_LEVEL=info
+CHATWOOT_WEBHOOK_SECRET=
+```
+
+As credenciais Google ficam no Compose (valores fixos, sem interpolação). Depois de mudar de domínio ou credenciais, basta atualizar o Compose e fazer rebuild.
 
