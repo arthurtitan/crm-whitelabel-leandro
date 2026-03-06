@@ -356,7 +356,7 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
                   </SelectItem>
                   {eligibleContacts.length === 0 ? (
                     <SelectItem value="none" disabled>
-                      Nenhum lead elegível no funil
+                      Nenhum contato cadastrado
                     </SelectItem>
                   ) : (
                     eligibleContacts.map((contact) => {
