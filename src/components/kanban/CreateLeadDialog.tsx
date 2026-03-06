@@ -32,6 +32,8 @@ import {
 } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { Loader2, UserPlus } from 'lucide-react';
+import { useBackend } from '@/config/backend.config';
+import { contactsBackendService } from '@/services/contacts.backend.service';
 import { contactsCloudService } from '@/services/contacts.cloud.service';
 import type { ContactOrigin } from '@/types/crm';
 import type { Tag as CloudTag } from '@/services/tags.cloud.service';
