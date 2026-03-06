@@ -10,7 +10,7 @@ export type SaleStatus = 'pending' | 'paid' | 'refunded' | 'partial_refund';
 export type PaymentMethod = 'pix' | 'boleto' | 'debito' | 'credito' | 'dinheiro' | 'convenio';
 export type ActorType = 'user' | 'agent_bot' | 'system' | 'external';
 export type TransactionType = 'charge' | 'refund';
-export type ContactOrigin = 'whatsapp' | 'instagram' | 'site' | 'indicacao';
+export type ContactOrigin = 'whatsapp' | 'instagram' | 'site' | 'indicacao' | 'outro';
 export type Channel = 'whatsapp' | 'instagram' | 'webchat';
 
 // ============= CORE ENTITIES =============

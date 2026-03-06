@@ -6,6 +6,7 @@ import { useBackend } from '@/config/backend.config';
 import { supabase } from '@/integrations/supabase/client';
 import { financeBackendService } from '@/services/finance.backend.service';
 import { contactsBackendService } from '@/services/contacts.backend.service';
+import { contactsCloudService } from '@/services/contacts.cloud.service';
 import { mergeContacts } from '@/utils/dataSync';
 import { 
   mockLeadFunnelStates, 
@@ -77,7 +78,7 @@ interface FinanceContextType {
   
   // Actions
   createSale: (data: CreateSaleData) => { success: boolean; error?: string } | Promise<{ success: boolean; error?: string }>;
-  createContact: (data: CreateContactData) => { success: boolean; error?: string; contactId?: string };
+  createContact: (data: CreateContactData) => Promise<{ success: boolean; error?: string; contactId?: string }>;
   updateContact: (contactId: string, data: UpdateContactData) => { success: boolean; error?: string };
   deleteContact: (contactId: string) => { success: boolean; error?: string };
   updateLeadStage: (contactId: string, stageId: string) => void;
@@ -439,69 +440,54 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
 
   // Create contact
   const createContact = useCallback(
-    (data: CreateContactData): { success: boolean; error?: string; contactId?: string } => {
-      if (useBackend) {
-        // In backend mode, create via API asynchronously but return sync-compatible result
-        const tempId = `contact-${Date.now()}`;
-        // Optimistic local update
-        const newContact: Contact = {
-          id: tempId,
+    async (data: CreateContactData): Promise<{ success: boolean; error?: string; contactId?: string }> => {
+      try {
+        const origemNormalizada: ContactOrigin =
+          data.origem === 'whatsapp' ||
+          data.origem === 'instagram' ||
+          data.origem === 'site' ||
+          data.origem === 'indicacao' ||
+          data.origem === 'outro'
+            ? data.origem
+            : 'outro';
+
+        const payload = {
+          account_id: accountId,
+          nome: data.nome,
+          telefone: data.telefone,
+          email: data.email || undefined,
+          origem: origemNormalizada,
+        };
+
+        const result = useBackend
+          ? await contactsBackendService.createContact(payload)
+          : await contactsCloudService.createContact(payload);
+
+        if (!result.success || !result.contact_id) {
+          return { success: false, error: result.error || 'Erro ao criar contato' };
+        }
+
+        const now = new Date().toISOString();
+        const createdContact: Contact = {
+          id: result.contact_id,
           account_id: accountId,
           nome: data.nome,
           telefone: data.telefone,
           email: data.email,
-          origem: data.origem as ContactOrigin,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+          origem: origemNormalizada,
+          chatwoot_contact_id: result.chatwoot_contact_id ?? null,
+          chatwoot_conversation_id: result.chatwoot_conversation_id ?? null,
+          created_at: now,
+          updated_at: now,
         };
-        setContacts((prev) => [newContact, ...prev]);
 
-        // Fire API call in background and update with real ID
-        (async () => {
-          try {
-            const result = await contactsBackendService.createContact({
-              nome: data.nome,
-              telefone: data.telefone,
-              email: data.email,
-              origem: data.origem as ContactOrigin,
-              account_id: accountId,
-            });
-            if (result.contact_id) {
-              setContacts((prev) =>
-                prev.map((c) => (c.id === tempId ? { ...c, id: result.contact_id! } : c))
-              );
-            }
-          } catch (err: any) {
-            console.error('Error creating contact via backend:', err);
-          }
-        })();
+        setContacts((prev) => [createdContact, ...prev.filter((c) => c.id !== createdContact.id)]);
 
-        return { success: true, contactId: tempId };
+        return { success: true, contactId: result.contact_id };
+      } catch (err: any) {
+        console.error('Error creating contact:', err);
+        return { success: false, error: err?.message || 'Erro ao criar contato' };
       }
-
-      const newContact: Contact = {
-        id: `contact-${Date.now()}`,
-        account_id: accountId,
-        nome: data.nome,
-        telefone: data.telefone,
-        email: data.email,
-        origem: data.origem as ContactOrigin,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-      
-      setContacts((prev) => [newContact, ...prev]);
-      
-      // Auto-add to funnel at advanced stage for immediate sale eligibility
-      const qualifiedStage = mockFunnelStages.find((s) => s.nome === 'Qualificado');
-      if (qualifiedStage) {
-        setLeadFunnelStates((prev) => [
-          { contact_id: newContact.id, funnel_stage_id: qualifiedStage.id, updated_at: new Date().toISOString() },
-          ...prev,
-        ]);
-      }
-      
-      return { success: true, contactId: newContact.id };
     },
     [accountId]
   );
@@ -600,43 +586,58 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
         }
       }
 
-      // Local-only mode (Supabase Cloud)
-      const saleId = `sale-${Date.now()}`;
-      const items: SaleItem[] = data.items.map((item, index) => ({
-        id: `item-${saleId}-${index}`,
+      // Supabase Cloud mode: persist sale + sale items
+      const saleItems: SaleItem[] = data.items.map((item, index) => ({
+        id: `item-${Date.now()}-${index}`,
         product_id: item.productId,
         quantidade: item.quantidade,
         valor_unitario: item.valorUnitario,
         valor_total: item.quantidade * item.valorUnitario,
       }));
 
-      const valorTotal = items.reduce((sum, item) => sum + item.valor_total, 0);
-      const isRecurring = data.items.some(item => 
-        checkIsRecurringSale(data.contactId, item.productId)
+      const valorTotal = saleItems.reduce((sum, item) => sum + item.valor_total, 0);
+      const isRecurring = data.items.some((item) => checkIsRecurringSale(data.contactId, item.productId));
+
+      const { data: createdSale, error: saleError } = await supabase
+        .from('sales')
+        .insert({
+          account_id: accountId,
+          contact_id: data.contactId,
+          valor: valorTotal,
+          metodo_pagamento: data.metodoPagamento,
+          convenio_nome: data.convenioNome ?? null,
+          responsavel_id: data.responsavelId,
+          is_recurring: isRecurring,
+        })
+        .select('id')
+        .single();
+
+      if (saleError || !createdSale) {
+        console.error('Error creating sale in cloud mode:', saleError);
+        return { success: false, error: saleError?.message || 'Erro ao criar venda' };
+      }
+
+      const { error: itemsError } = await supabase.from('sale_items').insert(
+        saleItems.map((item) => ({
+          sale_id: createdSale.id,
+          product_id: item.product_id,
+          quantidade: item.quantidade,
+          valor_unitario: item.valor_unitario,
+          valor_total: item.valor_total,
+        }))
       );
 
-      const newSale: Sale = {
-        id: saleId,
-        account_id: accountId,
-        contact_id: data.contactId,
-        product_id: data.items[0]?.productId,
-        items,
-        valor: valorTotal,
-        status: 'pending',
-        metodo_pagamento: data.metodoPagamento,
-        convenio_nome: data.convenioNome,
-        responsavel_id: data.responsavelId,
-        is_recurring: isRecurring,
-        created_at: new Date().toISOString(),
-        paid_at: null,
-        refunded_at: null,
-      };
+      if (itemsError) {
+        console.error('Error creating sale items in cloud mode:', itemsError);
+        await supabase.from('sales').delete().eq('id', createdSale.id);
+        return { success: false, error: itemsError.message || 'Erro ao criar itens da venda' };
+      }
 
-      setSales((prev) => [newSale, ...prev]);
-      createEvent('sale.created', newSale.id, { 
-        contactId: data.contactId, 
+      await fetchSalesFromDb();
+      createEvent('sale.created', createdSale.id, {
+        contactId: data.contactId,
         valor: valorTotal,
-        itemsCount: items.length,
+        itemsCount: saleItems.length,
         isRecurring,
       });
 

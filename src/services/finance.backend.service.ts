@@ -59,8 +59,15 @@ export const financeBackendService = {
   // --- Sales ---
 
   fetchSales: async (accountId: string): Promise<Sale[]> => {
-    const res = await apiClient.get<ApiResponse<any[]>>(API_ENDPOINTS.SALES.LIST);
-    return (res.data || []).map(mapSaleFromApi);
+    const res = await apiClient.get<any>(API_ENDPOINTS.SALES.LIST);
+    const payload = res?.data ?? res;
+    const rawSales = Array.isArray(payload)
+      ? payload
+      : Array.isArray(payload?.data)
+        ? payload.data
+        : [];
+
+    return rawSales.map(mapSaleFromApi);
   },
 
   createSale: async (data: CreateSaleBackendData): Promise<Sale> => {
