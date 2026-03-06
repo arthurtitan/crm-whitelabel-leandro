@@ -1,42 +1,52 @@
 
 
-## Diagnóstico final
+## Problema
 
-O `env_file: - .env` não funciona no EasyPanel porque ele **não monta** um arquivo `.env` no filesystem do container — ele injeta variáveis via Docker API. Porém, as variáveis declaradas na seção `environment` do Compose (com interpolação `${}`) têm **prioridade** e são resolvidas em build-time pelo Compose, onde as vars Google não existem, resultando em strings vazias.
+O `syncWithGoogle` usa `prisma.calendarEvent.upsert()` com `where: { id: ... || 'new' }`. Quando o evento do Google ainda não existe no banco, `getEventIdByGoogleId` retorna `null`, e o código passa a string literal `'new'` como valor do campo `id` (que é `@db.Uuid`). O Postgres rejeita `'new'` porque não é um UUID válido.
 
-A solução definitiva: hardcodar as credenciais Google diretamente no `environment` do Compose.
+## Correção
 
-## Alterações
+### `backend/src/services/calendar.service.ts` — método `syncWithGoogle` (linhas ~377-406)
 
-**Arquivo: `docker-compose.yml`** — adicionar as 3 variáveis Google com valores literais na seção `environment` do backend (após `LOG_LEVEL`):
+Substituir o `upsert` por lógica condicional: se o evento já existe, faz `update`; senão, faz `create`:
 
-```yaml
-GOOGLE_CLIENT_ID: "231653132408-iv5b27dlf72ekmbvmviuevcruc6kqs8m.apps.googleusercontent.com"
-GOOGLE_CLIENT_SECRET: "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"
-GOOGLE_REDIRECT_URI: "https://360.gleps.com.br/api/calendar/google/callback"
+```typescript
+for (const gEvent of googleEvents) {
+  if (gEvent.status === 'cancelled') continue;
+  const startTime = gEvent.start?.dateTime || gEvent.start?.date;
+  const endTime = gEvent.end?.dateTime || gEvent.end?.date;
+  if (!startTime || !endTime) continue;
+
+  const existingId = await this.getEventIdByGoogleId(gEvent.id, accountId);
+
+  const eventData = {
+    title: gEvent.summary || 'Sem título',
+    startTime: new Date(startTime),
+    endTime: new Date(endTime),
+    location: gEvent.location || null,
+    meetingLink: gEvent.hangoutLink || null,
+  };
+
+  if (existingId) {
+    await prisma.calendarEvent.update({
+      where: { id: existingId },
+      data: eventData,
+    });
+  } else {
+    await prisma.calendarEvent.create({
+      data: {
+        ...eventData,
+        accountId,
+        createdById: userId,
+        type: 'meeting',
+        source: 'google',
+        googleEventId: gEvent.id,
+        googleCalendarId: 'primary',
+      },
+    });
+  }
+}
 ```
 
-**Seu `.env` no EasyPanel deve ficar assim** (pode remover as 3 linhas do Google já que agora estão no Compose):
-
-```
-DB_USER=gleps
-DB_PASSWORD=SenhaForte2024!
-DB_NAME=gleps_crm
-FRONTEND_URL=https://360.gleps.com.br
-API_URL=http://backend:3000
-CORS_ORIGINS=https://360.gleps.com.br
-JWT_SECRET=k8Tj3mZvPqR7xYwN2sLfA9bCdEgHiKoU4nVrXuWyQ1M
-JWT_EXPIRES_IN=1h
-REFRESH_TOKEN_SECRET=Bp5GnSx8WqLm3TvRj7YcKfA2dHuE9oZiN6rXwMkJ4Qs
-REFRESH_TOKEN_EXPIRES_IN=7d
-BCRYPT_SALT_ROUNDS=12
-RATE_LIMIT_WINDOW_MS=900000
-RATE_LIMIT_MAX=100
-BACKEND_UPSTREAM=backend:3000
-RUN_SEED=true
-LOG_LEVEL=info
-CHATWOOT_WEBHOOK_SECRET=
-```
-
-As credenciais Google ficam no Compose (valores fixos, sem interpolação). Depois de mudar de domínio ou credenciais, basta atualizar o Compose e fazer rebuild.
+Impacto: arquivo único `backend/src/services/calendar.service.ts`. Requer rebuild do backend.
 
