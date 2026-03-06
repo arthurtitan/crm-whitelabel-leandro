@@ -6,6 +6,7 @@ import { useBackend } from '@/config/backend.config';
 import { supabase } from '@/integrations/supabase/client';
 import { financeBackendService } from '@/services/finance.backend.service';
 import { contactsBackendService } from '@/services/contacts.backend.service';
+import { contactsCloudService } from '@/services/contacts.cloud.service';
 import { mergeContacts } from '@/utils/dataSync';
 import { 
   mockLeadFunnelStates, 
