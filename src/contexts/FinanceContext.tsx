@@ -577,43 +577,58 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
         }
       }
 
-      // Local-only mode (Supabase Cloud)
-      const saleId = `sale-${Date.now()}`;
-      const items: SaleItem[] = data.items.map((item, index) => ({
-        id: `item-${saleId}-${index}`,
+      // Supabase Cloud mode: persist sale + sale items
+      const saleItems: SaleItem[] = data.items.map((item, index) => ({
+        id: `item-${Date.now()}-${index}`,
         product_id: item.productId,
         quantidade: item.quantidade,
         valor_unitario: item.valorUnitario,
         valor_total: item.quantidade * item.valorUnitario,
       }));
 
-      const valorTotal = items.reduce((sum, item) => sum + item.valor_total, 0);
-      const isRecurring = data.items.some(item => 
-        checkIsRecurringSale(data.contactId, item.productId)
+      const valorTotal = saleItems.reduce((sum, item) => sum + item.valor_total, 0);
+      const isRecurring = data.items.some((item) => checkIsRecurringSale(data.contactId, item.productId));
+
+      const { data: createdSale, error: saleError } = await supabase
+        .from('sales')
+        .insert({
+          account_id: accountId,
+          contact_id: data.contactId,
+          valor: valorTotal,
+          metodo_pagamento: data.metodoPagamento,
+          convenio_nome: data.convenioNome ?? null,
+          responsavel_id: data.responsavelId,
+          is_recurring: isRecurring,
+        })
+        .select('id')
+        .single();
+
+      if (saleError || !createdSale) {
+        console.error('Error creating sale in cloud mode:', saleError);
+        return { success: false, error: saleError?.message || 'Erro ao criar venda' };
+      }
+
+      const { error: itemsError } = await supabase.from('sale_items').insert(
+        saleItems.map((item) => ({
+          sale_id: createdSale.id,
+          product_id: item.product_id,
+          quantidade: item.quantidade,
+          valor_unitario: item.valor_unitario,
+          valor_total: item.valor_total,
+        }))
       );
 
-      const newSale: Sale = {
-        id: saleId,
-        account_id: accountId,
-        contact_id: data.contactId,
-        product_id: data.items[0]?.productId,
-        items,
-        valor: valorTotal,
-        status: 'pending',
-        metodo_pagamento: data.metodoPagamento,
-        convenio_nome: data.convenioNome,
-        responsavel_id: data.responsavelId,
-        is_recurring: isRecurring,
-        created_at: new Date().toISOString(),
-        paid_at: null,
-        refunded_at: null,
-      };
+      if (itemsError) {
+        console.error('Error creating sale items in cloud mode:', itemsError);
+        await supabase.from('sales').delete().eq('id', createdSale.id);
+        return { success: false, error: itemsError.message || 'Erro ao criar itens da venda' };
+      }
 
-      setSales((prev) => [newSale, ...prev]);
-      createEvent('sale.created', newSale.id, { 
-        contactId: data.contactId, 
+      await fetchSalesFromDb();
+      createEvent('sale.created', createdSale.id, {
+        contactId: data.contactId,
         valor: valorTotal,
-        itemsCount: items.length,
+        itemsCount: saleItems.length,
         isRecurring,
       });
 

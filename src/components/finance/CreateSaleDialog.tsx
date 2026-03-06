@@ -193,7 +193,7 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
 
     // Create new contact if needed
     if (isCreatingNewContact) {
-      const newContactResult = createContact({
+      const newContactResult = await createContact({
         nome: newContact.nome.trim(),
         telefone: newContact.telefone.trim(),
         email: newContact.email.trim() || null,
