@@ -124,11 +124,11 @@ export function SaleDetailsSheet({
   };
 
   const activeItemsTotal = sale.items
-    .filter((item) => !(item as any).refunded)
+    .filter((item) => !item.refunded)
     .reduce((sum, item) => sum + item.valor_total, 0);
 
   const refundedItemsTotal = sale.items
-    .filter((item) => (item as any).refunded)
+    .filter((item) => item.refunded)
     .reduce((sum, item) => sum + item.valor_total, 0);
 
   return (
