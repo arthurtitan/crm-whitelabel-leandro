@@ -245,7 +245,10 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
 
   // ============= AUTO-SYNC POLLING =============
   // Syncs every 30 seconds ONLY when connected.
-  // Important: polling must never change connection state (only user clicks can disconnect).
+  // Pauses on critical errors to avoid flooding.
+
+  const syncErrorCountRef = useRef(0);
+  const MAX_SYNC_ERRORS = 3;
 
   useEffect(() => {
     if (!accountId) return;
@@ -254,12 +257,19 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
     const SYNC_INTERVAL = 30000;
 
     const intervalId = setInterval(async () => {
+      // Stop polling if too many consecutive errors
+      if (syncErrorCountRef.current >= MAX_SYNC_ERRORS) {
+        console.warn('[Calendar] Auto-sync paused after repeated errors');
+        return;
+      }
+
       console.log('[Calendar] Auto-sync polling...');
 
       try {
         if (useBackend) {
           await calendarBackendService.syncGoogle();
           await loadEvents();
+          syncErrorCountRef.current = 0; // Reset on success
           return;
         }
 
@@ -269,9 +279,13 @@ export function CalendarProvider({ children, accountId, userId }: CalendarProvid
         const response = await supabase.functions.invoke('google-calendar-sync', {});
         if (!response.error) {
           await loadEvents();
+          syncErrorCountRef.current = 0;
+        } else {
+          syncErrorCountRef.current++;
         }
       } catch (error) {
-        console.warn('[Calendar] Auto-sync failed (ignored):', error);
+        syncErrorCountRef.current++;
+        console.warn(`[Calendar] Auto-sync failed (${syncErrorCountRef.current}/${MAX_SYNC_ERRORS}):`, error);
       }
     }, SYNC_INTERVAL);
 

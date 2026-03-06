@@ -134,7 +134,7 @@ export default function AdminAgendaPage() {
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-foreground">Agenda</h1>
           <p className="text-xs sm:text-sm text-muted-foreground">
-            {isConnected 
+            {isConnected && connection.email
               ? `Sincronizado com ${connection.email}` 
               : hasError 
                 ? 'Reconexão necessária'
