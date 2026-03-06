@@ -1,42 +1,43 @@
 
 
-## Diagnóstico final
+## Problemas identificados
 
-O `env_file: - .env` não funciona no EasyPanel porque ele **não monta** um arquivo `.env` no filesystem do container — ele injeta variáveis via Docker API. Porém, as variáveis declaradas na seção `environment` do Compose (com interpolação `${}`) têm **prioridade** e são resolvidas em build-time pelo Compose, onde as vars Google não existem, resultando em strings vazias.
+### 1. Produtos não aparecem no dropdown de vendas
+O `financeBackendService.fetchProducts` retorna `res.data || []` sem mapear os campos do backend (camelCase) para o formato esperado pelo frontend (snake_case). O backend retorna `valorPadrao`, `metodosPagamento`, `conveniosAceitos`, mas a interface `Product` espera `valor_padrao`, `metodos_pagamento`, `convenios_aceitos`.
 
-A solução definitiva: hardcodar as credenciais Google diretamente no `environment` do Compose.
+### 2. "Nenhum lead elegível no funil"
+O `CreateSaleDialog` filtra contatos por `getContactFunnelStage(c.id) !== null` (linha 253), que depende de `leadFunnelStates` populado com `mockFunnelStages`. No modo backend, essa lista nunca é preenchida, resultando em 0 contatos elegíveis. O usuário quer que **todos** os contatos sejam elegíveis para venda, sem restrição de etapa.
 
-## Alterações
+## Correções
 
-**Arquivo: `docker-compose.yml`** — adicionar as 3 variáveis Google com valores literais na seção `environment` do backend (após `LOG_LEVEL`):
+### 1. `src/services/finance.backend.service.ts` — método `fetchProducts`
+Mapear campos camelCase para snake_case:
 
-```yaml
-GOOGLE_CLIENT_ID: "231653132408-iv5b27dlf72ekmbvmviuevcruc6kqs8m.apps.googleusercontent.com"
-GOOGLE_CLIENT_SECRET: "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"
-GOOGLE_REDIRECT_URI: "https://360.gleps.com.br/api/calendar/google/callback"
+```typescript
+fetchProducts: async (accountId: string): Promise<Product[]> => {
+  const res = await apiClient.get<ApiResponse<any[]>>(API_ENDPOINTS.PRODUCTS.LIST, {
+    params: { ativo: true },
+  });
+  return (res.data || []).map(p => ({
+    id: p.id,
+    account_id: p.accountId || p.account_id,
+    nome: p.nome,
+    valor_padrao: Number(p.valorPadrao ?? p.valor_padrao ?? 0),
+    ativo: p.ativo ?? true,
+    metodos_pagamento: p.metodosPagamento || p.metodos_pagamento || ['pix'],
+    convenios_aceitos: p.conveniosAceitos || p.convenios_aceitos || [],
+    created_at: p.createdAt || p.created_at,
+    updated_at: p.updatedAt || p.updated_at,
+  }));
+},
 ```
 
-**Seu `.env` no EasyPanel deve ficar assim** (pode remover as 3 linhas do Google já que agora estão no Compose):
+### 2. `src/components/finance/CreateSaleDialog.tsx` — linha 253
+Remover filtro de etapa e usar **todos** os contatos:
 
-```
-DB_USER=gleps
-DB_PASSWORD=SenhaForte2024!
-DB_NAME=gleps_crm
-FRONTEND_URL=https://360.gleps.com.br
-API_URL=http://backend:3000
-CORS_ORIGINS=https://360.gleps.com.br
-JWT_SECRET=k8Tj3mZvPqR7xYwN2sLfA9bCdEgHiKoU4nVrXuWyQ1M
-JWT_EXPIRES_IN=1h
-REFRESH_TOKEN_SECRET=Bp5GnSx8WqLm3TvRj7YcKfA2dHuE9oZiN6rXwMkJ4Qs
-REFRESH_TOKEN_EXPIRES_IN=7d
-BCRYPT_SALT_ROUNDS=12
-RATE_LIMIT_WINDOW_MS=900000
-RATE_LIMIT_MAX=100
-BACKEND_UPSTREAM=backend:3000
-RUN_SEED=true
-LOG_LEVEL=info
-CHATWOOT_WEBHOOK_SECRET=
+```typescript
+const eligibleContacts = contacts;
 ```
 
-As credenciais Google ficam no Compose (valores fixos, sem interpolação). Depois de mudar de domínio ou credenciais, basta atualizar o Compose e fazer rebuild.
+Também remover a mensagem "Nenhum lead elegível no funil" e trocar por "Nenhum contato cadastrado" caso a lista esteja vazia.
 
