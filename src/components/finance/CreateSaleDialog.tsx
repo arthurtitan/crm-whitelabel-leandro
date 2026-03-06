@@ -249,11 +249,8 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
     setIsCreatingNewContact(false);
   };
 
-  // Filter contacts that can have sales (in funnel)
-  const eligibleContacts = contacts.filter((c) => {
-    const stage = getContactFunnelStage(c.id);
-    return stage !== null;
-  });
+  // All contacts are eligible for sales
+  const eligibleContacts = contacts;
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -359,7 +356,7 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
                   </SelectItem>
                   {eligibleContacts.length === 0 ? (
                     <SelectItem value="none" disabled>
-                      Nenhum lead elegível no funil
+                      Nenhum contato cadastrado
                     </SelectItem>
                   ) : (
                     eligibleContacts.map((contact) => {
