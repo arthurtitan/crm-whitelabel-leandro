@@ -1,42 +1,69 @@
 
 
-## Diagnóstico final
+## Problema
 
-O `env_file: - .env` não funciona no EasyPanel porque ele **não monta** um arquivo `.env` no filesystem do container — ele injeta variáveis via Docker API. Porém, as variáveis declaradas na seção `environment` do Compose (com interpolação `${}`) têm **prioridade** e são resolvidas em build-time pelo Compose, onde as vars Google não existem, resultando em strings vazias.
+Dois problemas na cadeia de estorno:
 
-A solução definitiva: hardcodar as credenciais Google diretamente no `environment` do Compose.
+1. **Validação de senha hardcoded**: `RefundConfirmationDialog` valida contra um dicionário fixo `DEMO_CREDENTIALS` com apenas 6 emails de demonstração. Emails reais como `admin@gleps.com.br` não estão na lista, causando "Senha incorreta" sempre.
 
-## Alterações
+2. **Estorno não persiste no backend**: `FinanceContext.refundSale()` apenas atualiza o state local com `setSales(...)` — nunca chama `financeBackendService.refundSale()`. O mesmo problema existe para `refundSaleItem()`.
 
-**Arquivo: `docker-compose.yml`** — adicionar as 3 variáveis Google com valores literais na seção `environment` do backend (após `LOG_LEVEL`):
+## Correção
 
-```yaml
-GOOGLE_CLIENT_ID: "231653132408-iv5b27dlf72ekmbvmviuevcruc6kqs8m.apps.googleusercontent.com"
-GOOGLE_CLIENT_SECRET: "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"
-GOOGLE_REDIRECT_URI: "https://360.gleps.com.br/api/calendar/google/callback"
+### 1. `src/components/finance/RefundConfirmationDialog.tsx`
+
+Remover o `DEMO_CREDENTIALS` e a validação local de senha. Em vez disso, o dialog apenas coleta a senha e o motivo, e repassa ambos para o `onConfirm`:
+
+- Alterar a interface: `onConfirm: (reason: string, password: string) => void`
+- O `handleConfirm` apenas valida que os campos não estão vazios e chama `onConfirm(reason, password)` — a validação real ocorre no backend via middleware `verifyPassword`
+
+### 2. `src/contexts/FinanceContext.tsx` — `refundSale` e `refundSaleItem`
+
+Quando `useBackend === true`, chamar o backend service com a senha no header:
+
+```typescript
+const refundSale = useCallback(
+  async (saleId: string, reason: string, password?: string) => {
+    if (useBackend) {
+      await financeBackendService.refundSale(saleId, reason, password);
+      await fetchSalesFromDb(); // re-fetch para atualizar
+      return;
+    }
+    // fallback local...
+  },
+  [useBackend, createEvent]
+);
 ```
 
-**Seu `.env` no EasyPanel deve ficar assim** (pode remover as 3 linhas do Google já que agora estão no Compose):
+### 3. `src/services/finance.backend.service.ts` — `refundSale` e `refundSaleItem`
 
-```
-DB_USER=gleps
-DB_PASSWORD=SenhaForte2024!
-DB_NAME=gleps_crm
-FRONTEND_URL=https://360.gleps.com.br
-API_URL=http://backend:3000
-CORS_ORIGINS=https://360.gleps.com.br
-JWT_SECRET=k8Tj3mZvPqR7xYwN2sLfA9bCdEgHiKoU4nVrXuWyQ1M
-JWT_EXPIRES_IN=1h
-REFRESH_TOKEN_SECRET=Bp5GnSx8WqLm3TvRj7YcKfA2dHuE9oZiN6rXwMkJ4Qs
-REFRESH_TOKEN_EXPIRES_IN=7d
-BCRYPT_SALT_ROUNDS=12
-RATE_LIMIT_WINDOW_MS=900000
-RATE_LIMIT_MAX=100
-BACKEND_UPSTREAM=backend:3000
-RUN_SEED=true
-LOG_LEVEL=info
-CHATWOOT_WEBHOOK_SECRET=
+Enviar a senha via header `x-confirm-password`:
+
+```typescript
+refundSale: async (saleId: string, reason: string, password?: string): Promise<Sale> => {
+  const headers: Record<string, string> = {};
+  if (password) headers['x-confirm-password'] = password;
+  const res = await apiClient.post<ApiResponse<Sale>>(
+    API_ENDPOINTS.SALES.REFUND(saleId),
+    { reason },
+    { headers }
+  );
+  return res.data;
+},
 ```
 
-As credenciais Google ficam no Compose (valores fixos, sem interpolação). Depois de mudar de domínio ou credenciais, basta atualizar o Compose e fazer rebuild.
+### 4. Callers (`SalesTable`, `AdminSalesPage`, `LeadProfileSheet`, `SaleDetailsSheet`)
+
+Atualizar o `handleRefundConfirm` para repassar a senha recebida do dialog:
+
+```typescript
+const handleRefundConfirm = (reason: string, password: string) => {
+  if (!refundDialog.saleId) return;
+  refundSale(refundDialog.saleId, reason, password);
+};
+```
+
+### 5. `ItemRefundDialog` (estorno parcial)
+
+Aplicar a mesma correção: coletar senha, enviar via `refundSaleItem(saleId, itemId, reason, password)`.
 
