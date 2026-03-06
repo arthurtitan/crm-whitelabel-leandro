@@ -65,7 +65,7 @@ export default function AdminSalesPage() {
   const filteredSales = useMemo(() => {
     return sales.filter((sale) => {
       const contact = getContactById(sale.contact_id);
-      const matchesSearch = contact?.nome?.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearch = !searchTerm.trim() || contact?.nome?.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesStatus = statusFilter === 'all' || sale.status === statusFilter;
       
       // Filter by agent (responsavel_id)
