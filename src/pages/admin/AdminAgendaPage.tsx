@@ -40,7 +40,7 @@ export default function AdminAgendaPage() {
     const params = new URLSearchParams(window.location.search);
     const googleConnected = params.get('google_connected') || params.get('google');
     const forceSync = params.get('force_sync');
-    const error = params.get('error');
+    const error = params.get('error') || params.get('google_error');
 
     // Nothing to handle
     if (!error && !googleConnected && !forceSync) return;
