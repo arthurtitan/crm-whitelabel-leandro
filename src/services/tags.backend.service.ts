@@ -13,14 +13,16 @@ export const tagsBackendService = {
     const response = await apiClient.get<Tag[] | { data: Tag[] }>(API_ENDPOINTS.TAGS.LIST, {
       params: { type: 'stage', ativo: true, accountId },
     });
-    return Array.isArray(response) ? response : (response as any).data || [];
+    const raw = Array.isArray(response) ? response : (response as any).data || [];
+    return raw.map(mapBackendTag);
   },
 
   async listAllTags(accountId: string): Promise<Tag[]> {
     const response = await apiClient.get<Tag[] | { data: Tag[] }>(API_ENDPOINTS.TAGS.LIST, {
       params: { ativo: true, accountId },
     });
-    return Array.isArray(response) ? response : (response as any).data || [];
+    const raw = Array.isArray(response) ? response : (response as any).data || [];
+    return raw.map(mapBackendTag);
   },
 
   async createStageTag(input: {

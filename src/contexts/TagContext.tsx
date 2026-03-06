@@ -1,6 +1,8 @@
-import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Tag, LeadTag, TagHistory, ActorType } from '@/types/crm';
 import { mockTags, mockLeadTags, mockTagHistory, mockFunnels } from '@/data/mockData';
+import { useBackend } from '@/config/backend.config';
+import { tagsBackendService } from '@/services/tags.backend.service';
 
 // ============= TYPES =============
 
