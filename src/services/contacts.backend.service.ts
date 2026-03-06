@@ -2,6 +2,7 @@
  * Contacts Backend Service
  * 
  * Uses Express API via apiClient instead of Supabase.
+ * Returns normalized CreateContactResult to match cloud service interface.
  */
 
 import { apiClient } from '@/api/client';
@@ -15,25 +16,47 @@ import type {
 
 export const contactsBackendService = {
   async createContact(input: CreateContactInput): Promise<CreateContactResult> {
-    return apiClient.post<CreateContactResult>(API_ENDPOINTS.CONTACTS.CREATE, {
-      nome: input.nome,
-      telefone: input.telefone,
-      email: input.email,
-      origem: input.origem,
-      accountId: input.account_id,
-    });
+    try {
+      const res = await apiClient.post<any>(API_ENDPOINTS.CONTACTS.CREATE, {
+        nome: input.nome,
+        telefone: input.telefone,
+        email: input.email,
+        origem: input.origem,
+        accountId: input.account_id,
+      });
+      const contact = res.data || res;
+      return {
+        success: true,
+        contact_id: contact.id,
+        chatwoot_contact_id: contact.chatwootContactId || null,
+        chatwoot_conversation_id: contact.chatwootConversationId || null,
+      };
+    } catch (error: any) {
+      return { success: false, error: error.message || 'Erro ao criar contato' };
+    }
   },
 
   async createContactWithChatwoot(input: CreateContactWithChatwootInput): Promise<CreateContactResult> {
-    return apiClient.post<CreateContactResult>(API_ENDPOINTS.CONTACTS.CREATE, {
-      nome: input.nome,
-      telefone: input.telefone,
-      email: input.email,
-      origem: input.origem,
-      accountId: input.account_id,
-      createConversation: input.create_conversation,
-      initialStageTagId: input.initial_stage_tag_id,
-    });
+    try {
+      const res = await apiClient.post<any>(API_ENDPOINTS.CONTACTS.CREATE, {
+        nome: input.nome,
+        telefone: input.telefone,
+        email: input.email,
+        origem: input.origem,
+        accountId: input.account_id,
+        createConversation: input.create_conversation,
+        initialStageTagId: input.initial_stage_tag_id,
+      });
+      const contact = res.data || res;
+      return {
+        success: true,
+        contact_id: contact.id,
+        chatwoot_contact_id: contact.chatwootContactId || null,
+        chatwoot_conversation_id: contact.chatwootConversationId || null,
+      };
+    } catch (error: any) {
+      return { success: false, error: error.message || 'Erro ao criar contato no Chatwoot' };
+    }
   },
 
   async applyStageTagToContact(
