@@ -84,6 +84,7 @@ async function bootstrap() {
     res.json({
       status: 'ok',
       version: process.env.BUILD_VERSION || 'dev',
+      syncStrategy: 'create-or-update-v2',
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
     });
