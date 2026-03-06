@@ -8,6 +8,22 @@ import { apiClient } from '@/api/client';
 import { API_ENDPOINTS } from '@/api/endpoints';
 import type { Tag, LeadTag, ImportLabelsResult, SyncContactsResult } from './tags.cloud.service';
 
+function mapBackendTag(t: any): Tag {
+  return {
+    id: t.id,
+    account_id: t.account_id ?? t.accountId,
+    funnel_id: t.funnel_id ?? t.funnelId,
+    name: t.name,
+    slug: t.slug,
+    type: t.type,
+    color: t.color,
+    ordem: t.ordem ?? 0,
+    ativo: t.ativo ?? true,
+    chatwoot_label_id: t.chatwoot_label_id ?? t.chatwootLabelId ?? null,
+    created_at: t.created_at ?? t.createdAt,
+  };
+}
+
 export const tagsBackendService = {
   async listStageTags(accountId: string): Promise<Tag[]> {
     const response = await apiClient.get<Tag[] | { data: Tag[] }>(API_ENDPOINTS.TAGS.LIST, {
