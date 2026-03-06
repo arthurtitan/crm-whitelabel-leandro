@@ -103,22 +103,21 @@ export function CreateLeadDialog({
     setIsSubmitting(true);
 
     try {
+      const service = useBackend ? contactsBackendService : contactsCloudService;
       let result;
 
       if (values.create_in_chatwoot && hasChatwootConfig) {
-        // Create in Supabase + Chatwoot (with initial label if stage selected)
-        result = await contactsCloudService.createContactWithChatwoot({
+        result = await service.createContactWithChatwoot({
           account_id: accountId,
           nome: values.nome,
           telefone: values.telefone,
           email: values.email || undefined,
           origem: values.origem as ContactOrigin,
           create_conversation: true,
-          initial_stage_tag_id: values.initial_stage_id, // Pass tag ID to get label name
+          initial_stage_tag_id: values.initial_stage_id,
         });
       } else {
-        // Create in Supabase only
-        result = await contactsCloudService.createContact({
+        result = await service.createContact({
           account_id: accountId,
           nome: values.nome,
           telefone: values.telefone,
@@ -140,7 +139,7 @@ export function CreateLeadDialog({
       
       if (values.initial_stage_id && result.contact_id) {
         console.log('[CreateLeadDialog] Applying stage tag...');
-        const tagResult = await contactsCloudService.applyStageTagToContact(
+        const tagResult = await service.applyStageTagToContact(
           result.contact_id,
           values.initial_stage_id,
           'kanban'
