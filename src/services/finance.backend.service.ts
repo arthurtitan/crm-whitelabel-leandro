@@ -7,7 +7,43 @@
 
 import { apiClient, ApiResponse } from '@/api/client';
 import { API_ENDPOINTS } from '@/api/endpoints';
-import type { Sale, Product, Contact, LeadNote, SaleItem, PaymentMethod, ContactOrigin } from '@/types/crm';
+import type { Sale, SaleItem, Product, Contact, LeadNote, PaymentMethod, ContactOrigin } from '@/types/crm';
+
+// ============= MAPPERS =============
+
+function mapSaleItemFromApi(raw: any): SaleItem {
+  return {
+    id: raw.id,
+    product_id: raw.productId || raw.product_id,
+    quantidade: raw.quantidade ?? 1,
+    valor_unitario: Number(raw.valorUnitario ?? raw.valor_unitario ?? 0),
+    valor_total: Number(raw.valorTotal ?? raw.valor_total ?? 0),
+    refunded: raw.refunded ?? false,
+    refunded_at: raw.refundedAt || raw.refunded_at || null,
+    refund_reason: raw.refundReason || raw.refund_reason || null,
+  };
+}
+
+function mapSaleFromApi(raw: any): Sale {
+  const items = (raw.items || raw.saleItems || raw.sale_items || []).map(mapSaleItemFromApi);
+  return {
+    id: raw.id,
+    account_id: raw.accountId || raw.account_id,
+    contact_id: raw.contactId || raw.contact_id,
+    product_id: items[0]?.product_id || raw.productId || raw.product_id || null,
+    items,
+    valor: Number(raw.valor ?? 0),
+    status: raw.status || 'pending',
+    metodo_pagamento: raw.metodoPagamento || raw.metodo_pagamento,
+    convenio_nome: raw.convenioNome || raw.convenio_nome || null,
+    responsavel_id: raw.responsavelId || raw.responsavel_id,
+    is_recurring: raw.isRecurring ?? raw.is_recurring ?? false,
+    created_at: raw.createdAt || raw.created_at,
+    paid_at: raw.paidAt || raw.paid_at || null,
+    refunded_at: raw.refundedAt || raw.refunded_at || null,
+    refund_reason: raw.refundReason || raw.refund_reason || null,
+  };
+}
 
 // ============= SALES =============
 
@@ -23,31 +59,44 @@ export const financeBackendService = {
   // --- Sales ---
 
   fetchSales: async (accountId: string): Promise<Sale[]> => {
-    const res = await apiClient.get<ApiResponse<Sale[]>>(API_ENDPOINTS.SALES.LIST);
-    return res.data || [];
+    const res = await apiClient.get<ApiResponse<any[]>>(API_ENDPOINTS.SALES.LIST);
+    return (res.data || []).map(mapSaleFromApi);
   },
 
   createSale: async (data: CreateSaleBackendData): Promise<Sale> => {
-    const res = await apiClient.post<ApiResponse<Sale>>(API_ENDPOINTS.SALES.CREATE, data);
-    return res.data;
+    const res = await apiClient.post<ApiResponse<any>>(API_ENDPOINTS.SALES.CREATE, data);
+    return mapSaleFromApi(res.data);
   },
 
   markAsPaid: async (saleId: string): Promise<Sale> => {
-    const res = await apiClient.patch<ApiResponse<Sale>>(API_ENDPOINTS.SALES.MARK_PAID(saleId));
-    return res.data;
+    const res = await apiClient.patch<ApiResponse<any>>(API_ENDPOINTS.SALES.MARK_PAID(saleId));
+    return mapSaleFromApi(res.data);
   },
 
-  refundSale: async (saleId: string, reason: string): Promise<Sale> => {
-    const res = await apiClient.post<ApiResponse<Sale>>(API_ENDPOINTS.SALES.REFUND(saleId), { reason });
-    return res.data;
-  },
-
-  refundSaleItem: async (saleId: string, itemId: string, reason: string): Promise<Sale> => {
-    const res = await apiClient.post<ApiResponse<Sale>>(
-      API_ENDPOINTS.SALES.REFUND_ITEM(saleId, itemId),
-      { reason }
+  refundSale: async (saleId: string, reason: string, password?: string): Promise<Sale> => {
+    const headers: Record<string, string> = {};
+    if (password) {
+      headers['x-confirm-password'] = password;
+    }
+    const res = await apiClient.post<ApiResponse<any>>(
+      API_ENDPOINTS.SALES.REFUND(saleId),
+      { reason },
+      { headers }
     );
-    return res.data;
+    return mapSaleFromApi(res.data);
+  },
+
+  refundSaleItem: async (saleId: string, itemId: string, reason: string, password?: string): Promise<Sale> => {
+    const headers: Record<string, string> = {};
+    if (password) {
+      headers['x-confirm-password'] = password;
+    }
+    const res = await apiClient.post<ApiResponse<any>>(
+      API_ENDPOINTS.SALES.REFUND_ITEM(saleId, itemId),
+      { reason },
+      { headers }
+    );
+    return mapSaleFromApi(res.data);
   },
 
   getSaleKPIs: async (params?: { startDate?: string; endDate?: string }) => {

@@ -9,14 +9,15 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Loader2 } from 'lucide-react';
 
 interface RefundConfirmationDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   saleValue: number;
-  onConfirm: (reason: string) => void;
+  onConfirm: (reason: string, password: string) => void | Promise<void>;
 }
 
 export function RefundConfirmationDialog({
@@ -26,7 +27,9 @@ export function RefundConfirmationDialog({
   onConfirm,
 }: RefundConfirmationDialogProps) {
   const [reason, setReason] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -35,19 +38,34 @@ export function RefundConfirmationDialog({
     }).format(value);
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!reason.trim()) {
       setError('Informe o motivo do estorno');
       return;
     }
+    if (!password.trim()) {
+      setError('Informe sua senha para confirmar');
+      return;
+    }
 
-    onConfirm(reason);
-    handleClose();
+    setIsSubmitting(true);
+    setError('');
+    try {
+      await onConfirm(reason, password);
+      handleClose();
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || 'Erro ao processar estorno';
+      setError(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleClose = () => {
     setReason('');
+    setPassword('');
     setError('');
+    setIsSubmitting(false);
     onOpenChange(false);
   };
 
@@ -85,23 +103,45 @@ export function RefundConfirmationDialog({
               placeholder="Descreva o motivo do estorno..."
               rows={2}
             />
-            {error && (
-              <p className="text-sm text-destructive">{error}</p>
-            )}
           </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="refund-password">Senha de confirmação</Label>
+            <Input
+              id="refund-password"
+              type="password"
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                setError('');
+              }}
+              placeholder="Digite sua senha..."
+            />
+          </div>
+
+          {error && (
+            <p className="text-sm text-destructive">{error}</p>
+          )}
         </div>
 
         <AlertDialogFooter>
-          <AlertDialogCancel onClick={handleClose}>
+          <AlertDialogCancel onClick={handleClose} disabled={isSubmitting}>
             Cancelar
           </AlertDialogCancel>
           <button
             type="button"
             onClick={handleConfirm}
-            disabled={!reason.trim()}
+            disabled={!reason.trim() || !password.trim() || isSubmitting}
             className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-destructive text-destructive-foreground hover:bg-destructive/90 h-10 px-4 py-2"
           >
-            Confirmar Estorno
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Processando...
+              </>
+            ) : (
+              'Confirmar Estorno'
+            )}
           </button>
         </AlertDialogFooter>
       </AlertDialogContent>
