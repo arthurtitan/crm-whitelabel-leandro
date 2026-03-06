@@ -374,38 +374,48 @@ class CalendarService {
     const data: any = await response.json();
     const googleEvents = data.items || [];
 
+    let created = 0;
+    let updated = 0;
+
     for (const gEvent of googleEvents) {
       if (gEvent.status === 'cancelled') continue;
       const startTime = gEvent.start?.dateTime || gEvent.start?.date;
       const endTime = gEvent.end?.dateTime || gEvent.end?.date;
       if (!startTime || !endTime) continue;
 
-      await prisma.calendarEvent.upsert({
-        where: { id: await this.getEventIdByGoogleId(gEvent.id, accountId) || 'new' },
-        create: {
-          accountId,
-          createdById: userId,
-          title: gEvent.summary || 'Sem título',
-          startTime: new Date(startTime),
-          endTime: new Date(endTime),
-          type: 'meeting',
-          source: 'google',
-          location: gEvent.location,
-          meetingLink: gEvent.hangoutLink,
-          googleEventId: gEvent.id,
-          googleCalendarId: 'primary',
-        },
-        update: {
-          title: gEvent.summary || 'Sem título',
-          startTime: new Date(startTime),
-          endTime: new Date(endTime),
-          location: gEvent.location,
-          meetingLink: gEvent.hangoutLink,
-        },
-      });
+      const existingId = await this.getEventIdByGoogleId(gEvent.id, accountId);
+
+      const eventData = {
+        title: gEvent.summary || 'Sem título',
+        startTime: new Date(startTime),
+        endTime: new Date(endTime),
+        location: gEvent.location || null,
+        meetingLink: gEvent.hangoutLink || null,
+      };
+
+      if (existingId) {
+        await prisma.calendarEvent.update({
+          where: { id: existingId },
+          data: eventData,
+        });
+        updated++;
+      } else {
+        await prisma.calendarEvent.create({
+          data: {
+            ...eventData,
+            accountId,
+            createdById: userId,
+            type: 'meeting',
+            source: 'google',
+            googleEventId: gEvent.id,
+            googleCalendarId: 'primary',
+          },
+        });
+        created++;
+      }
     }
 
-    return { synced: googleEvents.length };
+    return { synced: created + updated, created, updated };
   }
 
   private async getEventIdByGoogleId(googleEventId: string, accountId: string): Promise<string | null> {
