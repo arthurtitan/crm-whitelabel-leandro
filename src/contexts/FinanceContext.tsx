@@ -442,12 +442,21 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
   const createContact = useCallback(
     async (data: CreateContactData): Promise<{ success: boolean; error?: string; contactId?: string }> => {
       try {
+        const origemNormalizada: ContactOrigin =
+          data.origem === 'whatsapp' ||
+          data.origem === 'instagram' ||
+          data.origem === 'site' ||
+          data.origem === 'indicacao' ||
+          data.origem === 'outro'
+            ? data.origem
+            : 'outro';
+
         const payload = {
           account_id: accountId,
           nome: data.nome,
           telefone: data.telefone,
           email: data.email || undefined,
-          origem: data.origem as ContactOrigin,
+          origem: origemNormalizada,
         };
 
         const result = useBackend
@@ -465,7 +474,7 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
           nome: data.nome,
           telefone: data.telefone,
           email: data.email,
-          origem: data.origem as ContactOrigin,
+          origem: origemNormalizada,
           chatwoot_contact_id: result.chatwoot_contact_id ?? null,
           chatwoot_conversation_id: result.chatwoot_conversation_id ?? null,
           created_at: now,
