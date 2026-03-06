@@ -656,7 +656,17 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
   );
 
   const refundSale = useCallback(
-    (saleId: string, reason: string) => {
+    async (saleId: string, reason: string) => {
+      if (useBackend) {
+        try {
+          await financeBackendService.refundSale(saleId, reason);
+          await fetchSalesFromDb();
+          return;
+        } catch (err) {
+          console.error('Error refunding sale via backend:', err);
+          throw err;
+        }
+      }
       setSales((prev) =>
         prev.map((s) =>
           s.id === saleId
@@ -666,7 +676,7 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
       );
       createEvent('sale.refunded', saleId, { reason, refunded_at: new Date().toISOString() });
     },
-    [createEvent]
+    [createEvent, fetchSalesFromDb]
   );
 
   const refundSaleItem = useCallback(
