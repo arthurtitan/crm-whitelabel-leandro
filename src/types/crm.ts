@@ -219,6 +219,9 @@ export interface SaleItem {
   quantidade: number;
   valor_unitario: number;
   valor_total: number;
+  refunded?: boolean;
+  refunded_at?: string | null;
+  refund_reason?: string | null;
   // UI enrichment
   product?: Product;
 }
