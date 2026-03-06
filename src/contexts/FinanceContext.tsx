@@ -76,16 +76,16 @@ interface FinanceContextType {
   kpis: FinanceKPIs;
   
   // Actions
-  createSale: (data: CreateSaleData) => { success: boolean; error?: string };
+  createSale: (data: CreateSaleData) => { success: boolean; error?: string } | Promise<{ success: boolean; error?: string }>;
   createContact: (data: CreateContactData) => { success: boolean; error?: string; contactId?: string };
   updateContact: (contactId: string, data: UpdateContactData) => { success: boolean; error?: string };
   deleteContact: (contactId: string) => { success: boolean; error?: string };
   updateLeadStage: (contactId: string, stageId: string) => void;
   addLeadNote: (contactId: string, content: string, authorId: string, authorName: string) => void;
-  markAsPaid: (saleId: string) => void;
+  markAsPaid: (saleId: string) => void | Promise<void>;
   cancelSale: (saleId: string) => void;
-  refundSale: (saleId: string, reason: string) => void | Promise<void>;
-  refundSaleItem: (saleId: string, itemId: string, reason: string) => void | Promise<void>;
+  refundSale: (saleId: string, reason: string, password?: string) => void | Promise<void>;
+  refundSaleItem: (saleId: string, itemId: string, reason: string, password?: string) => void | Promise<void>;
   updateSale: (saleId: string, data: Partial<Sale>) => { success: boolean; error?: string };
   refetchContacts: () => Promise<void>;
   // Helpers
