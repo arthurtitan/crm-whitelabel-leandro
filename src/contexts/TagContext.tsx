@@ -1,6 +1,8 @@
-import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Tag, LeadTag, TagHistory, ActorType } from '@/types/crm';
 import { mockTags, mockLeadTags, mockTagHistory, mockFunnels } from '@/data/mockData';
+import { useBackend } from '@/config/backend.config';
+import { tagsBackendService } from '@/services/tags.backend.service';
 
 // ============= TYPES =============
 
@@ -102,22 +104,40 @@ interface TagProviderProps {
 export const TagProvider: React.FC<TagProviderProps> = ({ children, accountId }) => {
   // State filtered by account
   const [tags, setTags] = useState<Tag[]>(
-    mockTags.filter((t) => t.account_id === accountId && t.ativo)
+    useBackend ? [] : mockTags.filter((t) => t.account_id === accountId && t.ativo)
   );
-  const [leadTags, setLeadTags] = useState<LeadTag[]>(mockLeadTags);
-  const [tagHistory, setTagHistory] = useState<TagHistory[]>(mockTagHistory);
+  const [leadTags, setLeadTags] = useState<LeadTag[]>(useBackend ? [] : mockLeadTags);
+  const [tagHistory, setTagHistory] = useState<TagHistory[]>(useBackend ? [] : mockTagHistory);
+  const configInitialized = useRef(false);
   
-  // Final stages for funnel conversion - default to last 2 stages by order
-  const [funnelStageConfig, setFunnelStageConfig] = useState<FunnelStageConfig>(() => {
-    const accountTags = mockTags.filter((t) => t.account_id === accountId && t.ativo && t.type === 'stage');
-    const sortedByOrder = [...accountTags].sort((a, b) => b.ordem - a.ordem);
-    const defaultFinalStages = sortedByOrder.slice(0, 2).map((t) => t.id);
-    return {
-      leadsConvertidos: defaultFinalStages,
-      vendasCriadas: [], // Não usado - calculado a partir de vendas
-      vendasPagas: [],   // Não usado - calculado a partir de vendas
-    };
+  // Fetch tags from backend
+  useEffect(() => {
+    if (!useBackend || !accountId) return;
+    tagsBackendService.listAllTags(accountId).then((backendTags) => {
+      setTags(backendTags);
+    }).catch(console.error);
+  }, [accountId]);
+  
+  // Final stages for funnel conversion - recalculate when tags load
+  const [funnelStageConfig, setFunnelStageConfig] = useState<FunnelStageConfig>({
+    leadsConvertidos: [],
+    vendasCriadas: [],
+    vendasPagas: [],
   });
+
+  // Set default final stages when tags are loaded
+  useEffect(() => {
+    if (configInitialized.current) return;
+    const stageTagsList = tags.filter(t => t.type === 'stage');
+    if (stageTagsList.length === 0) return;
+    const sortedByOrder = [...stageTagsList].sort((a, b) => b.ordem - a.ordem);
+    const defaultFinalStages = sortedByOrder.slice(0, 2).map((t) => t.id);
+    setFunnelStageConfig(prev => ({
+      ...prev,
+      leadsConvertidos: defaultFinalStages,
+    }));
+    configInitialized.current = true;
+  }, [tags]);
   
   // Backwards compatibility alias
   const finalStageIds = funnelStageConfig.leadsConvertidos;

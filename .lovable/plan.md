@@ -1,46 +1,42 @@
 
 
-## Problema
+## Diagnóstico final
 
-O `TagContext` inicializa `stageTags` exclusivamente a partir de `mockTags` filtrado por `accountId`. Em produção, nenhum mock corresponde ao `accountId` real, então `stageTags` fica vazio. O popover de "Etapas que contam como Leads Convertidos" renderiza uma lista vazia — não há checkboxes para selecionar.
+O `env_file: - .env` não funciona no EasyPanel porque ele **não monta** um arquivo `.env` no filesystem do container — ele injeta variáveis via Docker API. Porém, as variáveis declaradas na seção `environment` do Compose (com interpolação `${}`) têm **prioridade** e são resolvidas em build-time pelo Compose, onde as vars Google não existem, resultando em strings vazias.
 
-## Correção
+A solução definitiva: hardcodar as credenciais Google diretamente no `environment` do Compose.
 
-### `src/contexts/TagContext.tsx`
+## Alterações
 
-Adicionar fetch das tags reais do backend quando `useBackend === true`:
+**Arquivo: `docker-compose.yml`** — adicionar as 3 variáveis Google com valores literais na seção `environment` do backend (após `LOG_LEVEL`):
 
-1. Importar `useBackend` e `tagsBackendService`
-2. No `TagProvider`, adicionar `useEffect` que:
-   - Se `useBackend && accountId`: chama `tagsBackendService.listStageTags(accountId)` 
-   - Atualiza `setTags` com o resultado (substituindo os mocks vazios)
-3. Manter fallback de `mockTags` apenas quando `useBackend === false`
-
-```typescript
-import { useBackend } from '@/config/backend.config';
-import { tagsBackendService } from '@/services/tags.backend.service';
-
-// Dentro do TagProvider:
-const [tags, setTags] = useState<Tag[]>(
-  useBackend ? [] : mockTags.filter((t) => t.account_id === accountId && t.ativo)
-);
-
-useEffect(() => {
-  if (!useBackend || !accountId) return;
-  tagsBackendService.listStageTags(accountId).then((backendTags) => {
-    setTags(backendTags);
-  }).catch(console.error);
-}, [accountId]);
+```yaml
+GOOGLE_CLIENT_ID: "231653132408-iv5b27dlf72ekmbvmviuevcruc6kqs8m.apps.googleusercontent.com"
+GOOGLE_CLIENT_SECRET: "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"
+GOOGLE_REDIRECT_URI: "https://360.gleps.com.br/api/calendar/google/callback"
 ```
 
-4. Ajustar a inicialização do `funnelStageConfig` para recalcular os `defaultFinalStages` **após** o fetch (outro `useEffect` que observa `tags`), garantindo que as 2 últimas etapas por ordem sejam selecionadas por padrão quando não houver configuração salva.
+**Seu `.env` no EasyPanel deve ficar assim** (pode remover as 3 linhas do Google já que agora estão no Compose):
 
-### Normalização de resposta
+```
+DB_USER=gleps
+DB_PASSWORD=SenhaForte2024!
+DB_NAME=gleps_crm
+FRONTEND_URL=https://360.gleps.com.br
+API_URL=http://backend:3000
+CORS_ORIGINS=https://360.gleps.com.br
+JWT_SECRET=k8Tj3mZvPqR7xYwN2sLfA9bCdEgHiKoU4nVrXuWyQ1M
+JWT_EXPIRES_IN=1h
+REFRESH_TOKEN_SECRET=Bp5GnSx8WqLm3TvRj7YcKfA2dHuE9oZiN6rXwMkJ4Qs
+REFRESH_TOKEN_EXPIRES_IN=7d
+BCRYPT_SALT_ROUNDS=12
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX=100
+BACKEND_UPSTREAM=backend:3000
+RUN_SEED=true
+LOG_LEVEL=info
+CHATWOOT_WEBHOOK_SECRET=
+```
 
-O `tagsBackendService.listStageTags` já retorna `Tag[]`, mas os campos podem vir em `camelCase` do Express. Verificar e adicionar mapper se necessário (como foi feito no `financeBackendService`):
-- `accountId → account_id`
-- `funnelId → funnel_id`  
-- `createdAt → created_at`
-
-Impacto: apenas `src/contexts/TagContext.tsx` e possivelmente `src/services/tags.backend.service.ts` (mapper).
+As credenciais Google ficam no Compose (valores fixos, sem interpolação). Depois de mudar de domínio ou credenciais, basta atualizar o Compose e fazer rebuild.
 
