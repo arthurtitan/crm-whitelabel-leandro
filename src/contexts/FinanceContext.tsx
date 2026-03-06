@@ -708,10 +708,10 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
   );
 
   const refundSaleItem = useCallback(
-    async (saleId: string, itemId: string, reason: string) => {
+    async (saleId: string, itemId: string, reason: string, password?: string) => {
       if (useBackend) {
         try {
-          await financeBackendService.refundSaleItem(saleId, itemId, reason);
+          await financeBackendService.refundSaleItem(saleId, itemId, reason, password);
           await fetchSalesFromDb();
           return;
         } catch (err) {
@@ -729,9 +729,9 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
               : item
           );
 
-          const activeItems = updatedItems.filter((item) => !(item as any).refunded);
+          const activeItems = updatedItems.filter((item) => !item.refunded);
           const newTotal = activeItems.reduce((sum, item) => sum + item.valor_total, 0);
-          const allRefunded = updatedItems.every((item) => (item as any).refunded);
+          const allRefunded = updatedItems.every((item) => item.refunded);
 
           return {
             ...s,
