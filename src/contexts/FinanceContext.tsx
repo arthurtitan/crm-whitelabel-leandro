@@ -440,69 +440,45 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
 
   // Create contact
   const createContact = useCallback(
-    (data: CreateContactData): { success: boolean; error?: string; contactId?: string } => {
-      if (useBackend) {
-        // In backend mode, create via API asynchronously but return sync-compatible result
-        const tempId = `contact-${Date.now()}`;
-        // Optimistic local update
-        const newContact: Contact = {
-          id: tempId,
+    async (data: CreateContactData): Promise<{ success: boolean; error?: string; contactId?: string }> => {
+      try {
+        const payload = {
+          account_id: accountId,
+          nome: data.nome,
+          telefone: data.telefone,
+          email: data.email || undefined,
+          origem: data.origem as ContactOrigin,
+        };
+
+        const result = useBackend
+          ? await contactsBackendService.createContact(payload)
+          : await contactsCloudService.createContact(payload);
+
+        if (!result.success || !result.contact_id) {
+          return { success: false, error: result.error || 'Erro ao criar contato' };
+        }
+
+        const now = new Date().toISOString();
+        const createdContact: Contact = {
+          id: result.contact_id,
           account_id: accountId,
           nome: data.nome,
           telefone: data.telefone,
           email: data.email,
           origem: data.origem as ContactOrigin,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+          chatwoot_contact_id: result.chatwoot_contact_id ?? null,
+          chatwoot_conversation_id: result.chatwoot_conversation_id ?? null,
+          created_at: now,
+          updated_at: now,
         };
-        setContacts((prev) => [newContact, ...prev]);
 
-        // Fire API call in background and update with real ID
-        (async () => {
-          try {
-            const result = await contactsBackendService.createContact({
-              nome: data.nome,
-              telefone: data.telefone,
-              email: data.email,
-              origem: data.origem as ContactOrigin,
-              account_id: accountId,
-            });
-            if (result.contact_id) {
-              setContacts((prev) =>
-                prev.map((c) => (c.id === tempId ? { ...c, id: result.contact_id! } : c))
-              );
-            }
-          } catch (err: any) {
-            console.error('Error creating contact via backend:', err);
-          }
-        })();
+        setContacts((prev) => [createdContact, ...prev.filter((c) => c.id !== createdContact.id)]);
 
-        return { success: true, contactId: tempId };
+        return { success: true, contactId: result.contact_id };
+      } catch (err: any) {
+        console.error('Error creating contact:', err);
+        return { success: false, error: err?.message || 'Erro ao criar contato' };
       }
-
-      const newContact: Contact = {
-        id: `contact-${Date.now()}`,
-        account_id: accountId,
-        nome: data.nome,
-        telefone: data.telefone,
-        email: data.email,
-        origem: data.origem as ContactOrigin,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-      
-      setContacts((prev) => [newContact, ...prev]);
-      
-      // Auto-add to funnel at advanced stage for immediate sale eligibility
-      const qualifiedStage = mockFunnelStages.find((s) => s.nome === 'Qualificado');
-      if (qualifiedStage) {
-        setLeadFunnelStates((prev) => [
-          { contact_id: newContact.id, funnel_stage_id: qualifiedStage.id, updated_at: new Date().toISOString() },
-          ...prev,
-        ]);
-      }
-      
-      return { success: true, contactId: newContact.id };
     },
     [accountId]
   );
