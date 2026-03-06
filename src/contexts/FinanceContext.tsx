@@ -646,7 +646,17 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
   );
 
   const markAsPaid = useCallback(
-    (saleId: string) => {
+    async (saleId: string) => {
+      if (useBackend) {
+        try {
+          await financeBackendService.markAsPaid(saleId);
+          await fetchSalesFromDb();
+          return;
+        } catch (err) {
+          console.error('Error marking sale as paid via backend:', err);
+          throw err;
+        }
+      }
       setSales((prev) =>
         prev.map((s) =>
           s.id === saleId
@@ -656,7 +666,7 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
       );
       createEvent('sale.paid', saleId, { paid_at: new Date().toISOString() });
     },
-    [createEvent]
+    [createEvent, fetchSalesFromDb]
   );
 
   const cancelSale = useCallback(
