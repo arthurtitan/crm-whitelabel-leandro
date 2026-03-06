@@ -684,10 +684,10 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
   );
 
   const refundSale = useCallback(
-    async (saleId: string, reason: string) => {
+    async (saleId: string, reason: string, password?: string) => {
       if (useBackend) {
         try {
-          await financeBackendService.refundSale(saleId, reason);
+          await financeBackendService.refundSale(saleId, reason, password);
           await fetchSalesFromDb();
           return;
         } catch (err) {
