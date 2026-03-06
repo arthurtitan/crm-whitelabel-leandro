@@ -102,6 +102,8 @@ async function bootstrap() {
     logger.info(`🚀 Server running on port ${env.PORT}`);
     logger.info(`📍 Environment: ${env.NODE_ENV}`);
     logger.info(`🔗 API URL: ${env.API_URL}`);
+    logger.info(`🔄 Sync strategy: create-or-update-v2 (no upsert)`);
+    logger.info(`📦 Build version: ${process.env.BUILD_VERSION || 'dev'}`);
     const gId = (process.env.GOOGLE_CLIENT_ID || '').trim();
     const gSecret = (process.env.GOOGLE_CLIENT_SECRET || '').trim();
     const gRedirect = (process.env.GOOGLE_REDIRECT_URI || '').trim();
