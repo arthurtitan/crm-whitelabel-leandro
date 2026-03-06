@@ -571,7 +571,7 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
 
   // Actions
   const createSale = useCallback(
-    (data: CreateSaleData): { success: boolean; error?: string } => {
+    async (data: CreateSaleData): Promise<{ success: boolean; error?: string }> => {
       if (!data.skipValidation) {
         const validation = canCreateSale(data.contactId);
         if (!validation.allowed) {
@@ -579,7 +579,28 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
         }
       }
 
-      // Build items array with generated IDs
+      if (useBackend) {
+        try {
+          await financeBackendService.createSale({
+            contactId: data.contactId,
+            items: data.items.map(item => ({
+              productId: item.productId,
+              quantidade: item.quantidade,
+              valorUnitario: item.valorUnitario,
+            })),
+            metodoPagamento: data.metodoPagamento,
+            responsavelId: data.responsavelId,
+            convenioNome: data.convenioNome,
+          });
+          await fetchSalesFromDb();
+          return { success: true };
+        } catch (err: any) {
+          console.error('Error creating sale via backend:', err);
+          return { success: false, error: err?.response?.data?.message || 'Erro ao criar venda' };
+        }
+      }
+
+      // Local-only mode (Supabase Cloud)
       const saleId = `sale-${Date.now()}`;
       const items: SaleItem[] = data.items.map((item, index) => ({
         id: `item-${saleId}-${index}`,
@@ -589,10 +610,7 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
         valor_total: item.quantidade * item.valorUnitario,
       }));
 
-      // Calculate total value from items
       const valorTotal = items.reduce((sum, item) => sum + item.valor_total, 0);
-
-      // Check if any product is recurring
       const isRecurring = data.items.some(item => 
         checkIsRecurringSale(data.contactId, item.productId)
       );
@@ -601,7 +619,7 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
         id: saleId,
         account_id: accountId,
         contact_id: data.contactId,
-        product_id: data.items[0]?.productId, // backwards compatibility
+        product_id: data.items[0]?.productId,
         items,
         valor: valorTotal,
         status: 'pending',
@@ -624,7 +642,7 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
 
       return { success: true };
     },
-    [accountId, canCreateSale, checkIsRecurringSale, createEvent]
+    [accountId, canCreateSale, checkIsRecurringSale, createEvent, fetchSalesFromDb]
   );
 
   const markAsPaid = useCallback(
