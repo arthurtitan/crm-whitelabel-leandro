@@ -84,8 +84,8 @@ interface FinanceContextType {
   addLeadNote: (contactId: string, content: string, authorId: string, authorName: string) => void;
   markAsPaid: (saleId: string) => void;
   cancelSale: (saleId: string) => void;
-  refundSale: (saleId: string, reason: string) => void;
-  refundSaleItem: (saleId: string, itemId: string, reason: string) => void;
+  refundSale: (saleId: string, reason: string) => void | Promise<void>;
+  refundSaleItem: (saleId: string, itemId: string, reason: string) => void | Promise<void>;
   updateSale: (saleId: string, data: Partial<Sale>) => { success: boolean; error?: string };
   refetchContacts: () => Promise<void>;
   // Helpers
