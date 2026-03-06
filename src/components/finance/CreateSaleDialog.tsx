@@ -160,7 +160,7 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
     }));
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     // Validations
     if (isCreatingNewContact) {
       if (!newContact.nome.trim() || !newContact.telefone.trim()) {
@@ -214,8 +214,8 @@ export function CreateSaleDialog({ preSelectedContactId, trigger, onClose }: Cre
       valorUnitario: parseFloat(item.valorUnitario),
     }));
 
-    // Create sale
-    const result = createSale({
+    // Create sale (may be async in backend mode)
+    const result = await createSale({
       contactId: finalContactId,
       items: saleItems,
       metodoPagamento: metodoPagamento as PaymentMethod,

@@ -94,9 +94,9 @@ export default function AdminSalesPage() {
     toast.success('Pagamento confirmado!');
   };
 
-  const handleRefundConfirm = (reason: string) => {
+  const handleRefundConfirm = async (reason: string, password: string) => {
     if (!refundDialog.saleId) return;
-    refundSale(refundDialog.saleId, reason);
+    await refundSale(refundDialog.saleId, reason, password);
     setRefundDialog({ open: false, saleId: null, valor: 0 });
   };
 

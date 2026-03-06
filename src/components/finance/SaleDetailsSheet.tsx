@@ -117,9 +117,9 @@ export function SaleDetailsSheet({
     return method ? labels[method] || method : '-';
   };
 
-  const handleItemRefundConfirm = (reason: string) => {
+  const handleItemRefundConfirm = async (reason: string, password: string) => {
     if (!itemRefundDialog.item) return;
-    refundSaleItem(sale.id, itemRefundDialog.item.id, reason);
+    await refundSaleItem(sale.id, itemRefundDialog.item.id, reason, password);
     setItemRefundDialog({ open: false, item: null, productName: '' });
   };
 

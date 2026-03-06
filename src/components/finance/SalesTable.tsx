@@ -106,9 +106,9 @@ export function SalesTable({ isLoading = false }: SalesTableProps) {
     toast.success('Venda cancelada!');
   };
 
-  const handleRefundConfirm = (reason: string) => {
+  const handleRefundConfirm = async (reason: string, password: string) => {
     if (!refundDialog.sale) return;
-    refundSale(refundDialog.sale.id, reason);
+    await refundSale(refundDialog.sale.id, reason, password);
     setRefundDialog({ open: false, sale: null });
   };
 
