@@ -63,10 +63,20 @@ export const financeBackendService = {
   // --- Products ---
 
   fetchProducts: async (accountId: string): Promise<Product[]> => {
-    const res = await apiClient.get<ApiResponse<Product[]>>(API_ENDPOINTS.PRODUCTS.LIST, {
+    const res = await apiClient.get<ApiResponse<any[]>>(API_ENDPOINTS.PRODUCTS.LIST, {
       params: { ativo: true },
     });
-    return res.data || [];
+    return (res.data || []).map(p => ({
+      id: p.id,
+      account_id: p.accountId || p.account_id,
+      nome: p.nome,
+      valor_padrao: Number(p.valorPadrao ?? p.valor_padrao ?? 0),
+      ativo: p.ativo ?? true,
+      metodos_pagamento: p.metodosPagamento || p.metodos_pagamento || ['pix'],
+      convenios_aceitos: p.conveniosAceitos || p.convenios_aceitos || [],
+      created_at: p.createdAt || p.created_at,
+      updated_at: p.updatedAt || p.updated_at,
+    }));
   },
 
   // --- Contacts ---
