@@ -65,6 +65,8 @@ export function SaleItemsRow({
         return <Badge className="bg-warning/10 text-warning border-warning/20">Pendente</Badge>;
       case 'refunded':
         return <Badge className="bg-destructive/10 text-destructive border-destructive/20">Estornado</Badge>;
+      case 'partial_refund':
+        return <Badge className="bg-warning/10 text-warning border-warning/20">Estorno Parcial</Badge>;
       default:
         return <Badge variant="outline">-</Badge>;
     }
@@ -87,8 +89,8 @@ export function SaleItemsRow({
   };
 
   // Count active and refunded items
-  const activeItemsCount = sale.items.filter((item) => !(item as any).refunded).length;
-  const hasRefundedItems = sale.items.some((item) => (item as any).refunded);
+  const activeItemsCount = sale.items.filter((item) => !item.refunded).length;
+  const hasRefundedItems = sale.items.some((item) => item.refunded);
 
   return (
     <TableRow className="group hover:bg-muted/50">

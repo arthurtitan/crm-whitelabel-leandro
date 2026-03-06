@@ -55,7 +55,7 @@ export function SalesTable({ isLoading = false }: SalesTableProps) {
 
   const filteredSales = sales.filter((sale) => {
     const contact = getContactById(sale.contact_id);
-    const matchesSearch = contact?.nome?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = !searchTerm.trim() || contact?.nome?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || sale.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -106,9 +106,9 @@ export function SalesTable({ isLoading = false }: SalesTableProps) {
     toast.success('Venda cancelada!');
   };
 
-  const handleRefundConfirm = (reason: string) => {
+  const handleRefundConfirm = async (reason: string, password: string) => {
     if (!refundDialog.sale) return;
-    refundSale(refundDialog.sale.id, reason);
+    await refundSale(refundDialog.sale.id, reason, password);
     setRefundDialog({ open: false, sale: null });
   };
 

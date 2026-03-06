@@ -65,7 +65,7 @@ export default function AdminSalesPage() {
   const filteredSales = useMemo(() => {
     return sales.filter((sale) => {
       const contact = getContactById(sale.contact_id);
-      const matchesSearch = contact?.nome?.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearch = !searchTerm.trim() || contact?.nome?.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesStatus = statusFilter === 'all' || sale.status === statusFilter;
       
       // Filter by agent (responsavel_id)
@@ -94,9 +94,9 @@ export default function AdminSalesPage() {
     toast.success('Pagamento confirmado!');
   };
 
-  const handleRefundConfirm = (reason: string) => {
+  const handleRefundConfirm = async (reason: string, password: string) => {
     if (!refundDialog.saleId) return;
-    refundSale(refundDialog.saleId, reason);
+    await refundSale(refundDialog.saleId, reason, password);
     setRefundDialog({ open: false, saleId: null, valor: 0 });
   };
 

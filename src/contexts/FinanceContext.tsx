@@ -76,16 +76,16 @@ interface FinanceContextType {
   kpis: FinanceKPIs;
   
   // Actions
-  createSale: (data: CreateSaleData) => { success: boolean; error?: string };
+  createSale: (data: CreateSaleData) => { success: boolean; error?: string } | Promise<{ success: boolean; error?: string }>;
   createContact: (data: CreateContactData) => { success: boolean; error?: string; contactId?: string };
   updateContact: (contactId: string, data: UpdateContactData) => { success: boolean; error?: string };
   deleteContact: (contactId: string) => { success: boolean; error?: string };
   updateLeadStage: (contactId: string, stageId: string) => void;
   addLeadNote: (contactId: string, content: string, authorId: string, authorName: string) => void;
-  markAsPaid: (saleId: string) => void;
+  markAsPaid: (saleId: string) => void | Promise<void>;
   cancelSale: (saleId: string) => void;
-  refundSale: (saleId: string, reason: string) => void | Promise<void>;
-  refundSaleItem: (saleId: string, itemId: string, reason: string) => void | Promise<void>;
+  refundSale: (saleId: string, reason: string, password?: string) => void | Promise<void>;
+  refundSaleItem: (saleId: string, itemId: string, reason: string, password?: string) => void | Promise<void>;
   updateSale: (saleId: string, data: Partial<Sale>) => { success: boolean; error?: string };
   refetchContacts: () => Promise<void>;
   // Helpers
@@ -571,7 +571,7 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
 
   // Actions
   const createSale = useCallback(
-    (data: CreateSaleData): { success: boolean; error?: string } => {
+    async (data: CreateSaleData): Promise<{ success: boolean; error?: string }> => {
       if (!data.skipValidation) {
         const validation = canCreateSale(data.contactId);
         if (!validation.allowed) {
@@ -579,7 +579,28 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
         }
       }
 
-      // Build items array with generated IDs
+      if (useBackend) {
+        try {
+          await financeBackendService.createSale({
+            contactId: data.contactId,
+            items: data.items.map(item => ({
+              productId: item.productId,
+              quantidade: item.quantidade,
+              valorUnitario: item.valorUnitario,
+            })),
+            metodoPagamento: data.metodoPagamento,
+            responsavelId: data.responsavelId,
+            convenioNome: data.convenioNome,
+          });
+          await fetchSalesFromDb();
+          return { success: true };
+        } catch (err: any) {
+          console.error('Error creating sale via backend:', err);
+          return { success: false, error: err?.response?.data?.message || 'Erro ao criar venda' };
+        }
+      }
+
+      // Local-only mode (Supabase Cloud)
       const saleId = `sale-${Date.now()}`;
       const items: SaleItem[] = data.items.map((item, index) => ({
         id: `item-${saleId}-${index}`,
@@ -589,10 +610,7 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
         valor_total: item.quantidade * item.valorUnitario,
       }));
 
-      // Calculate total value from items
       const valorTotal = items.reduce((sum, item) => sum + item.valor_total, 0);
-
-      // Check if any product is recurring
       const isRecurring = data.items.some(item => 
         checkIsRecurringSale(data.contactId, item.productId)
       );
@@ -601,7 +619,7 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
         id: saleId,
         account_id: accountId,
         contact_id: data.contactId,
-        product_id: data.items[0]?.productId, // backwards compatibility
+        product_id: data.items[0]?.productId,
         items,
         valor: valorTotal,
         status: 'pending',
@@ -624,11 +642,21 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
 
       return { success: true };
     },
-    [accountId, canCreateSale, checkIsRecurringSale, createEvent]
+    [accountId, canCreateSale, checkIsRecurringSale, createEvent, fetchSalesFromDb]
   );
 
   const markAsPaid = useCallback(
-    (saleId: string) => {
+    async (saleId: string) => {
+      if (useBackend) {
+        try {
+          await financeBackendService.markAsPaid(saleId);
+          await fetchSalesFromDb();
+          return;
+        } catch (err) {
+          console.error('Error marking sale as paid via backend:', err);
+          throw err;
+        }
+      }
       setSales((prev) =>
         prev.map((s) =>
           s.id === saleId
@@ -638,7 +666,7 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
       );
       createEvent('sale.paid', saleId, { paid_at: new Date().toISOString() });
     },
-    [createEvent]
+    [createEvent, fetchSalesFromDb]
   );
 
   const cancelSale = useCallback(
@@ -656,10 +684,10 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
   );
 
   const refundSale = useCallback(
-    async (saleId: string, reason: string) => {
+    async (saleId: string, reason: string, password?: string) => {
       if (useBackend) {
         try {
-          await financeBackendService.refundSale(saleId, reason);
+          await financeBackendService.refundSale(saleId, reason, password);
           await fetchSalesFromDb();
           return;
         } catch (err) {
@@ -680,10 +708,10 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
   );
 
   const refundSaleItem = useCallback(
-    async (saleId: string, itemId: string, reason: string) => {
+    async (saleId: string, itemId: string, reason: string, password?: string) => {
       if (useBackend) {
         try {
-          await financeBackendService.refundSaleItem(saleId, itemId, reason);
+          await financeBackendService.refundSaleItem(saleId, itemId, reason, password);
           await fetchSalesFromDb();
           return;
         } catch (err) {
@@ -701,9 +729,9 @@ export function FinanceProvider({ children, accountId }: FinanceProviderProps) {
               : item
           );
 
-          const activeItems = updatedItems.filter((item) => !(item as any).refunded);
+          const activeItems = updatedItems.filter((item) => !item.refunded);
           const newTotal = activeItems.reduce((sum, item) => sum + item.valor_total, 0);
-          const allRefunded = updatedItems.every((item) => (item as any).refunded);
+          const allRefunded = updatedItems.every((item) => item.refunded);
 
           return {
             ...s,

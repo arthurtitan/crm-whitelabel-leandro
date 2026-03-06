@@ -117,18 +117,18 @@ export function SaleDetailsSheet({
     return method ? labels[method] || method : '-';
   };
 
-  const handleItemRefundConfirm = (reason: string) => {
+  const handleItemRefundConfirm = async (reason: string, password: string) => {
     if (!itemRefundDialog.item) return;
-    refundSaleItem(sale.id, itemRefundDialog.item.id, reason);
+    await refundSaleItem(sale.id, itemRefundDialog.item.id, reason, password);
     setItemRefundDialog({ open: false, item: null, productName: '' });
   };
 
   const activeItemsTotal = sale.items
-    .filter((item) => !(item as any).refunded)
+    .filter((item) => !item.refunded)
     .reduce((sum, item) => sum + item.valor_total, 0);
 
   const refundedItemsTotal = sale.items
-    .filter((item) => (item as any).refunded)
+    .filter((item) => item.refunded)
     .reduce((sum, item) => sum + item.valor_total, 0);
 
   return (
@@ -277,8 +277,8 @@ export function SaleDetailsSheet({
               <div className="space-y-2">
                 {sale.items.map((item, index) => {
                   const product = getProductById(item.product_id);
-                  const isRefunded = (item as any).refunded;
-                  const refundReason = (item as any).refund_reason;
+                  const isRefunded = item.refunded;
+                  const refundReason = item.refund_reason;
                   
                   return (
                     <div

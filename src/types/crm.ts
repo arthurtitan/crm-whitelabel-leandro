@@ -6,7 +6,7 @@ export type AccountStatus = 'active' | 'paused' | 'cancelled';
 export type UserStatus = 'active' | 'inactive' | 'suspended';
 export type ConversationStatus = 'open' | 'pending' | 'resolved';
 export type AssigneeType = 'user' | 'agent_bot';
-export type SaleStatus = 'pending' | 'paid' | 'refunded';
+export type SaleStatus = 'pending' | 'paid' | 'refunded' | 'partial_refund';
 export type PaymentMethod = 'pix' | 'boleto' | 'debito' | 'credito' | 'dinheiro' | 'convenio';
 export type ActorType = 'user' | 'agent_bot' | 'system' | 'external';
 export type TransactionType = 'charge' | 'refund';
@@ -219,6 +219,9 @@ export interface SaleItem {
   quantidade: number;
   valor_unitario: number;
   valor_total: number;
+  refunded?: boolean;
+  refunded_at?: string | null;
+  refund_reason?: string | null;
   // UI enrichment
   product?: Product;
 }
@@ -237,6 +240,7 @@ export interface Sale {
   convenio_nome?: string | null;
   responsavel_id: string;
   is_recurring?: boolean;
+  refund_reason?: string | null;
   created_at: string;
   paid_at: string | null;
   refunded_at: string | null;
