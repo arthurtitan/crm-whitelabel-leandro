@@ -48,6 +48,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      no_cache: true
     restart: unless-stopped
     env_file:
       - .env
