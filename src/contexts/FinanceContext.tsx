@@ -78,7 +78,7 @@ interface FinanceContextType {
   
   // Actions
   createSale: (data: CreateSaleData) => { success: boolean; error?: string } | Promise<{ success: boolean; error?: string }>;
-  createContact: (data: CreateContactData) => { success: boolean; error?: string; contactId?: string };
+  createContact: (data: CreateContactData) => Promise<{ success: boolean; error?: string; contactId?: string }>;
   updateContact: (contactId: string, data: UpdateContactData) => { success: boolean; error?: string };
   deleteContact: (contactId: string) => { success: boolean; error?: string };
   updateLeadStage: (contactId: string, stageId: string) => void;
