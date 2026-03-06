@@ -240,6 +240,7 @@ export interface Sale {
   convenio_nome?: string | null;
   responsavel_id: string;
   is_recurring?: boolean;
+  refund_reason?: string | null;
   created_at: string;
   paid_at: string | null;
   refunded_at: string | null;
