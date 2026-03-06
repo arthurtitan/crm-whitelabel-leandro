@@ -89,8 +89,8 @@ export function SaleItemsRow({
   };
 
   // Count active and refunded items
-  const activeItemsCount = sale.items.filter((item) => !(item as any).refunded).length;
-  const hasRefundedItems = sale.items.some((item) => (item as any).refunded);
+  const activeItemsCount = sale.items.filter((item) => !item.refunded).length;
+  const hasRefundedItems = sale.items.some((item) => item.refunded);
 
   return (
     <TableRow className="group hover:bg-muted/50">

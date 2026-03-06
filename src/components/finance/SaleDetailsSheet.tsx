@@ -277,8 +277,8 @@ export function SaleDetailsSheet({
               <div className="space-y-2">
                 {sale.items.map((item, index) => {
                   const product = getProductById(item.product_id);
-                  const isRefunded = (item as any).refunded;
-                  const refundReason = (item as any).refund_reason;
+                  const isRefunded = item.refunded;
+                  const refundReason = item.refund_reason;
                   
                   return (
                     <div
