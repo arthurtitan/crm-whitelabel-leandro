@@ -3,6 +3,7 @@ import { Tag, LeadTag, TagHistory, ActorType } from '@/types/crm';
 import { mockTags, mockLeadTags, mockTagHistory, mockFunnels } from '@/data/mockData';
 import { useBackend } from '@/config/backend.config';
 import { tagsBackendService } from '@/services/tags.backend.service';
+import { apiClient } from '@/api/client';
 
 // ============= TYPES =============
 
