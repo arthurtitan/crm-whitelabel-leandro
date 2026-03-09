@@ -110,12 +110,20 @@ export const TagProvider: React.FC<TagProviderProps> = ({ children, accountId })
   const [tagHistory, setTagHistory] = useState<TagHistory[]>(useBackend ? [] : mockTagHistory);
   const configInitialized = useRef(false);
   
-  // Fetch tags from backend
+  // Fetch tags and lead_tags from backend
   useEffect(() => {
     if (!useBackend || !accountId) return;
     tagsBackendService.listAllTags(accountId).then((backendTags) => {
       setTags(backendTags);
     }).catch(console.error);
+
+    // Fetch lead_tags for KPI calculations (funnel conversion)
+    apiClient.get<any>('/api/lead-tags', { params: { accountId } })
+      .then((response: any) => {
+        const data = Array.isArray(response) ? response : (response?.data || []);
+        setLeadTags(data);
+      })
+      .catch(console.error);
   }, [accountId]);
   
   // Final stages for funnel conversion - recalculate when tags load

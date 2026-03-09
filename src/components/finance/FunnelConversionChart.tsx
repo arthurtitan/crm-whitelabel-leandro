@@ -129,6 +129,21 @@ export function FunnelConversionChart({ isLoading = false }: FunnelConversionCha
                   <step.icon className={`w-5 h-5 sm:w-6 sm:h-6 ${step.color} mx-auto mb-1.5 sm:mb-2`} />
                   <p className="text-xl sm:text-2xl font-bold">{step.value}</p>
                   <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 sm:mt-1">{step.label}</p>
+                  {step.configurable && finalStageIds.length > 0 && (
+                    <div className="flex flex-wrap gap-1 justify-center mt-1">
+                      {stageTags
+                        .filter(s => finalStageIds.includes(s.id))
+                        .map(s => (
+                          <span 
+                            key={s.id} 
+                            className="text-[9px] px-1.5 py-0.5 rounded-full bg-background/50 text-muted-foreground"
+                            style={{ borderLeft: `2px solid ${s.color}` }}
+                          >
+                            {s.name}
+                          </span>
+                        ))}
+                    </div>
+                  )}
                 </div>
                 <p className="text-[10px] sm:text-xs text-muted-foreground text-center mt-1.5 sm:mt-2 hidden sm:block">
                   {step.description}
