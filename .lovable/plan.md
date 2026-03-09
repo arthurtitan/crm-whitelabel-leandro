@@ -1,59 +1,42 @@
 
 
-## Problema
+## Diagnóstico final
 
-O card "Leads Convertidos" no funil financeiro sempre mostra **0** porque:
+O `env_file: - .env` não funciona no EasyPanel porque ele **não monta** um arquivo `.env` no filesystem do container — ele injeta variáveis via Docker API. Porém, as variáveis declaradas na seção `environment` do Compose (com interpolação `${}`) têm **prioridade** e são resolvidas em build-time pelo Compose, onde as vars Google não existem, resultando em strings vazias.
 
-1. **`TagContext.leadTags` nunca é preenchido em modo backend** — é inicializado como `[]` e só o `AdminKanbanPage` busca lead_tags (em estado local próprio), sem propagar para o contexto global.
-2. **`FinanceContext.kpis.leadsConvertidos`** depende de `tagContext.leadTags` para contar leads nas etapas selecionadas — como está vazio, o resultado é sempre 0.
-3. O card **não exibe quais etapas estão selecionadas** como "finais", dificultando o diagnóstico.
+A solução definitiva: hardcodar as credenciais Google diretamente no `environment` do Compose.
 
-## Correção
+## Alterações
 
-### 1. `src/contexts/TagContext.tsx` — Buscar leadTags do backend
+**Arquivo: `docker-compose.yml`** — adicionar as 3 variáveis Google com valores literais na seção `environment` do backend (após `LOG_LEVEL`):
 
-Adicionar fetch de lead_tags no `useEffect` que já busca tags, usando a mesma API `/api/lead-tags` usada pelo Kanban:
-
-```typescript
-// Após buscar tags do backend, também buscar lead_tags
-useEffect(() => {
-  if (!useBackend || !accountId) return;
-  
-  tagsBackendService.listAllTags(accountId).then(setTags).catch(console.error);
-  
-  // Fetch lead_tags para cálculo de KPIs
-  apiClient.get('/api/lead-tags', { params: { accountId } })
-    .then((response: any) => {
-      const data = Array.isArray(response) ? response : (response?.data || []);
-      setLeadTags(data);
-    })
-    .catch(console.error);
-}, [accountId]);
+```yaml
+GOOGLE_CLIENT_ID: "231653132408-iv5b27dlf72ekmbvmviuevcruc6kqs8m.apps.googleusercontent.com"
+GOOGLE_CLIENT_SECRET: "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"
+GOOGLE_REDIRECT_URI: "https://360.gleps.com.br/api/calendar/google/callback"
 ```
 
-### 2. `src/components/finance/FunnelConversionChart.tsx` — Mostrar nomes das etapas selecionadas
+**Seu `.env` no EasyPanel deve ficar assim** (pode remover as 3 linhas do Google já que agora estão no Compose):
 
-Abaixo do número de "Leads Convertidos", exibir as etapas selecionadas como badges para dar contexto visual:
-
-```typescript
-// No card de Leads Convertidos, após o valor:
-{step.configurable && finalStageIds.length > 0 && (
-  <div className="flex flex-wrap gap-1 justify-center mt-1">
-    {stageTags
-      .filter(s => finalStageIds.includes(s.id))
-      .map(s => (
-        <span key={s.id} className="text-[9px] px-1.5 py-0.5 rounded-full bg-background/50" 
-              style={{ borderLeft: `2px solid ${s.color}` }}>
-          {s.name}
-        </span>
-      ))}
-  </div>
-)}
+```
+DB_USER=gleps
+DB_PASSWORD=SenhaForte2024!
+DB_NAME=gleps_crm
+FRONTEND_URL=https://360.gleps.com.br
+API_URL=http://backend:3000
+CORS_ORIGINS=https://360.gleps.com.br
+JWT_SECRET=k8Tj3mZvPqR7xYwN2sLfA9bCdEgHiKoU4nVrXuWyQ1M
+JWT_EXPIRES_IN=1h
+REFRESH_TOKEN_SECRET=Bp5GnSx8WqLm3TvRj7YcKfA2dHuE9oZiN6rXwMkJ4Qs
+REFRESH_TOKEN_EXPIRES_IN=7d
+BCRYPT_SALT_ROUNDS=12
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX=100
+BACKEND_UPSTREAM=backend:3000
+RUN_SEED=true
+LOG_LEVEL=info
+CHATWOOT_WEBHOOK_SECRET=
 ```
 
-### Impacto
-
-- 2 arquivos modificados: `TagContext.tsx`, `FunnelConversionChart.tsx`
-- O KPI `leadsConvertidos` passará a refletir a contagem real de leads nas etapas selecionadas
-- O card mostrará visualmente quais etapas estão configuradas como conversão
+As credenciais Google ficam no Compose (valores fixos, sem interpolação). Depois de mudar de domínio ou credenciais, basta atualizar o Compose e fazer rebuild.
 
