@@ -101,8 +101,8 @@ export default function SuperAdminLayout({ children }: SidebarLayoutProps) {
         <div className="h-16 flex items-center justify-between px-4 border-b border-sidebar-border">
           {!collapsed && (
             <div className="flex items-center gap-2">
-              <img src={glepsLogo} alt="Gleps.AI" className="w-8 h-8 object-contain" />
-              <span className="font-bold text-lg text-sidebar-foreground">Gleps Admin</span>
+              <img src={mychooiceLogo} alt="MyChooice" className="w-8 h-8 object-contain" />
+              <span className="font-bold text-lg text-sidebar-foreground">GoodLeads Admin</span>
             </div>
           )}
           {collapsed && (
