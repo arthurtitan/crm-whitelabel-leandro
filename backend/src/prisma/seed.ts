@@ -14,6 +14,7 @@ async function main() {
     { email: 'superadmin@sistema.com', nome: 'Super Admin' },
     { email: 'admin@gleps.com.br', nome: 'Admin GLEPS' },
     { email: 'glepsai@gmail.com', nome: 'GLEPS AI Admin' },
+    { email: 'admin@mychooice.com', nome: 'Admin MyChooice' },
   ];
 
   for (const admin of criticalAdmins) {
