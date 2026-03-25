@@ -56,7 +56,7 @@ services:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: "3000"
       API_URL: ${API_URL:-http://backend:3000}
-      FRONTEND_URL: "https://360.gleps.com.br"
+      FRONTEND_URL: ${FRONTEND_URL:-https://goodleads.mychooice.com}
       CORS_ORIGINS: ${CORS_ORIGINS:-}
       DATABASE_URL: postgresql://${DB_USER:-gleps}:${DB_PASSWORD:-gleps_secret}@postgres:5432/${DB_NAME:-gleps_crm}?schema=public
       JWT_SECRET: ${JWT_SECRET:-your-production-jwt-secret-min-32-characters}
@@ -70,9 +70,9 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       BUILD_VERSION: "2026-03-06-sync-v2"
       RUN_SEED: ${RUN_SEED:-true}
-      GOOGLE_CLIENT_ID: "231653132408-iv5b27dlf72ekmbvmviuevcruc6kqs8m.apps.googleusercontent.com"
-      GOOGLE_CLIENT_SECRET: "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"
-      GOOGLE_REDIRECT_URI: "https://360.gleps.com.br/api/calendar/google/callback"
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
     expose:
       - "3000"
     depends_on:
