@@ -122,9 +122,9 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         <div className="h-16 flex items-center justify-between px-4 border-b border-sidebar-border">
           {!collapsed && (
             <div className="flex items-center gap-2 overflow-hidden">
-              <img src={glepsLogo} alt="Gleps.AI" className="w-8 h-8 object-contain flex-shrink-0" />
+              <img src={mychooiceLogo} alt="MyChooice" className="w-8 h-8 object-contain flex-shrink-0" />
               <span className="font-bold text-lg text-sidebar-foreground truncate">
-                Painel Gleps
+                GoodLeads
               </span>
             </div>
           )}
