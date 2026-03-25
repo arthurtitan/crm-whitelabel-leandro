@@ -51,7 +51,7 @@ serve(async (req) => {
     }
 
     // Get the origin from the request to redirect back to the correct environment
-    const origin = req.headers.get("origin") || "https://testedocrm.lovable.app";
+    const origin = req.headers.get("origin") || "https://goodleads.mychooice.com";
 
     // Create state parameter with user_id and account_id (base64 encoded)
     const state = btoa(JSON.stringify({ 
