@@ -1,13 +1,27 @@
 
 
-## Usar logo branca na tela de login
+## Corrigir erro "Perfil não encontrado"
 
-A tela de login usa fundo escuro (classe `dark`), então faz sentido usar a versão branca do logo. O logo atual (`mychooice-logo.svg`) é a versão completa com as 3 variantes — precisa trocar para `mychooice-logo-white.svg` que já existe no projeto.
+### Causa raiz
+O banco de dados tem a **function** `handle_new_user()` que cria o perfil automaticamente quando um usuário é criado, mas o **trigger** que conecta essa function à tabela `auth.users` não existe. Resultado: o usuário foi criado no auth, a role foi atribuída, mas nenhum registro foi inserido na tabela `profiles`.
 
-### Alterações
+### Correção
 
-**`src/pages/LoginPage.tsx`** (linha 9 e linhas 104-111):
-1. Trocar import de `mychooice-logo.svg` para `mychooice-logo-white.svg`
-2. Remover `rounded-xl` (que criava aparência de "fundo") e ajustar o tamanho para exibir o logo mais largo (é um logo horizontal, não quadrado)
-3. Mudar de `w-20 h-20` para algo como `w-48 h-16` para respeitar o aspect ratio horizontal do logo
+**1. Criar o trigger no banco via migration**
+```sql
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_new_user();
+```
+
+**2. Inserir o perfil do usuário já criado**
+```sql
+INSERT INTO public.profiles (user_id, nome, email)
+SELECT id, COALESCE(raw_user_meta_data->>'nome', 'Administrador'), email
+FROM auth.users
+WHERE id NOT IN (SELECT user_id FROM public.profiles);
+```
+
+Após isso, o login com `admin@mychooice.com` / `Admin@123` deve funcionar normalmente.
 
