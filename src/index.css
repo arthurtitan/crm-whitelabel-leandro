@@ -24,11 +24,11 @@
     --text-secondary: 0 0% 30%;       /* #4D4D4D */
     --text-muted: 0 0% 55%;           /* #8C8C8C */
 
-    /* Primary - Orange */
-    --primary: 24 94% 53%;            /* #F97316 */
+    /* Primary - MyChooice Red #EE3924 */
+    --primary: 8 85% 54%;             /* #EE3924 */
     --primary-foreground: 0 0% 100%;
-    --primary-hover: 21 90% 48%;      /* #EA580C */
-    --primary-soft: 33 100% 96%;      /* #FFF7ED */
+    --primary-hover: 7 79% 47%;       /* #D42F1C */
+    --primary-soft: 0 86% 97%;        /* #FEF2F2 */
 
     /* Secondary */
     --secondary: 210 40% 96%;
