@@ -31,7 +31,7 @@ import {
   Calendar,
   Lightbulb,
 } from 'lucide-react';
-import glepsLogo from '@/assets/gleps-logo.png';
+import mychooiceLogo from '@/assets/mychooice-logo.png';
 
 interface AdminLayoutProps {
   children: ReactNode;
