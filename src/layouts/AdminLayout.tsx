@@ -129,7 +129,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             </div>
           )}
           {collapsed && (
-            <img src={glepsLogo} alt="Gleps.AI" className="w-8 h-8 object-contain mx-auto" />
+            <img src={mychooiceLogo} alt="MyChooice" className="w-8 h-8 object-contain mx-auto" />
           )}
           <button
             onClick={() => setCollapsed(!collapsed)}
