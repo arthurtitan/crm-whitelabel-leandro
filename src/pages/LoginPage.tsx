@@ -109,7 +109,7 @@ export default function LoginPage() {
               className="w-20 h-20 object-contain logo-glow rounded-xl"
             />
           </div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-orange-400 bg-clip-text text-transparent">GoodLeads</h1>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-red-400 bg-clip-text text-transparent">GoodLeads</h1>
           <p className="text-muted-foreground">
             Powered by <span className="text-primary font-medium">MyChooice</span>
           </p>
