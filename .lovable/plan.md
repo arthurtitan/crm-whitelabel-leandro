@@ -1,54 +1,45 @@
 
 
-## Reestruturação da Identidade Visual: MyChooice GoodLeads
+## Integrar Logo SVG MyChooice e Ajustar Cor da Marca
 
-### Resumo
-Substituir toda a identidade Gleps.AI por MyChooice GoodLeads com paleta laranja/preto. Aguardamos o logo SVG que o usuário vai enviar.
+### Descoberta
+O SVG contém 3 variantes do logo:
+- **Preto** (topo): texto e icone em `#000` — para fundos claros
+- **Vermelho** (meio): texto e icone em `#ee3924` — versão colorida
+- **Branco** (base): texto e icone em `#fff` sobre fundo preto — para sidebar escura
 
-### Paleta de Cores (Laranja/Preto)
-- **Primary**: `#F97316` (laranja vibrante) com hover `#EA580C`
-- **Primary soft**: `#FFF7ED` (laranja claro)
-- **Sidebar background**: `#0A0A0A` (preto profundo)
-- **Sidebar accent**: `#1A1A1A`
-- **Accent**: `#FB923C` (laranja secundario)
-- Manter cores de status (success, warning, destructive) como estão
+A cor oficial da marca extraida do SVG e `#ee3924` (vermelho-alaranjado), diferente do `#F97316` (laranja) que aplicamos antes. Vou corrigir.
 
-### Arquivos a Alterar
+### Alterações
 
-**1. Logo** (quando o SVG chegar)
-- Copiar SVG para `src/assets/mychooice-logo.svg`
-- Copiar para `public/favicon.svg` (ou gerar PNG para favicon)
+**1. Copiar SVG para o projeto**
+- `user-uploads://Logo-mychooice.svg` → `src/assets/mychooice-logo.svg`
+- Tambem copiar para `public/favicon.svg`
 
-**2. `index.html`** — Atualizar title, meta tags, favicon
-- Title: "MyChooice GoodLeads"
-- Description: "Plataforma de gestão de leads e CRM - MyChooice"
-- Favicon: apontar para novo logo
+**2. Criar versão otimizada para sidebar (branca)**
+- Criar `src/assets/mychooice-logo-white.svg` — extrair apenas o grupo branco (linhas 57-69) com viewBox ajustado
 
-**3. `src/index.css`** — Atualizar CSS variables
-- `--primary`: de azul (`217 91% 60%`) para laranja (`24 94% 53%`)
-- `--primary-hover`: laranja escuro
-- `--primary-soft`: laranja muito claro
-- `--ring`: laranja
-- `--accent`: laranja
-- Sidebar: trocar purple por preto puro (`--sidebar-background`, `--sidebar-accent`, etc.)
-- `--chart-1`: laranja
-- `.glass` e `.glass-strong`: gradients de preto em vez de purple
-- `logoGlow`: keyframes com laranja em vez de azul/purple
+**3. Atualizar cor primary em `src/index.css`**
+- `--primary`: de `24 94% 53%` (#F97316) para `8 85% 54%` (#EE3924)
+- `--primary-hover`: ajustar para tom mais escuro de #EE3924
+- `--accent`: ajustar para tom mais claro
+- `--ring`, `--info`, `--chart-1`, sidebar-primary, sidebar-ring: todos para a nova cor
+- Atualizar `logoGlow` keyframes para usar #EE3924
 
-**4. `src/pages/LoginPage.tsx`**
-- Trocar `import glepsLogo` por novo logo
-- Trocar "Painel Gleps" por "GoodLeads"
-- Trocar "Powered by Gleps.AI" por "Powered by MyChooice"
-- Gradient text: `from-primary to-orange-400` em vez de `to-purple-400`
+**4. Atualizar imports nos componentes**
+- `LoginPage.tsx`: import SVG em vez de PNG, usar versão vermelha/preta
+- `AdminLayout.tsx`: import SVG versão branca para sidebar escura
+- `SuperAdminLayout.tsx`: mesmo que AdminLayout
 
-**5. `src/layouts/AdminLayout.tsx`**
-- Trocar import do logo
-- Trocar alt texts de "Gleps.AI" para "MyChooice"
-- Trocar "Painel Gleps" por "GoodLeads"
+**5. Atualizar `index.html`**
+- Favicon apontar para `/favicon.svg`
 
-**6. `src/layouts/SuperAdminLayout.tsx`**
-- Mesmas mudanças: logo, alt text, "Gleps Admin" → "GoodLeads Admin"
+**6. Gradient do login**
+- `from-primary to-orange-400` → `from-primary to-red-400` para combinar com #EE3924
 
-### Dependencia
-Precisamos do arquivo SVG do logo antes de implementar. O usuário confirmou que vai enviar.
+### Detalhes Tecnicos
+- A cor `#EE3924` em HSL e aproximadamente `hsl(8, 85%, 54%)`
+- Hover: `#D42F1C` → `hsl(7, 79%, 47%)`
+- Soft: `#FEF2F2` (vermelho muito claro)
+- O SVG completo tem viewBox `0 0 595.28 841.89` (artboard do Illustrator) — precisa de viewBox ajustado para cada uso
 
