@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { AlertCircle, Eye, EyeOff, LogIn, Loader2 } from 'lucide-react';
-import mychooiceLogo from '@/assets/mychooice-logo.png';
+import mychooiceLogo from '@/assets/mychooice-logo.svg';
 
 // Helper function to get default route based on role and permissions
 function getSmartDefaultRoute(user: { role: string; permissions?: string[] }): string {
@@ -109,7 +109,7 @@ export default function LoginPage() {
               className="w-20 h-20 object-contain logo-glow rounded-xl"
             />
           </div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-orange-400 bg-clip-text text-transparent">GoodLeads</h1>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-red-400 bg-clip-text text-transparent">GoodLeads</h1>
           <p className="text-muted-foreground">
             Powered by <span className="text-primary font-medium">MyChooice</span>
           </p>

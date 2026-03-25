@@ -24,7 +24,7 @@ import {
   X,
   ArrowLeftRight,
 } from 'lucide-react';
-import mychooiceLogo from '@/assets/mychooice-logo.png';
+import mychooiceLogo from '@/assets/mychooice-logo-white.svg';
 
 interface SidebarLayoutProps {
   children: ReactNode;
