@@ -70,9 +70,9 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       BUILD_VERSION: "2026-03-06-sync-v2"
       RUN_SEED: ${RUN_SEED:-true}
-      GOOGLE_CLIENT_ID: "231653132408-iv5b27dlf72ekmbvmviuevcruc6kqs8m.apps.googleusercontent.com"
-      GOOGLE_CLIENT_SECRET: "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"
-      GOOGLE_REDIRECT_URI: "https://360.gleps.com.br/api/calendar/google/callback"
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
     expose:
       - "3000"
     depends_on:
