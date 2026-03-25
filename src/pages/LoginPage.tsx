@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { AlertCircle, Eye, EyeOff, LogIn, Loader2 } from 'lucide-react';
-import mychooiceLogo from '@/assets/mychooice-logo.svg';
+import mychooiceLogo from '@/assets/mychooice-logo-white.svg';
 
 // Helper function to get default route based on role and permissions
 function getSmartDefaultRoute(user: { role: string; permissions?: string[] }): string {
