@@ -106,7 +106,7 @@ export default function LoginPage() {
             <img 
               src={mychooiceLogo} 
               alt="MyChooice" 
-              className="w-20 h-20 object-contain logo-glow rounded-xl"
+              className="w-48 h-16 object-contain logo-glow"
             />
           </div>
           <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-red-400 bg-clip-text text-transparent">GoodLeads</h1>
