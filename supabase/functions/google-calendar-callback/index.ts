@@ -5,7 +5,7 @@ const GOOGLE_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID");
 const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET");
 const GOOGLE_REDIRECT_URI = Deno.env.get("GOOGLE_REDIRECT_URI") || 
   `${Deno.env.get("SUPABASE_URL")}/functions/v1/google-calendar-callback`;
-const DEFAULT_FRONTEND_URL = "https://testedocrm.lovable.app";
+const DEFAULT_FRONTEND_URL = "https://goodleads.mychooice.com";
 
 serve(async (req) => {
   try {
