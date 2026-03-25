@@ -141,6 +141,10 @@ export default function SuperAdminDashboard() {
   }, [historyPeriod]);
 
   useEffect(() => {
+    if (!useBackend) {
+      setMetricsLoading(false);
+      return;
+    }
     fetchServerMetrics();
 
     // Auto-refresh every 60 seconds
@@ -231,91 +235,93 @@ export default function SuperAdminDashboard() {
         ))}
       </div>
 
-      {/* Server Monitoring Section */}
-      <div className="space-y-4 pt-4">
-        <div className="flex items-center gap-2">
-          <Server className="w-5 h-5 text-primary" />
-          <h2 className="text-lg font-semibold text-foreground">Monitoramento do Servidor</h2>
-          {!metricsLoading && serverResources && (
-            <span className="text-xs text-muted-foreground ml-auto">
-              {serverResources.hostname} • {serverResources.os_platform}
-            </span>
-          )}
-        </div>
+      {/* Server Monitoring Section - only available with Express backend */}
+      {useBackend && (
+        <div className="space-y-4 pt-4">
+          <div className="flex items-center gap-2">
+            <Server className="w-5 h-5 text-primary" />
+            <h2 className="text-lg font-semibold text-foreground">Monitoramento do Servidor</h2>
+            {!metricsLoading && serverResources && (
+              <span className="text-xs text-muted-foreground ml-auto">
+                {serverResources.hostname} • {serverResources.os_platform}
+              </span>
+            )}
+          </div>
 
-        {/* Resource Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          <ServerResourceCard
-            title="CPU"
-            value={`${serverResources?.cpu_percent ?? 0}%`}
-            subtitle={`${serverResources?.cpu_cores ?? 0} cores`}
-            percent={serverResources?.cpu_percent}
-            icon={Cpu}
-            iconColor="text-chart-1"
-            iconBgColor="bg-chart-1/10"
-            isLoading={metricsLoading}
-          />
-          <ServerResourceCard
-            title="RAM"
-            value={formatBytes(serverResources?.ram_used_bytes ?? 0)}
-            subtitle={`de ${formatBytes(serverResources?.ram_total_bytes ?? 0)}`}
-            percent={serverResources?.ram_percent}
-            icon={MemoryStick}
-            iconColor="text-chart-2"
-            iconBgColor="bg-chart-2/10"
-            isLoading={metricsLoading}
-          />
-          <ServerResourceCard
-            title="Disco"
-            value={formatBytes(serverResources?.disk_used_bytes ?? 0)}
-            subtitle={`de ${formatBytes(serverResources?.disk_total_bytes ?? 0)}`}
-            percent={serverResources?.disk_percent}
-            icon={HardDrive}
-            iconColor="text-chart-3"
-            iconBgColor="bg-chart-3/10"
-            isLoading={metricsLoading}
-          />
-          <ServerResourceCard
-            title="Rede ↓"
-            value={formatBytesPerSec(serverResources?.network_in_bytes_sec ?? 0)}
-            icon={Wifi}
-            iconColor="text-info"
-            iconBgColor="bg-info/10"
-            isLoading={metricsLoading}
-          />
-          <ServerResourceCard
-            title="Rede ↑"
-            value={formatBytesPerSec(serverResources?.network_out_bytes_sec ?? 0)}
-            icon={Wifi}
-            iconColor="text-info"
-            iconBgColor="bg-info/10"
-            isLoading={metricsLoading}
-          />
-          <ServerResourceCard
-            title="Uptime"
-            value={formatUptime(serverResources?.uptime_seconds ?? 0)}
-            subtitle={`Node.js RSS: ${formatBytes(serverResources?.node_rss ?? 0)}`}
-            icon={Clock}
-            iconColor="text-success"
-            iconBgColor="bg-success/10"
-            isLoading={metricsLoading}
-          />
-        </div>
+          {/* Resource Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <ServerResourceCard
+              title="CPU"
+              value={`${serverResources?.cpu_percent ?? 0}%`}
+              subtitle={`${serverResources?.cpu_cores ?? 0} cores`}
+              percent={serverResources?.cpu_percent}
+              icon={Cpu}
+              iconColor="text-chart-1"
+              iconBgColor="bg-chart-1/10"
+              isLoading={metricsLoading}
+            />
+            <ServerResourceCard
+              title="RAM"
+              value={formatBytes(serverResources?.ram_used_bytes ?? 0)}
+              subtitle={`de ${formatBytes(serverResources?.ram_total_bytes ?? 0)}`}
+              percent={serverResources?.ram_percent}
+              icon={MemoryStick}
+              iconColor="text-chart-2"
+              iconBgColor="bg-chart-2/10"
+              isLoading={metricsLoading}
+            />
+            <ServerResourceCard
+              title="Disco"
+              value={formatBytes(serverResources?.disk_used_bytes ?? 0)}
+              subtitle={`de ${formatBytes(serverResources?.disk_total_bytes ?? 0)}`}
+              percent={serverResources?.disk_percent}
+              icon={HardDrive}
+              iconColor="text-chart-3"
+              iconBgColor="bg-chart-3/10"
+              isLoading={metricsLoading}
+            />
+            <ServerResourceCard
+              title="Rede ↓"
+              value={formatBytesPerSec(serverResources?.network_in_bytes_sec ?? 0)}
+              icon={Wifi}
+              iconColor="text-info"
+              iconBgColor="bg-info/10"
+              isLoading={metricsLoading}
+            />
+            <ServerResourceCard
+              title="Rede ↑"
+              value={formatBytesPerSec(serverResources?.network_out_bytes_sec ?? 0)}
+              icon={Wifi}
+              iconColor="text-info"
+              iconBgColor="bg-info/10"
+              isLoading={metricsLoading}
+            />
+            <ServerResourceCard
+              title="Uptime"
+              value={formatUptime(serverResources?.uptime_seconds ?? 0)}
+              subtitle={`Node.js RSS: ${formatBytes(serverResources?.node_rss ?? 0)}`}
+              icon={Clock}
+              iconColor="text-success"
+              iconBgColor="bg-success/10"
+              isLoading={metricsLoading}
+            />
+          </div>
 
-        {/* Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <ServerConsumptionChart
-            data={consumptionHistory}
-            isLoading={metricsLoading}
-            period={historyPeriod}
-            onPeriodChange={setHistoryPeriod}
-          />
-          <WeeklyConsumptionChart
-            data={weeklyData}
-            isLoading={metricsLoading}
-          />
+          {/* Charts */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <ServerConsumptionChart
+              data={consumptionHistory}
+              isLoading={metricsLoading}
+              period={historyPeriod}
+              onPeriodChange={setHistoryPeriod}
+            />
+            <WeeklyConsumptionChart
+              data={weeklyData}
+              isLoading={metricsLoading}
+            />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
