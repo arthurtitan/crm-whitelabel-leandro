@@ -3,47 +3,46 @@
 @tailwind utilities;
 
 /* 
-  GLEPS.AI DESIGN SYSTEM - SaaS Moderno
-  Clean, professional light theme with hierarchy clarity
-  Based on official HEX palette specification
+  MYCHOOICE GOODLEADS DESIGN SYSTEM - SaaS Moderno
+  Orange/Black brand identity
 */
 
 @layer base {
   :root {
-    /* Background & Structure - SaaS Moderno */
+    /* Background & Structure */
     --background: 210 40% 98%;        /* #F8FAFC */
-    --foreground: 222 47% 11%;        /* #0F172A */
+    --foreground: 0 0% 7%;            /* #111111 */
 
     --card: 0 0% 100%;                /* #FFFFFF */
-    --card-foreground: 222 47% 11%;   /* #0F172A */
+    --card-foreground: 0 0% 7%;       /* #111111 */
 
-    --popover: 0 0% 100%;             /* #FFFFFF */
-    --popover-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 7%;
 
     /* Typography tokens */
-    --text-primary: 222 47% 11%;      /* #0F172A - títulos e números */
-    --text-secondary: 215 16% 35%;    /* #475569 - descrições */
-    --text-muted: 215 16% 62%;        /* #94A3B8 - labels, subtítulos */
+    --text-primary: 0 0% 7%;          /* #111111 */
+    --text-secondary: 0 0% 30%;       /* #4D4D4D */
+    --text-muted: 0 0% 55%;           /* #8C8C8C */
 
-    /* Primary - Blue actions */
-    --primary: 217 91% 60%;           /* #2563EB */
+    /* Primary - Orange */
+    --primary: 24 94% 53%;            /* #F97316 */
     --primary-foreground: 0 0% 100%;
-    --primary-hover: 221 83% 53%;     /* #1D4ED8 */
-    --primary-soft: 214 95% 93%;      /* #DBEAFE */
+    --primary-hover: 21 90% 48%;      /* #EA580C */
+    --primary-soft: 33 100% 96%;      /* #FFF7ED */
 
     /* Secondary */
     --secondary: 210 40% 96%;
-    --secondary-foreground: 222 47% 11%;
+    --secondary-foreground: 0 0% 7%;
 
     /* Muted */
     --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;  /* #64748B */
+    --muted-foreground: 0 0% 45%;     /* #737373 */
 
-    /* Accent - usar primary para consistência */
-    --accent: 217 91% 60%;
+    /* Accent - Orange secondary */
+    --accent: 27 96% 61%;             /* #FB923C */
     --accent-foreground: 0 0% 100%;
 
-    /* Status Colors - SaaS palette */
+    /* Status Colors */
     --destructive: 0 72% 51%;         /* #DC2626 */
     --destructive-foreground: 0 0% 100%;
     --destructive-soft: 0 93% 94%;    /* #FEE2E2 */
@@ -56,46 +55,46 @@
     --warning-foreground: 0 0% 100%;
     --warning-soft: 48 96% 89%;       /* #FEF3C7 */
 
-    --info: 217 91% 60%;
+    --info: 24 94% 53%;
     --info-foreground: 0 0% 100%;
 
     /* Borders & Input */
     --border: 214 32% 91%;            /* #E2E8F0 */
     --input: 214 32% 91%;
-    --ring: 217 91% 60%;
+    --ring: 24 94% 53%;
 
-    /* Radius - 12px */
+    /* Radius */
     --radius: 0.75rem;
 
-    /* Chart Colors - fixed order */
-    --chart-1: 217 91% 60%;           /* #2563EB - azul */
+    /* Chart Colors */
+    --chart-1: 24 94% 53%;            /* #F97316 - laranja */
     --chart-2: 142 71% 45%;           /* #16A34A - verde */
     --chart-3: 38 92% 50%;            /* #F59E0B - amarelo */
     --chart-4: 0 72% 51%;             /* #DC2626 - vermelho */
     --chart-grid: 220 13% 91%;        /* #E5E7EB */
 
-    /* Sidebar - Dark purple (preserved from original) */
-    --sidebar-background: 270 60% 8%;
-    --sidebar-foreground: 270 20% 90%;
-    --sidebar-primary: 217 91% 60%;
+    /* Sidebar - Deep black */
+    --sidebar-background: 0 0% 4%;    /* #0A0A0A */
+    --sidebar-foreground: 0 0% 85%;   /* #D9D9D9 */
+    --sidebar-primary: 24 94% 53%;    /* #F97316 */
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 270 50% 15%;
-    --sidebar-accent-foreground: 270 20% 90%;
-    --sidebar-border: 270 50% 15%;
-    --sidebar-ring: 217 91% 60%;
-    --sidebar-muted: 270 20% 50%;
+    --sidebar-accent: 0 0% 10%;       /* #1A1A1A */
+    --sidebar-accent-foreground: 0 0% 85%;
+    --sidebar-border: 0 0% 10%;
+    --sidebar-ring: 24 94% 53%;
+    --sidebar-muted: 0 0% 40%;
 
     /* Kanban tokens */
-    --kanban-new: 217 91% 60%;
+    --kanban-new: 24 94% 53%;
     --kanban-contact: 260 60% 55%;
     --kanban-interested: 38 92% 50%;
     --kanban-qualified: 142 71% 45%;
     --kanban-converted: 280 67% 50%;
 
     /* Role colors */
-    --role-super-admin: 217 91% 50%;
-    --role-admin: 260 60% 50%;
-    --role-agent: 270 50% 45%;
+    --role-super-admin: 24 94% 50%;
+    --role-admin: 0 0% 20%;
+    --role-agent: 0 0% 40%;
 
     /* Status colors */
     --status-active: 142 71% 45%;
@@ -107,26 +106,26 @@
   }
 
   .dark {
-    /* Dark mode - Deep purple enterprise (for login, sidebar) */
-    --background: 270 80% 6%;
-    --foreground: 270 20% 95%;
+    /* Dark mode - Deep black enterprise */
+    --background: 0 0% 5%;            /* #0D0D0D */
+    --foreground: 0 0% 93%;           /* #EDEDED */
 
-    --card: 270 60% 10%;
-    --card-foreground: 270 20% 95%;
+    --card: 0 0% 8%;                  /* #141414 */
+    --card-foreground: 0 0% 93%;
 
-    --popover: 270 60% 10%;
-    --popover-foreground: 270 20% 95%;
+    --popover: 0 0% 8%;
+    --popover-foreground: 0 0% 93%;
 
-    --primary: 217 91% 60%;
+    --primary: 24 94% 53%;            /* #F97316 */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 270 50% 18%;
-    --secondary-foreground: 270 20% 95%;
+    --secondary: 0 0% 12%;
+    --secondary-foreground: 0 0% 93%;
 
-    --muted: 270 40% 16%;
-    --muted-foreground: 270 20% 60%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 50%;
 
-    --accent: 260 60% 55%;
+    --accent: 27 96% 61%;             /* #FB923C */
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 63% 35%;
@@ -138,24 +137,24 @@
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
 
-    --info: 217 91% 60%;
+    --info: 24 94% 53%;
     --info-foreground: 0 0% 100%;
 
-    --border: 270 40% 25%;
-    --input: 270 40% 20%;
+    --border: 0 0% 18%;
+    --input: 0 0% 15%;
     --input-foreground: 0 0% 100%;
-    --ring: 217 91% 60%;
+    --ring: 24 94% 53%;
 
-    /* Sidebar - Deeper purple */
-    --sidebar-background: 270 80% 4%;
-    --sidebar-foreground: 270 20% 85%;
-    --sidebar-primary: 217 91% 60%;
+    /* Sidebar - Deeper black */
+    --sidebar-background: 0 0% 3%;
+    --sidebar-foreground: 0 0% 80%;
+    --sidebar-primary: 24 94% 53%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 270 50% 12%;
-    --sidebar-accent-foreground: 270 20% 85%;
-    --sidebar-border: 270 50% 12%;
-    --sidebar-ring: 217 91% 60%;
-    --sidebar-muted: 270 20% 50%;
+    --sidebar-accent: 0 0% 8%;
+    --sidebar-accent-foreground: 0 0% 80%;
+    --sidebar-border: 0 0% 8%;
+    --sidebar-ring: 24 94% 53%;
+    --sidebar-muted: 0 0% 40%;
   }
 }
 
