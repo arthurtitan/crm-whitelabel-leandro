@@ -1,52 +1,88 @@
 
 
-## Adaptar .env e docker-compose.yml para o domínio correto
+## Bateria de Correções — Sistema Redondo e Funcional
 
-### Problema
-O `docker-compose.yml` tem valores hardcoded para `360.gleps.com.br` e credenciais Google antigas. O `.env` de deploy precisa refletir o domínio real `goodleads.mychooice.com`.
+### Problemas Identificados
 
-### Alterações
+**1. Dashboard Super Admin: Server Metrics causando erro 500 a cada 60s**
+O `SuperAdminDashboard` chama `apiClient.get()` para endpoints de métricas do servidor (`/api/admin/server-resources`, `/api/admin/consumption-history`, `/api/admin/weekly-consumption`). Esses endpoints **só existem no backend Express** (VPS). No modo Cloud (Lovable), não há backend Express servindo esses endpoints — o Nginx retorna 500. Isso gera spam de erros no console a cada minuto.
 
-**1. Atualizar `docker-compose.yml`** — remover hardcodes, usar variáveis do `.env`:
-- `FRONTEND_URL`: trocar `"https://360.gleps.com.br"` por `${FRONTEND_URL}`
-- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`: usar `${GOOGLE_CLIENT_ID:-}`, `${GOOGLE_CLIENT_SECRET:-}`, `${GOOGLE_REDIRECT_URI:-}` em vez de valores hardcoded
+**Solução:** Condicionar os fetches de server metrics com `useBackend`. Se `useBackend === false`, não buscar métricas de servidor e esconder os cards de recursos do servidor (CPU, RAM, Disco). Os KPIs já estão corretos (usam Edge Function).
 
-**2. `.env` adaptado para EasyPanel** (o que o usuário deve colar):
+**2. Dashboard KPIs: branch condicional já funciona**
+O fetch de KPIs já verifica `useBackend` e usa a Edge Function `super-admin-kpis` no modo Cloud. Os logs da Edge Function mostram boot sem erros. Isso está OK.
 
-```env
-DB_USER=gleps
-DB_PASSWORD=SenhaForte2024!
-DB_NAME=gleps_crm
+**3. Criar Conta + Chatwoot: funciona mas precisa de ajuste de UX**
+A criação de conta usa `accountsCloudService.create()` que faz insert direto no Supabase. O teste de conexão Chatwoot usa a Edge Function `test-chatwoot-connection`. Ambos estão corretos no código. Possível problema: a Edge Function `create-user` tem CORS headers incompletos (falta headers extras do Supabase client).
 
-FRONTEND_URL=https://goodleads.mychooice.com
-API_URL=http://backend:3000
-CORS_ORIGINS=https://goodleads.mychooice.com
+**4. Edge Function `create-user`: CORS headers incompletos**
+O `corsHeaders` na Edge Function `create-user` usa:
+```
+"authorization, x-client-info, apikey, content-type"
+```
+Mas deveria incluir os headers extras do Supabase SDK:
+```
+"authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version"
+```
+Mesma coisa para `set-user-password` e `delete-user`.
 
-JWT_SECRET=k8Tj3mZvPqR7xYwN2sLfA9bCdEgHiKoU4nVrXuWyQ1M
-JWT_EXPIRES_IN=1h
-REFRESH_TOKEN_SECRET=Bp5GnSx8WqLm3TvRj7YcKfA2dHuE9oZiN6rXwMkJ4Qs
-REFRESH_TOKEN_EXPIRES_IN=7d
+### Alterações Planejadas
 
-BCRYPT_SALT_ROUNDS=12
-RATE_LIMIT_WINDOW_MS=900000
-RATE_LIMIT_MAX=100
+**Arquivo 1: `src/pages/super-admin/SuperAdminDashboard.tsx`**
+- Importar `useBackend` (já importado como valor, não hook — renomear se necessário)
+- Condicionar `fetchServerMetrics` para só executar se `useBackend === true`
+- Esconder os cards de Server Resources e charts quando `useBackend === false`
+- Remover o polling de 60s quando no modo Cloud
 
-BACKEND_UPSTREAM=backend:3000
-RUN_SEED=true
-LOG_LEVEL=info
+**Arquivo 2: `supabase/functions/create-user/index.ts`**
+- Atualizar `corsHeaders` com headers completos do Supabase SDK
 
-CHATWOOT_WEBHOOK_SECRET=
+**Arquivo 3: `supabase/functions/set-user-password/index.ts`**
+- Atualizar `corsHeaders` com headers completos
 
-GOOGLE_CLIENT_ID=231653132408-iv5b27dlf72ekmbvmviuevcruc6kqs8m.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=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
-GOOGLE_REDIRECT_URI=https://goodleads.mychooice.com/api/calendar/google/callback
+**Arquivo 4: `supabase/functions/delete-user/index.ts`**
+- Atualizar `corsHeaders` com headers completos
+
+**Arquivo 5: `supabase/functions/delete-lead/index.ts`**
+- Verificar e atualizar `corsHeaders` se necessário
+
+### Resultado Esperado
+- Zero erros 500 no console do Super Admin Dashboard
+- KPIs carregam via Edge Function normalmente
+- Criar conta funciona sem problemas de CORS
+- Teste de conexão Chatwoot continua funcionando (já está OK)
+- Criar usuários via wizard funciona sem falhas de CORS
+
+### Detalhes Técnicos
+
+No `SuperAdminDashboard.tsx`, a mudança principal:
+```typescript
+// Só buscar métricas de servidor no modo backend
+useEffect(() => {
+  if (!useBackend) {
+    setMetricsLoading(false);
+    return;
+  }
+  fetchServerMetrics();
+  const interval = setInterval(fetchServerMetrics, 60000);
+  return () => clearInterval(interval);
+}, [fetchServerMetrics]);
 ```
 
-### Detalhes técnicos
+E no JSX, esconder a seção de Server Resources:
+```typescript
+{useBackend && (
+  <>
+    {/* Server resource cards e charts */}
+  </>
+)}
+```
 
-**Arquivo: `docker-compose.yml`** — 3 alterações no serviço `backend.environment`:
-- Linha `FRONTEND_URL`: de `"https://360.gleps.com.br"` para `${FRONTEND_URL:-https://goodleads.mychooice.com}`
-- Linhas `GOOGLE_*`: trocar valores hardcoded por `${GOOGLE_CLIENT_ID:-}`, `${GOOGLE_CLIENT_SECRET:-}`, `${GOOGLE_REDIRECT_URI:-}`
-
-Nenhum outro arquivo precisa ser alterado.
+Para os CORS das Edge Functions, o padrão correto:
+```typescript
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+```
 
