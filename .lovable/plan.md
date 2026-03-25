@@ -1,42 +1,24 @@
 
 
-## Diagnóstico final
+## Aplicar configurações do domínio `goodleads.mychooice.com`
 
-O `env_file: - .env` não funciona no EasyPanel porque ele **não monta** um arquivo `.env` no filesystem do container — ele injeta variáveis via Docker API. Porém, as variáveis declaradas na seção `environment` do Compose (com interpolação `${}`) têm **prioridade** e são resolvidas em build-time pelo Compose, onde as vars Google não existem, resultando em strings vazias.
+### Contexto
+Os secrets `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET` já estão configurados no projeto. O domínio `mychooice.com` já foi autorizado no Google Cloud Console. Faltam apenas as alterações nos arquivos de edge functions para apontar ao novo domínio.
 
-A solução definitiva: hardcodar as credenciais Google diretamente no `environment` do Compose.
+### Alterações
 
-## Alterações
+**1. `supabase/functions/google-calendar-callback/index.ts`** (linha 8)
+- Trocar `DEFAULT_FRONTEND_URL` de `"https://testedocrm.lovable.app"` para `"https://goodleads.mychooice.com"`
 
-**Arquivo: `docker-compose.yml`** — adicionar as 3 variáveis Google com valores literais na seção `environment` do backend (após `LOG_LEVEL`):
+**2. `supabase/functions/google-calendar-auth-url/index.ts`** (linha 54)
+- Trocar fallback origin de `"https://testedocrm.lovable.app"` para `"https://goodleads.mychooice.com"`
 
-```yaml
-GOOGLE_CLIENT_ID: "231653132408-iv5b27dlf72ekmbvmviuevcruc6kqs8m.apps.googleusercontent.com"
-GOOGLE_CLIENT_SECRET: "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"
-GOOGLE_REDIRECT_URI: "https://360.gleps.com.br/api/calendar/google/callback"
-```
-
-**Seu `.env` no EasyPanel deve ficar assim** (pode remover as 3 linhas do Google já que agora estão no Compose):
-
-```
-DB_USER=gleps
-DB_PASSWORD=SenhaForte2024!
-DB_NAME=gleps_crm
-FRONTEND_URL=https://360.gleps.com.br
-API_URL=http://backend:3000
-CORS_ORIGINS=https://360.gleps.com.br
-JWT_SECRET=k8Tj3mZvPqR7xYwN2sLfA9bCdEgHiKoU4nVrXuWyQ1M
-JWT_EXPIRES_IN=1h
-REFRESH_TOKEN_SECRET=Bp5GnSx8WqLm3TvRj7YcKfA2dHuE9oZiN6rXwMkJ4Qs
-REFRESH_TOKEN_EXPIRES_IN=7d
-BCRYPT_SALT_ROUNDS=12
-RATE_LIMIT_WINDOW_MS=900000
-RATE_LIMIT_MAX=100
-BACKEND_UPSTREAM=backend:3000
-RUN_SEED=true
-LOG_LEVEL=info
-CHATWOOT_WEBHOOK_SECRET=
-```
-
-As credenciais Google ficam no Compose (valores fixos, sem interpolação). Depois de mudar de domínio ou credenciais, basta atualizar o Compose e fazer rebuild.
+### Passo manual pendente
+Após as alterações no código, você precisará:
+- Em **Settings → Domains**, conectar o domínio `goodleads.mychooice.com`
+- No registrador DNS, adicionar:
+  - **A Record**: `goodleads` → `185.158.133.1`
+  - **TXT Record**: `_lovable` → valor fornecido pelo Lovable
+- No **Google Cloud Console**, adicionar como Authorized redirect URI:
+  `https://hdiwzuesrfgefztqrqbm.supabase.co/functions/v1/google-calendar-callback`
 
