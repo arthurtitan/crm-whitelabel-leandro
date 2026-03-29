@@ -375,11 +375,6 @@ export default function AdminKanbanPage() {
         refetchContacts();
       }
     } catch (error: any) {
-      if (error.message?.includes('leads') || error.message?.includes('TAG_HAS_LEADS')) {
-        // Show force options
-        setDeleteHasLeads(true);
-        return;
-      }
       toast.error(error.message || 'Erro ao excluir etapa');
     }
     setDeleteConfirmStage(null);
@@ -756,7 +751,14 @@ export default function AdminKanbanPage() {
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
-                              onClick={() => setDeleteConfirmStage(stage)}
+                              onClick={() => {
+                                // Check if stage has leads to show options immediately
+                                const leadsInStage = getLeadsByStage(stage.id);
+                                if (leadsInStage.length > 0) {
+                                  setDeleteHasLeads(true);
+                                }
+                                setDeleteConfirmStage(stage);
+                              }}
                               className="text-destructive focus:text-destructive"
                             >
                               <Trash2 className="w-4 h-4 mr-2" />
