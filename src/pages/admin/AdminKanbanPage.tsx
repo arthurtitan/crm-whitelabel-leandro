@@ -758,7 +758,7 @@ export default function AdminKanbanPage() {
                             <DropdownMenuItem
                               onClick={() => {
                                 // Check if stage has leads to show options immediately
-                                const leadsInStage = kanbanLeads.filter(l => l.current_stage_id === stage.id);
+                                const leadsInStage = getLeadsByStage(stage.id);
                                 if (leadsInStage.length > 0) {
                                   setDeleteHasLeads(true);
                                 }
