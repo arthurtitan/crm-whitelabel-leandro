@@ -375,11 +375,6 @@ export default function AdminKanbanPage() {
         refetchContacts();
       }
     } catch (error: any) {
-      if (error.message?.includes('leads') || error.message?.includes('TAG_HAS_LEADS')) {
-        // Show force options
-        setDeleteHasLeads(true);
-        return;
-      }
       toast.error(error.message || 'Erro ao excluir etapa');
     }
     setDeleteConfirmStage(null);
