@@ -66,15 +66,14 @@ services:
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-100}
       CHATWOOT_WEBHOOK_SECRET: ${CHATWOOT_WEBHOOK_SECRET:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
-      BUILD_VERSION: "2026-04-02-google-fix"
+      BUILD_VERSION: "2026-04-02-google-fix-2"
       RUN_SEED: ${RUN_SEED:-true}
-      # Google Calendar & optional vars: NOT listed here intentionally.
-      # EasyPanel injects env vars directly into containers.
-      # Using ${VAR:-} would resolve to empty string when compose
-      # can't find the var in its substitution context, overriding
-      # the value EasyPanel injects at container level.
-      # GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI
-      # are read from process.env in the backend code.
+      # Google Calendar fallback global credentials.
+      # These must be explicitly passed to the backend container;
+      # having them only in the EasyPanel app env is not enough.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI}
     expose:
       - "3000"
     depends_on:
