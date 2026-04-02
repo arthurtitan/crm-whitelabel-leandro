@@ -28,13 +28,15 @@ No painel do EasyPanel, vá em **Environment Variables** e configure:
 
 **Opcionais (Google Calendar):**
 
+> ⚠️ **IMPORTANTE**: As variáveis do Google Calendar são injetadas diretamente pelo EasyPanel nos containers.
+> Elas NÃO estão listadas na seção `environment:` do docker-compose.yml propositalmente,
+> para evitar que o compose as sobrescreva com strings vazias.
+
 | Variável | Descrição |
 |----------|-----------|
 | `GOOGLE_CLIENT_ID` | Client ID do Google Cloud Console |
 | `GOOGLE_CLIENT_SECRET` | Client Secret do Google Cloud Console |
 | `GOOGLE_REDIRECT_URI` | `https://seudominio.com.br/api/calendar/google/callback` |
-
-> As variáveis são injetadas via substituição do Compose (`${VAR:-}`). Se não definidas, o backend trata como "não configurado".
 
 ### 3. Mapear Domínio
 
