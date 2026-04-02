@@ -45,7 +45,7 @@ interface GoogleCredentials {
 
 class CalendarService {
   /**
-   * Get Google OAuth credentials from the account's DB record
+   * Get Google OAuth credentials from the account's DB record or env vars
    */
   private async getGoogleCredentials(accountId: string): Promise<GoogleCredentials | null> {
     // 1) Try DB first (per-account)
@@ -59,6 +59,7 @@ class CalendarService {
     });
 
     if (account?.googleClientId && account?.googleClientSecret && account?.googleRedirectUri) {
+      console.log(`[GoogleCal] Using DB credentials for account ${accountId}`);
       return {
         clientId: account.googleClientId,
         clientSecret: account.googleClientSecret,
@@ -71,6 +72,8 @@ class CalendarService {
     const envClientSecret = (process.env.GOOGLE_CLIENT_SECRET || '').trim();
     const envRedirectUri = (process.env.GOOGLE_REDIRECT_URI || '').trim();
 
+    console.log(`[GoogleCal] Env check: GOOGLE_CLIENT_ID=${envClientId ? envClientId.substring(0, 12) + '...' : 'EMPTY'}, SECRET=${envClientSecret ? 'SET' : 'EMPTY'}, REDIRECT=${envRedirectUri ? 'SET' : 'EMPTY'}`);
+
     if (envClientId && envClientSecret && envRedirectUri) {
       return {
         clientId: envClientId,
@@ -79,6 +82,7 @@ class CalendarService {
       };
     }
 
+    console.warn(`[GoogleCal] No credentials found for account ${accountId} — neither DB nor env vars`);
     return null;
   }
 
