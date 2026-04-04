@@ -28,8 +28,9 @@ No painel do EasyPanel, vá em **Environment Variables** e configure:
 
 **Opcionais (Google Calendar):**
 
-> ⚠️ **IMPORTANTE**: As variáveis do Google Calendar precisam existir no EasyPanel **e** ser repassadas ao serviço `backend` pelo `docker-compose.yml`.
-> O compose da aplicação já faz esse repasse automaticamente pelas chaves `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` e `GOOGLE_REDIRECT_URI`.
+> ⚠️ **IMPORTANTE**: No EasyPanel, configure as variáveis do Google Calendar no ambiente de produção do serviço `backend`.
+> O `docker-compose.yml` não interpola mais essas chaves para evitar warnings falsos de "variable is not set" durante o deploy.
+> O backend lê essas credenciais diretamente do ambiente em runtime ou da configuração da conta no banco.
 
 | Variável | Descrição |
 |----------|-----------|
