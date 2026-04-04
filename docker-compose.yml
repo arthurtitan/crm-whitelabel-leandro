@@ -68,12 +68,12 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       BUILD_VERSION: "2026-04-02-google-fix-2"
       RUN_SEED: ${RUN_SEED:-true}
-      # Google Calendar fallback global credentials.
-      # These must be explicitly passed to the backend container;
-      # having them only in the EasyPanel app env is not enough.
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
-      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI}
+      # Google Calendar credentials are resolved at runtime by the backend:
+      # 1) account-specific credentials stored in the database
+      # 2) environment variables injected directly by the production platform
+      # Avoid interpolating GOOGLE_* here because EasyPanel can inject them at
+      # container runtime, while docker-compose interpolation happens earlier
+      # and emits misleading "variable is not set" warnings.
     expose:
       - "3000"
     depends_on:
