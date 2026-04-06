@@ -4,6 +4,12 @@ import { Contact, Tag, SaleStatus } from '@/types/crm';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
   GripVertical,
   Phone,
   Clock,
@@ -11,6 +17,7 @@ import {
   AlertCircle,
   Check,
   RotateCcw,
+  MessageSquare,
 } from 'lucide-react';
 import { safeFormatDateBR } from '@/utils/dateUtils';
 import { cn } from '@/lib/utils';
