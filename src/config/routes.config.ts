@@ -35,6 +35,7 @@ export const ROUTES = {
     AGENDA: '/admin/agenda',
     INSIGHTS: '/admin/insights',
     EVENTS: '/admin/events',
+    EXTRACAO: '/admin/extracao',
     SETTINGS: '/admin/settings',
     USERS: '/admin/users',
   },
