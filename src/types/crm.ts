@@ -75,6 +75,8 @@ export interface Contact {
   origem: ContactOrigin | null;
   chatwoot_contact_id?: number | null;
   chatwoot_conversation_id?: number | null;
+  followup_count?: number;
+  last_followup_at?: string | null;
   created_at: string;
   updated_at: string;
 }

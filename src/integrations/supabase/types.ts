@@ -148,7 +148,9 @@ export type Database = {
           created_at: string | null
           email: string | null
           first_resolved_at: string | null
+          followup_count: number
           id: string
+          last_followup_at: string | null
           nome: string | null
           origem: Database["public"]["Enums"]["contact_origin"] | null
           telefone: string | null
@@ -161,7 +163,9 @@ export type Database = {
           created_at?: string | null
           email?: string | null
           first_resolved_at?: string | null
+          followup_count?: number
           id?: string
+          last_followup_at?: string | null
           nome?: string | null
           origem?: Database["public"]["Enums"]["contact_origin"] | null
           telefone?: string | null
@@ -174,7 +178,9 @@ export type Database = {
           created_at?: string | null
           email?: string | null
           first_resolved_at?: string | null
+          followup_count?: number
           id?: string
+          last_followup_at?: string | null
           nome?: string | null
           origem?: Database["public"]["Enums"]["contact_origin"] | null
           telefone?: string | null
