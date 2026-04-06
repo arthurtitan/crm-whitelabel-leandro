@@ -136,6 +136,21 @@ export function LeadCard({ lead, stage, isDragging, isNew, onClick, onDragStart,
                 <DollarSign className="w-2.5 h-2.5" />
               </div>
             )}
+            {(lead.followup_count ?? 0) > 0 && (
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-0.5 px-1 py-0.5 rounded text-[10px] font-medium bg-amber-500 text-white flex-shrink-0">
+                      <MessageSquare className="w-2.5 h-2.5" />
+                      <span>{lead.followup_count}x</span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs">
+                    <p>Follow-up {lead.followup_count} • Último: {lead.last_followup_at ? safeFormatDateBR(lead.last_followup_at, 'dd/MM HH:mm') : '—'}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
           </div>
 
           {lead.telefone && (
