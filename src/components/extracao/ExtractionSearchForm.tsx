@@ -1,0 +1,101 @@
+import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent } from '@/components/ui/card';
+import { Search, MapPin, Loader2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+import type { ExtractedLead } from './types';
+
+interface Props {
+  accountId: string;
+  onResults: (leads: ExtractedLead[]) => void;
+  isLoading: boolean;
+  setIsLoading: (v: boolean) => void;
+}
+
+export function ExtractionSearchForm({ accountId, onResults, isLoading, setIsLoading }: Props) {
+  const [nicho, setNicho] = useState('');
+  const [localizacao, setLocalizacao] = useState('');
+  const { toast } = useToast();
+
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nicho.trim() || !localizacao.trim()) {
+      toast({ title: 'Preencha todos os campos', variant: 'destructive' });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('extract-leads', {
+        body: { account_id: accountId, nicho: nicho.trim(), localizacao: localizacao.trim() },
+      });
+
+      if (error) throw error;
+
+      if (!data?.success || !Array.isArray(data.leads)) {
+        throw new Error(data?.error || 'Nenhum resultado encontrado');
+      }
+
+      const leads: ExtractedLead[] = data.leads.map((l: any, i: number) => ({
+        id: `lead-${Date.now()}-${i}`,
+        nome: l.nome || '',
+        cidade: l.cidade || '',
+        endereco: l.endereco || '',
+        telefone: l.telefone || '',
+        site: l.site || '',
+      }));
+
+      onResults(leads);
+      toast({ title: `${leads.length} leads encontrados!` });
+    } catch (err: any) {
+      console.error('Extraction error:', err);
+      toast({ title: 'Erro na extração', description: err.message, variant: 'destructive' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardContent className="pt-6">
+        <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-3">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Nicho (ex: padarias, dentistas...)"
+              value={nicho}
+              onChange={e => setNicho(e.target.value)}
+              className="pl-10"
+              disabled={isLoading}
+            />
+          </div>
+          <div className="flex-1 relative">
+            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Localização (ex: João Pinheiro, MG)"
+              value={localizacao}
+              onChange={e => setLocalizacao(e.target.value)}
+              className="pl-10"
+              disabled={isLoading}
+            />
+          </div>
+          <Button type="submit" disabled={isLoading} className="min-w-[140px]">
+            {isLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Buscando...
+              </>
+            ) : (
+              <>
+                <Search className="w-4 h-4 mr-2" />
+                Buscar Leads
+              </>
+            )}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
