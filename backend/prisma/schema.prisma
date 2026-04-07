@@ -20,6 +20,7 @@ model Account {
   plano           String?       @db.VarChar(50)
   status          AccountStatus @default(active)
   limiteUsuarios  Int           @default(10) @map("limite_usuarios")
+  monthlyExtractionLimit Int?  @default(500) @map("monthly_extraction_limit")
 
   // Chatwoot Integration
   chatwootBaseUrl   String? @map("chatwoot_base_url") @db.VarChar(500)
