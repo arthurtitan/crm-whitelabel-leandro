@@ -108,6 +108,8 @@ async function bootstrap() {
     const gSecret = (process.env.GOOGLE_CLIENT_SECRET || '').trim();
     const gRedirect = (process.env.GOOGLE_REDIRECT_URI || '').trim();
     logger.info(`📅 Google Calendar env: clientId=${gId ? gId.substring(0, 8) + '...' : 'EMPTY'}, secret=${gSecret ? 'SET' : 'EMPTY'}, redirect=${gRedirect ? 'SET' : 'EMPTY'}`);
+    const rapidKey = (process.env.RAPIDAPI_KEY || '').trim();
+    logger.info(`🔑 RapidAPI key: ${rapidKey ? rapidKey.substring(0, 8) + '...' : 'EMPTY'} (env.RAPIDAPI_KEY=${env.RAPIDAPI_KEY ? 'SET' : 'EMPTY'})`);
   });
 }
 

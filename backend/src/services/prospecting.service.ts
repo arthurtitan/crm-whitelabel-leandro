@@ -43,7 +43,7 @@ class ProspectingService {
    * Extract leads from Google Maps via RapidAPI
    */
   async extractLeads(accountId: string, nicho: string, localizacao: string) {
-    const rapidApiKey = env.RAPIDAPI_KEY || process.env.RAPIDAPI_KEY;
+    const rapidApiKey = (env.RAPIDAPI_KEY || process.env.RAPIDAPI_KEY || '').trim();
     if (!rapidApiKey) throw new Error('RAPIDAPI_KEY not configured');
 
     // Check monthly quota
