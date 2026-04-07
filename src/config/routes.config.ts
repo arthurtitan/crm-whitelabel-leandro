@@ -60,6 +60,7 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   [ROUTES.ADMIN.AGENDA]: 'agenda',
   [ROUTES.ADMIN.INSIGHTS]: 'insights',
   [ROUTES.ADMIN.EVENTS]: 'events',
+  [ROUTES.ADMIN.EXTRACAO]: 'extracao',
 };
 
 // Default routes by role
