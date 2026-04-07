@@ -76,7 +76,7 @@ class ProspectingService {
     });
     if (!geocodeRes.ok) throw new Error('Erro no geocoding. Verifique a localização.');
 
-    const geocodeData: GeocodingResponse = await geocodeRes.json();
+    const geocodeData = (await geocodeRes.json()) as GeocodingResponse;
     if (!geocodeData.data?.lat || !geocodeData.data?.lng) {
       throw Object.assign(new Error('Localização não encontrada. Tente outro endereço.'), { statusCode: 404 });
     }
@@ -90,7 +90,7 @@ class ProspectingService {
     });
     if (!nearbyRes.ok) throw new Error('Erro na busca por estabelecimentos.');
 
-    const nearbyData: NearbyResponse = await nearbyRes.json();
+    const nearbyData = (await nearbyRes.json()) as NearbyResponse;
     const places = nearbyData.data || [];
 
     // Log usage (2 API calls)
@@ -132,7 +132,7 @@ class ProspectingService {
       headers: { 'api_access_token': account.chatwootApiKey },
     });
     if (!res.ok) throw new Error('Failed to fetch inboxes');
-    const data = await res.json();
+    const data = (await res.json()) as any;
     return (data.payload || []).map((i: any) => ({
       id: i.id,
       name: i.name,
@@ -456,7 +456,7 @@ class ProspectingService {
 
     let contactId: number;
     if (contactRes.ok) {
-      const cData = await contactRes.json();
+      const cData = (await contactRes.json()) as any;
       contactId = cData.payload?.contact?.id || cData.payload?.id || cData.id;
     } else {
       const searchRes = await fetch(
@@ -464,7 +464,7 @@ class ProspectingService {
         { headers: { 'api_access_token': config.apiKey } }
       );
       if (!searchRes.ok) throw new Error(`Cannot create or find contact: ${contact.nome}`);
-      const searchData = await searchRes.json();
+      const searchData = (await searchRes.json()) as any;
       const found = (searchData.payload || []).find((c: any) =>
         c.phone_number?.replace(/\D/g, '') === phone.replace(/\D/g, '')
       );
@@ -479,14 +479,14 @@ class ProspectingService {
 
     let conversationId: number;
     if (convRes.ok) {
-      const convData = await convRes.json();
+      const convData = (await convRes.json()) as any;
       conversationId = convData.id;
     } else {
       const convSearchRes = await fetch(`${base}/contacts/${contactId}/conversations`, {
         headers: { 'api_access_token': config.apiKey },
       });
       if (!convSearchRes.ok) throw new Error('Cannot create or find conversation');
-      const convSearchData = await convSearchRes.json();
+      const convSearchData = (await convSearchRes.json()) as any;
       const existing = (convSearchData.payload || []).find((c: any) => c.inbox_id === inboxId);
       if (!existing) throw new Error('Conversation creation failed');
       conversationId = existing.id;
