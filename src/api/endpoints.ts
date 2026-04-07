@@ -155,6 +155,17 @@ export const API_ENDPOINTS = {
     WEEKLY_CONSUMPTION: '/api/admin/weekly-consumption',
   },
 
+  // ============= PROSPECTING SERVICE =============
+  PROSPECTING: {
+    EXTRACT: '/api/prospecting/extract',
+    INBOXES: '/api/prospecting/inboxes',
+    DISPATCH: '/api/prospecting/dispatch',
+    CANCEL: '/api/prospecting/cancel',
+    RESUME: '/api/prospecting/resume',
+    BATCHES: '/api/prospecting/batches',
+    BATCH_LOGS: (batchId: string) => `/api/prospecting/batches/${batchId}/logs`,
+  },
+
   // ============= INSIGHTS/REPORTS =============
   INSIGHTS: {
     OVERVIEW: '/api/insights/overview',
