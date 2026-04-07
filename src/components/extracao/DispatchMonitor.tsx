@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -6,6 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Zap, CheckCircle2, XCircle, Clock, Download, ArrowLeft, Phone, StopCircle, Ban, Eye, PlayCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { useBackend } from '@/config/backend.config';
+import { apiClient } from '@/api/client';
+import { API_ENDPOINTS } from '@/api/endpoints';
 import { useToast } from '@/hooks/use-toast';
 
 interface DispatchBatch {
@@ -32,6 +35,35 @@ interface DispatchLog {
   sent_at: string | null;
 }
 
+// Map backend camelCase to snake_case for consistency
+function normalizeBatch(b: any): DispatchBatch {
+  return {
+    id: b.id,
+    keyword: b.keyword ?? null,
+    location: b.location ?? null,
+    total_contacts: b.total_contacts ?? b.totalContacts ?? 0,
+    sent_count: b.sent_count ?? b.sentCount ?? 0,
+    failed_count: b.failed_count ?? b.failedCount ?? 0,
+    status: b.status,
+    delay_seconds: b.delay_seconds ?? b.delaySeconds ?? 30,
+    started_at: b.started_at ?? b.startedAt,
+    completed_at: b.completed_at ?? b.completedAt ?? null,
+  };
+}
+
+function normalizeLog(l: any): DispatchLog {
+  return {
+    id: l.id,
+    contact_name: l.contact_name ?? l.contactName ?? '',
+    phone: l.phone,
+    inbox_id: l.inbox_id ?? l.inboxId ?? 0,
+    inbox_name: l.inbox_name ?? l.inboxName ?? null,
+    status: l.status,
+    error_message: l.error_message ?? l.errorMessage ?? null,
+    sent_at: l.sent_at ?? l.sentAt ?? null,
+  };
+}
+
 interface Props {
   accountId: string;
   activeBatchId?: string | null;
@@ -46,25 +78,53 @@ export function DispatchMonitor({ accountId, activeBatchId }: Props) {
   const [cancelling, setCancelling] = useState(false);
   const [resuming, setResuming] = useState(false);
 
+  const fetchBatches = useCallback(async () => {
+    if (!accountId) { setLoading(false); return; }
+    try {
+      if (useBackend) {
+        const response = await apiClient.get<any>(API_ENDPOINTS.PROSPECTING.BATCHES);
+        const data = (response as any).data || response;
+        setBatches((Array.isArray(data) ? data : []).map(normalizeBatch));
+      } else {
+        const { data } = await supabase
+          .from('dispatch_batches')
+          .select('*')
+          .eq('account_id', accountId)
+          .order('created_at', { ascending: false })
+          .limit(20);
+        if (data) setBatches(data as DispatchBatch[]);
+      }
+    } catch (err) {
+      console.error('Error loading batches:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [accountId]);
+
+  const fetchLogs = useCallback(async (batchId: string) => {
+    try {
+      if (useBackend) {
+        const response = await apiClient.get<any>(API_ENDPOINTS.PROSPECTING.BATCH_LOGS(batchId));
+        const data = (response as any).data || response;
+        setLogs((Array.isArray(data) ? data : []).map(normalizeLog));
+      } else {
+        const { data } = await supabase
+          .from('dispatch_logs')
+          .select('*')
+          .eq('batch_id', batchId)
+          .order('created_at', { ascending: true });
+        if (data) setLogs(data as DispatchLog[]);
+      }
+    } catch (err) {
+      console.error('Error loading logs:', err);
+    }
+  }, []);
+
   // Load batches
   useEffect(() => {
-    if (!accountId) {
-      setLoading(false);
-      return;
-    }
     setLoading(true);
-    supabase
-      .from('dispatch_batches')
-      .select('*')
-      .eq('account_id', accountId)
-      .order('created_at', { ascending: false })
-      .limit(20)
-      .then(({ data, error }) => {
-        console.log('[DispatchMonitor] batches loaded:', data?.length, 'error:', error?.message);
-        if (data) setBatches(data as DispatchBatch[]);
-        setLoading(false);
-      });
-  }, [accountId]);
+    fetchBatches();
+  }, [fetchBatches]);
 
   // Auto-select active batch
   useEffect(() => {
@@ -74,44 +134,47 @@ export function DispatchMonitor({ accountId, activeBatchId }: Props) {
     }
   }, [activeBatchId, batches]);
 
-  // Realtime batch updates
+  // Realtime or polling for batch updates
   useEffect(() => {
     if (!accountId) return;
-    const channel = supabase
-      .channel('dispatch-batches-realtime')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'dispatch_batches',
-      }, (payload) => {
-        const updated = payload.new as DispatchBatch;
-        setBatches(prev => {
-          const exists = prev.find(b => b.id === updated.id);
-          if (exists) return prev.map(b => b.id === updated.id ? updated : b);
-          return [updated, ...prev];
-        });
-        if (selectedBatch?.id === updated.id) setSelectedBatch(updated);
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [accountId, selectedBatch?.id]);
+
+    if (useBackend) {
+      // Poll every 3 seconds when there are running batches
+      const interval = setInterval(() => {
+        fetchBatches();
+        if (selectedBatch) fetchLogs(selectedBatch.id);
+      }, 3000);
+      return () => clearInterval(interval);
+    } else {
+      const channel = supabase
+        .channel('dispatch-batches-realtime')
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'dispatch_batches',
+        }, (payload) => {
+          const updated = payload.new as DispatchBatch;
+          setBatches(prev => {
+            const exists = prev.find(b => b.id === updated.id);
+            if (exists) return prev.map(b => b.id === updated.id ? updated : b);
+            return [updated, ...prev];
+          });
+          if (selectedBatch?.id === updated.id) setSelectedBatch(updated);
+        })
+        .subscribe();
+      return () => { supabase.removeChannel(channel); };
+    }
+  }, [accountId, selectedBatch?.id, fetchBatches, fetchLogs]);
 
   // Load logs when batch selected
   useEffect(() => {
     if (!selectedBatch) { setLogs([]); return; }
-    supabase
-      .from('dispatch_logs')
-      .select('*')
-      .eq('batch_id', selectedBatch.id)
-      .order('created_at', { ascending: true })
-      .then(({ data }) => {
-        if (data) setLogs(data as DispatchLog[]);
-      });
-  }, [selectedBatch?.id]);
+    fetchLogs(selectedBatch.id);
+  }, [selectedBatch?.id, fetchLogs]);
 
-  // Realtime log updates
+  // Realtime log updates (Supabase only)
   useEffect(() => {
-    if (!selectedBatch) return;
+    if (!selectedBatch || useBackend) return;
     const channel = supabase
       .channel('dispatch-logs-realtime')
       .on('postgres_changes', {
@@ -134,12 +197,19 @@ export function DispatchMonitor({ accountId, activeBatchId }: Props) {
   const handleCancel = async (batchId: string) => {
     setCancelling(true);
     try {
-      const { data, error } = await supabase.functions.invoke('dispatch-messages', {
-        body: { action: 'cancel', account_id: accountId, batch_id: batchId },
-      });
-      if (error) throw error;
-      if (!data?.success) throw new Error('Falha ao cancelar');
+      if (useBackend) {
+        const response = await apiClient.post<any>(API_ENDPOINTS.PROSPECTING.CANCEL, { batch_id: batchId });
+        const data = (response as any).data || response;
+        if (!data?.success) throw new Error('Falha ao cancelar');
+      } else {
+        const { data, error } = await supabase.functions.invoke('dispatch-messages', {
+          body: { action: 'cancel', account_id: accountId, batch_id: batchId },
+        });
+        if (error) throw error;
+        if (!data?.success) throw new Error('Falha ao cancelar');
+      }
       toast({ title: 'Disparo cancelado', description: 'Os envios pendentes foram cancelados.' });
+      fetchBatches();
     } catch (err: any) {
       toast({ title: 'Erro ao cancelar', description: err.message, variant: 'destructive' });
     } finally {
@@ -150,24 +220,29 @@ export function DispatchMonitor({ accountId, activeBatchId }: Props) {
   const handleResume = async (batchId: string) => {
     setResuming(true);
     try {
-      const { data, error } = await supabase.functions.invoke('dispatch-messages', {
-        body: {
-          action: 'resume',
-          account_id: accountId,
+      if (useBackend) {
+        const response = await apiClient.post<any>(API_ENDPOINTS.PROSPECTING.RESUME, {
           batch_id: batchId,
           messages: ['Olá {nome}, tudo bem?'],
-        },
-      });
-      if (error) throw error;
-      if (!data?.success) throw new Error(data?.error || 'Falha ao retomar');
-      toast({ title: 'Disparo retomado', description: `${data.remaining} contatos restantes serão processados.` });
+        });
+        const data = (response as any).data || response;
+        if (!data?.success) throw new Error(data?.error || 'Falha ao retomar');
+        toast({ title: 'Disparo retomado', description: `${data.remaining} contatos restantes serão processados.` });
+      } else {
+        const { data, error } = await supabase.functions.invoke('dispatch-messages', {
+          body: { action: 'resume', account_id: accountId, batch_id: batchId, messages: ['Olá {nome}, tudo bem?'] },
+        });
+        if (error) throw error;
+        if (!data?.success) throw new Error(data?.error || 'Falha ao retomar');
+        toast({ title: 'Disparo retomado', description: `${data.remaining} contatos restantes serão processados.` });
+      }
+      fetchBatches();
     } catch (err: any) {
       toast({ title: 'Erro ao retomar', description: err.message, variant: 'destructive' });
     } finally {
       setResuming(false);
     }
   };
-
 
   const exportReport = () => {
     if (!selectedBatch || logs.length === 0) return;
@@ -215,7 +290,6 @@ export function DispatchMonitor({ accountId, activeBatchId }: Props) {
 
     return (
       <div className="space-y-4">
-        {/* Running campaigns switcher */}
         {runningBatches.length > 1 && (
           <Card>
             <CardContent className="py-3">
@@ -238,7 +312,6 @@ export function DispatchMonitor({ accountId, activeBatchId }: Props) {
           </Card>
         )}
 
-        {/* Header */}
         <div className="flex items-center justify-between">
           <Button variant="ghost" size="sm" onClick={() => setSelectedBatch(null)}>
             <ArrowLeft className="w-4 h-4 mr-1" />
@@ -277,7 +350,6 @@ export function DispatchMonitor({ accountId, activeBatchId }: Props) {
           </div>
         </div>
 
-        {/* KPI Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <Card>
             <CardContent className="pt-4 pb-3">
@@ -312,7 +384,6 @@ export function DispatchMonitor({ accountId, activeBatchId }: Props) {
           </Card>
         </div>
 
-        {/* Progress bar */}
         <Card>
           <CardContent className="pt-4 pb-3">
             <div className="flex items-center justify-between mb-2">
@@ -332,7 +403,6 @@ export function DispatchMonitor({ accountId, activeBatchId }: Props) {
           </CardContent>
         </Card>
 
-        {/* Log table */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Log de envios em tempo real</CardTitle>
@@ -438,7 +508,6 @@ export function DispatchMonitor({ accountId, activeBatchId }: Props) {
         )}
       </div>
 
-      {/* Active campaigns first */}
       {runningBatches.length > 0 && (
         <div className="space-y-2">
           {runningBatches.map(batch => {
@@ -491,7 +560,6 @@ export function DispatchMonitor({ accountId, activeBatchId }: Props) {
         </div>
       )}
 
-      {/* Completed / failed batches */}
       {batches.filter(b => b.status !== 'running').map(batch => (
         <Card
           key={batch.id}
