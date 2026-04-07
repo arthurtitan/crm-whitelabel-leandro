@@ -202,17 +202,13 @@ Deno.serve(async (req) => {
       }
 
       const supabase = getSupabase();
-
-      // Update batch status to cancelled
       const { error: updateErr } = await supabase
         .from('dispatch_batches')
         .update({ status: 'cancelled', completed_at: new Date().toISOString() })
         .eq('id', batch_id)
         .eq('status', 'running');
-
       if (updateErr) throw updateErr;
 
-      // Mark remaining pending logs as cancelled
       await supabase
         .from('dispatch_logs')
         .update({ status: 'cancelled', error_message: 'Cancelado pelo usuário' })
@@ -221,6 +217,145 @@ Deno.serve(async (req) => {
 
       return new Response(
         JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Resume cancelled batch
+    if (action === 'resume') {
+      const { batch_id, messages, delay_seconds } = body as {
+        batch_id: string;
+        messages: string[];
+        delay_seconds?: number;
+      };
+
+      if (!batch_id || !messages?.length) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'batch_id and messages required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const supabase = getSupabase();
+
+      // Get cancelled batch
+      const { data: batchData, error: batchErr } = await supabase
+        .from('dispatch_batches')
+        .select('*')
+        .eq('id', batch_id)
+        .eq('account_id', account_id)
+        .single();
+
+      if (batchErr || !batchData || batchData.status !== 'cancelled') {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Batch not found or not cancelled' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Get remaining cancelled logs
+      const { data: pendingLogs } = await supabase
+        .from('dispatch_logs')
+        .select('*')
+        .eq('batch_id', batch_id)
+        .eq('status', 'cancelled')
+        .order('created_at', { ascending: true });
+
+      if (!pendingLogs?.length) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'No cancelled contacts to resume' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Reset batch to running
+      await supabase
+        .from('dispatch_batches')
+        .update({ status: 'running', completed_at: null })
+        .eq('id', batch_id);
+
+      // Reset cancelled logs to pending
+      await supabase
+        .from('dispatch_logs')
+        .update({ status: 'pending', error_message: null })
+        .eq('batch_id', batch_id)
+        .eq('status', 'cancelled');
+
+      const delayMs = Math.max((delay_seconds || batchData.delay_seconds || 30) * 1000, 5000);
+
+      // Process remaining contacts in background
+      const processResume = async () => {
+        let sentCount = batchData.sent_count;
+        let failedCount = batchData.failed_count;
+
+        for (let i = 0; i < pendingLogs.length; i++) {
+          if (await isBatchCancelled(batch_id)) {
+            console.log(`[dispatch] Resumed batch ${batch_id} cancelled again at ${i}/${pendingLogs.length}`);
+            return;
+          }
+
+          const log = pendingLogs[i];
+          try {
+            const msgTemplate = messages[Math.floor(Math.random() * messages.length)];
+            const message = msgTemplate.replace(/\{nome\}/gi, log.contact_name);
+            const contact: Contact = { nome: log.contact_name, telefone: log.phone };
+            const { conversationId } = await createContactAndConversation(config, contact, log.inbox_id);
+            await sendMessage(config, conversationId, message);
+
+            sentCount++;
+            await supabase
+              .from('dispatch_logs')
+              .update({ status: 'sent', sent_at: new Date().toISOString(), error_message: null })
+              .eq('id', log.id);
+
+            await supabase
+              .from('dispatch_batches')
+              .update({ sent_count: sentCount, failed_count: failedCount })
+              .eq('id', batch_id);
+
+            console.log(`[dispatch-resume] Sent to ${log.contact_name} (${i + 1}/${pendingLogs.length})`);
+          } catch (err: any) {
+            failedCount++;
+            console.error(`[dispatch-resume] Failed for ${log.contact_name}:`, err.message);
+
+            await supabase
+              .from('dispatch_logs')
+              .update({ status: 'failed', error_message: err.message, sent_at: new Date().toISOString() })
+              .eq('id', log.id);
+
+            await supabase
+              .from('dispatch_batches')
+              .update({ sent_count: sentCount, failed_count: failedCount })
+              .eq('id', batch_id);
+          }
+
+          if (i < pendingLogs.length - 1) await sleep(delayMs);
+        }
+
+        const cancelled = await isBatchCancelled(batch_id);
+        if (!cancelled) {
+          await supabase
+            .from('dispatch_batches')
+            .update({
+              status: failedCount === batchData.total_contacts ? 'failed' : 'completed',
+              sent_count: sentCount,
+              failed_count: failedCount,
+              completed_at: new Date().toISOString(),
+            })
+            .eq('id', batch_id);
+        }
+      };
+
+      processResume().catch(err => {
+        console.error('[dispatch-resume] Error:', err);
+        getSupabase()
+          .from('dispatch_batches')
+          .update({ status: 'failed', completed_at: new Date().toISOString() })
+          .eq('id', batch_id);
+      });
+
+      return new Response(
+        JSON.stringify({ success: true, batch_id, remaining: pendingLogs.length }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
