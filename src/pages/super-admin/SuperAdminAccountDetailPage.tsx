@@ -591,6 +591,80 @@ export default function SuperAdminAccountDetailPage() {
               </Select>
             </div>
             
+            {/* OpenAI Integration */}
+            <div className="space-y-4 pt-4 border-t border-border/50">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="edit-openai">Integração OpenAI</Label>
+                  <p className="text-xs text-muted-foreground">Assistente de IA para geração de e-mails</p>
+                </div>
+                <Switch
+                  id="edit-openai"
+                  checked={editFormData.openaiEnabled}
+                  onCheckedChange={(checked) => setEditFormData({ ...editFormData, openaiEnabled: checked })}
+                />
+              </div>
+              {editFormData.openaiEnabled && (
+                <div className="space-y-2">
+                  <Label htmlFor="edit-openai-key">API Key</Label>
+                  <Input
+                    id="edit-openai-key"
+                    type="password"
+                    value={editFormData.openaiApiKey}
+                    onChange={(e) => setEditFormData({ ...editFormData, openaiApiKey: e.target.value })}
+                    placeholder="sk-..."
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* SendGrid Integration */}
+            <div className="space-y-4 pt-4 border-t border-border/50">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="edit-sendgrid">Integração SendGrid</Label>
+                  <p className="text-xs text-muted-foreground">Disparo de e-mails com rastreamento</p>
+                </div>
+                <Switch
+                  id="edit-sendgrid"
+                  checked={editFormData.sendgridEnabled}
+                  onCheckedChange={(checked) => setEditFormData({ ...editFormData, sendgridEnabled: checked })}
+                />
+              </div>
+              {editFormData.sendgridEnabled && (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-sendgrid-key">API Key</Label>
+                    <Input
+                      id="edit-sendgrid-key"
+                      type="password"
+                      value={editFormData.sendgridApiKey}
+                      onChange={(e) => setEditFormData({ ...editFormData, sendgridApiKey: e.target.value })}
+                      placeholder="SG...."
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-sendgrid-email">E-mail Remetente</Label>
+                    <Input
+                      id="edit-sendgrid-email"
+                      value={editFormData.sendgridFromEmail}
+                      onChange={(e) => setEditFormData({ ...editFormData, sendgridFromEmail: e.target.value })}
+                      placeholder="contato@empresa.com"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-sendgrid-name">Nome Remetente</Label>
+                    <Input
+                      id="edit-sendgrid-name"
+                      value={editFormData.sendgridFromName}
+                      onChange={(e) => setEditFormData({ ...editFormData, sendgridFromName: e.target.value })}
+                      placeholder="Minha Empresa"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Chatwoot Integration */}
             <div className="space-y-4 pt-4 border-t border-border/50">
               <div className="flex items-center justify-between">
