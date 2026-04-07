@@ -509,9 +509,22 @@ export function DispatchMonitor({ accountId, activeBatchId }: Props) {
                   {new Date(batch.started_at).toLocaleDateString('pt-BR')} {new Date(batch.started_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                 </p>
               </div>
-              <Badge variant={getStatusVariant(batch.status)}>
-                {getStatusLabel(batch.status)}
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant={getStatusVariant(batch.status)}>
+                  {getStatusLabel(batch.status)}
+                </Badge>
+                {batch.status === 'cancelled' && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={(e) => { e.stopPropagation(); handleResume(batch.id); }}
+                    disabled={resuming}
+                  >
+                    <PlayCircle className="w-3 h-3 mr-1" /> Retomar
+                  </Button>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-4 text-xs">
               <span className="text-green-600 font-medium">{batch.sent_count} enviados</span>
