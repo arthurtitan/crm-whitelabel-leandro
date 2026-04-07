@@ -25,6 +25,9 @@ export const PERMISSIONS = {
   // Calendar
   AGENDA: 'agenda',
   
+  // Extraction
+  EXTRACAO: 'extracao',
+  
   // Administration
   USERS: 'users',
   SETTINGS: 'settings',
@@ -57,6 +60,10 @@ export const PERMISSION_GROUPS = {
   AGENDA: {
     label: 'Agenda',
     permissions: [PERMISSIONS.AGENDA],
+  },
+  EXTRACAO: {
+    label: 'Extração',
+    permissions: [PERMISSIONS.EXTRACAO],
   },
   ADMIN: {
     label: 'Administração',

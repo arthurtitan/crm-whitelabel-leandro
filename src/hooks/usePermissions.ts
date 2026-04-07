@@ -10,6 +10,7 @@ export type AgentPermission =
   | 'products'
   | 'events' 
   | 'insights'
+  | 'extracao'
   | 'refunds';
 
 // Map routes to required permissions
@@ -23,6 +24,7 @@ const routePermissionMap: Record<string, AgentPermission> = {
   '/admin/products': 'products',
   '/admin/events': 'events',
   '/admin/insights': 'insights',
+  '/admin/extracao': 'extracao',
 };
 
 export function usePermissions() {
@@ -64,6 +66,7 @@ export function usePermissions() {
       '/admin/products',
       '/admin/events',
       '/admin/insights',
+      '/admin/extracao',
     ];
 
     for (const route of routeOrder) {
