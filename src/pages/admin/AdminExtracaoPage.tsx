@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Download, Send, Search, Zap, BarChart3 } from 'lucide-react';
+import { Download, Send, Search, Zap } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { ExtractedLead, ApiUsage } from '@/components/extracao/types';
 
@@ -95,15 +95,12 @@ export default function AdminExtracaoPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3 max-w-md">
+        <TabsList className="grid w-full grid-cols-2 max-w-sm">
           <TabsTrigger value="extracao" className="gap-2">
             <Search className="w-4 h-4" /> Extração
           </TabsTrigger>
           <TabsTrigger value="disparos" className="gap-2">
             <Zap className="w-4 h-4" /> Disparos
-          </TabsTrigger>
-          <TabsTrigger value="metricas" className="gap-2">
-            <BarChart3 className="w-4 h-4" /> Métricas
           </TabsTrigger>
         </TabsList>
 
@@ -145,22 +142,6 @@ export default function AdminExtracaoPage() {
           <DispatchMonitor accountId={account?.id || ''} activeBatchId={activeBatchId} />
         </TabsContent>
 
-        <TabsContent value="metricas" className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Card><CardContent className="pt-6">
-              <div className="text-2xl font-bold text-foreground">{usage?.used ?? 0}</div>
-              <p className="text-xs text-muted-foreground mt-1">Requisições este mês</p>
-            </CardContent></Card>
-            <Card><CardContent className="pt-6">
-              <div className="text-2xl font-bold text-foreground">{usage?.limit ?? 500}</div>
-              <p className="text-xs text-muted-foreground mt-1">Limite mensal</p>
-            </CardContent></Card>
-            <Card><CardContent className="pt-6">
-              <div className="text-2xl font-bold text-foreground">{leads.length}</div>
-              <p className="text-xs text-muted-foreground mt-1">Leads extraídos (sessão)</p>
-            </CardContent></Card>
-          </div>
-        </TabsContent>
       </Tabs>
 
       <DispatchDialog
