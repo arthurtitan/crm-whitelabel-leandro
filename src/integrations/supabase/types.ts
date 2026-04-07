@@ -234,6 +234,106 @@ export type Database = {
           },
         ]
       }
+      dispatch_batches: {
+        Row: {
+          account_id: string
+          completed_at: string | null
+          created_at: string
+          delay_seconds: number
+          failed_count: number
+          id: string
+          keyword: string | null
+          location: string | null
+          sent_count: number
+          started_at: string
+          status: string
+          total_contacts: number
+        }
+        Insert: {
+          account_id: string
+          completed_at?: string | null
+          created_at?: string
+          delay_seconds?: number
+          failed_count?: number
+          id?: string
+          keyword?: string | null
+          location?: string | null
+          sent_count?: number
+          started_at?: string
+          status?: string
+          total_contacts?: number
+        }
+        Update: {
+          account_id?: string
+          completed_at?: string | null
+          created_at?: string
+          delay_seconds?: number
+          failed_count?: number
+          id?: string
+          keyword?: string | null
+          location?: string | null
+          sent_count?: number
+          started_at?: string
+          status?: string
+          total_contacts?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dispatch_batches_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dispatch_logs: {
+        Row: {
+          batch_id: string
+          contact_name: string
+          created_at: string
+          error_message: string | null
+          id: string
+          inbox_id: number
+          inbox_name: string | null
+          phone: string
+          sent_at: string | null
+          status: string
+        }
+        Insert: {
+          batch_id: string
+          contact_name: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          inbox_id: number
+          inbox_name?: string | null
+          phone: string
+          sent_at?: string | null
+          status?: string
+        }
+        Update: {
+          batch_id?: string
+          contact_name?: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          inbox_id?: number
+          inbox_name?: string | null
+          phone?: string
+          sent_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dispatch_logs_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "dispatch_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       events: {
         Row: {
           account_id: string | null
