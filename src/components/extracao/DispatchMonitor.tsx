@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Zap, CheckCircle2, XCircle, Clock, Download, ArrowLeft, Phone, StopCircle, Ban, Eye } from 'lucide-react';
+import { Zap, CheckCircle2, XCircle, Clock, Download, ArrowLeft, Phone, StopCircle, Ban, Eye, PlayCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -44,6 +44,7 @@ export function DispatchMonitor({ accountId, activeBatchId }: Props) {
   const [logs, setLogs] = useState<DispatchLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState(false);
+  const [resuming, setResuming] = useState(false);
 
   // Load batches
   useEffect(() => {
@@ -146,6 +147,28 @@ export function DispatchMonitor({ accountId, activeBatchId }: Props) {
     }
   };
 
+  const handleResume = async (batchId: string) => {
+    setResuming(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('dispatch-messages', {
+        body: {
+          action: 'resume',
+          account_id: accountId,
+          batch_id: batchId,
+          messages: ['Olá {nome}, tudo bem?'],
+        },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'Falha ao retomar');
+      toast({ title: 'Disparo retomado', description: `${data.remaining} contatos restantes serão processados.` });
+    } catch (err: any) {
+      toast({ title: 'Erro ao retomar', description: err.message, variant: 'destructive' });
+    } finally {
+      setResuming(false);
+    }
+  };
+
+
   const exportReport = () => {
     if (!selectedBatch || logs.length === 0) return;
     const headers = ['Contato', 'Telefone', 'Inbox', 'Status', 'Erro', 'Horário'];
@@ -234,6 +257,17 @@ export function DispatchMonitor({ accountId, activeBatchId }: Props) {
               >
                 <StopCircle className="w-4 h-4 mr-1" />
                 {cancelling ? 'Cancelando...' : 'Parar disparo'}
+              </Button>
+            )}
+            {selectedBatch.status === 'cancelled' && (
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => handleResume(selectedBatch.id)}
+                disabled={resuming}
+              >
+                <PlayCircle className="w-4 h-4 mr-1" />
+                {resuming ? 'Retomando...' : 'Retomar disparo'}
               </Button>
             )}
             <Button variant="outline" size="sm" onClick={exportReport}>
@@ -475,9 +509,22 @@ export function DispatchMonitor({ accountId, activeBatchId }: Props) {
                   {new Date(batch.started_at).toLocaleDateString('pt-BR')} {new Date(batch.started_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                 </p>
               </div>
-              <Badge variant={getStatusVariant(batch.status)}>
-                {getStatusLabel(batch.status)}
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant={getStatusVariant(batch.status)}>
+                  {getStatusLabel(batch.status)}
+                </Badge>
+                {batch.status === 'cancelled' && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={(e) => { e.stopPropagation(); handleResume(batch.id); }}
+                    disabled={resuming}
+                  >
+                    <PlayCircle className="w-3 h-3 mr-1" /> Retomar
+                  </Button>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-4 text-xs">
               <span className="text-green-600 font-medium">{batch.sent_count} enviados</span>
