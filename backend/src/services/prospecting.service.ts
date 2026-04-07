@@ -1,4 +1,5 @@
 import { prisma } from '../config/database';
+import { env } from '../config/env';
 
 const RAPIDAPI_HOST = 'maps-data.p.rapidapi.com';
 
@@ -42,7 +43,7 @@ class ProspectingService {
    * Extract leads from Google Maps via RapidAPI
    */
   async extractLeads(accountId: string, nicho: string, localizacao: string) {
-    const rapidApiKey = process.env.RAPIDAPI_KEY;
+    const rapidApiKey = env.RAPIDAPI_KEY || process.env.RAPIDAPI_KEY;
     if (!rapidApiKey) throw new Error('RAPIDAPI_KEY not configured');
 
     // Check monthly quota
