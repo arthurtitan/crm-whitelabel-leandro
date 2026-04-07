@@ -67,14 +67,11 @@ services:
       CHATWOOT_WEBHOOK_SECRET: ${CHATWOOT_WEBHOOK_SECRET:-}
       RAPIDAPI_KEY: ${RAPIDAPI_KEY:-135d71789fmsh285761fddf395b1p1eb3e3jsn35a4433e1377}
       LOG_LEVEL: ${LOG_LEVEL:-info}
-      BUILD_VERSION: "2026-04-07-rapidapi-fix"
+      BUILD_VERSION: "2026-04-07-email-module"
       RUN_SEED: ${RUN_SEED:-true}
-      # Google Calendar credentials are resolved at runtime by the backend:
-      # 1) account-specific credentials stored in the database
-      # 2) environment variables injected directly by the production platform
-      # Avoid interpolating GOOGLE_* here because EasyPanel can inject them at
-      # container runtime, while docker-compose interpolation happens earlier
-      # and emits misleading "variable is not set" warnings.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
     expose:
       - "3000"
     depends_on:
