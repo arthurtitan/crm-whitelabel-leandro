@@ -44,6 +44,7 @@ export function DispatchMonitor({ accountId, activeBatchId }: Props) {
   const [logs, setLogs] = useState<DispatchLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState(false);
+  const [resuming, setResuming] = useState(false);
 
   // Load batches
   useEffect(() => {
@@ -145,6 +146,28 @@ export function DispatchMonitor({ accountId, activeBatchId }: Props) {
       setCancelling(false);
     }
   };
+
+  const handleResume = async (batchId: string) => {
+    setResuming(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('dispatch-messages', {
+        body: {
+          action: 'resume',
+          account_id: accountId,
+          batch_id: batchId,
+          messages: ['Olá {nome}, tudo bem?'],
+        },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'Falha ao retomar');
+      toast({ title: 'Disparo retomado', description: `${data.remaining} contatos restantes serão processados.` });
+    } catch (err: any) {
+      toast({ title: 'Erro ao retomar', description: err.message, variant: 'destructive' });
+    } finally {
+      setResuming(false);
+    }
+  };
+
 
   const exportReport = () => {
     if (!selectedBatch || logs.length === 0) return;
