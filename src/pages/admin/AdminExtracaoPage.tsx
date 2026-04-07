@@ -3,9 +3,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { ExtractionSearchForm } from '@/components/extracao/ExtractionSearchForm';
 import { ExtractionResultsTable } from '@/components/extracao/ExtractionResultsTable';
 import { DispatchDialog } from '@/components/extracao/DispatchDialog';
+import { DispatchMonitor } from '@/components/extracao/DispatchMonitor';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Download, Send, Search, Zap, BarChart3 } from 'lucide-react';
@@ -20,6 +21,8 @@ export default function AdminExtracaoPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [dispatchOpen, setDispatchOpen] = useState(false);
   const [usage, setUsage] = useState<ApiUsage | null>(null);
+  const [activeTab, setActiveTab] = useState('extracao');
+  const [activeBatchId, setActiveBatchId] = useState<string | null>(null);
 
   const handleSearchResults = useCallback((results: ExtractedLead[], apiUsage?: ApiUsage) => {
     setLeads(results);
@@ -30,27 +33,19 @@ export default function AdminExtracaoPage() {
   const handleToggleSelect = useCallback((id: string) => {
     setSelectedIds(prev => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
   }, []);
 
   const handleSelectAll = useCallback(() => {
-    if (selectedIds.size === leads.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(leads.map(l => l.id)));
-    }
+    if (selectedIds.size === leads.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(leads.map(l => l.id)));
   }, [leads, selectedIds.size]);
 
   const handleRemoveLead = useCallback((id: string) => {
     setLeads(prev => prev.filter(l => l.id !== id));
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
+    setSelectedIds(prev => { const next = new Set(prev); next.delete(id); return next; });
   }, []);
 
   const handleExportExcel = useCallback(() => {
@@ -61,23 +56,24 @@ export default function AdminExtracaoPage() {
       l.avaliacao?.toString() || '', l.total_avaliacoes?.toString() || '',
     ]);
     const csv = [headers.join(';'), ...rows.map(r => r.join(';'))].join('\n');
-    const BOM = '\uFEFF';
-    const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
-    a.download = `prospeccao-leads-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    a.href = url; a.download = `prospeccao-leads-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click(); URL.revokeObjectURL(url);
     toast({ title: 'Exportação concluída', description: `${leads.length} leads exportados.` });
   }, [leads, toast]);
+
+  const handleDispatchStarted = useCallback((batchId: string) => {
+    setActiveBatchId(batchId);
+    setActiveTab('disparos');
+  }, []);
 
   const selectedLeads = leads.filter(l => selectedIds.has(l.id));
   const usagePercent = usage ? Math.min((usage.used / usage.limit) * 100, 100) : 0;
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Prospecção</h1>
@@ -98,24 +94,19 @@ export default function AdminExtracaoPage() {
         )}
       </div>
 
-      {/* Tabs */}
-      <Tabs defaultValue="extracao" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="grid w-full grid-cols-3 max-w-md">
           <TabsTrigger value="extracao" className="gap-2">
-            <Search className="w-4 h-4" />
-            Extração
+            <Search className="w-4 h-4" /> Extração
           </TabsTrigger>
           <TabsTrigger value="disparos" className="gap-2">
-            <Zap className="w-4 h-4" />
-            Disparos
+            <Zap className="w-4 h-4" /> Disparos
           </TabsTrigger>
           <TabsTrigger value="metricas" className="gap-2">
-            <BarChart3 className="w-4 h-4" />
-            Métricas
+            <BarChart3 className="w-4 h-4" /> Métricas
           </TabsTrigger>
         </TabsList>
 
-        {/* Tab: Extração */}
         <TabsContent value="extracao" className="space-y-4">
           <ExtractionSearchForm
             accountId={account?.id || ''}
@@ -123,32 +114,22 @@ export default function AdminExtracaoPage() {
             isLoading={isLoading}
             setIsLoading={setIsLoading}
           />
-
           {leads.length > 0 && (
             <>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary">{leads.length} leads encontrados</Badge>
-                  {selectedLeads.length > 0 && (
-                    <Badge variant="outline">{selectedLeads.length} selecionados</Badge>
-                  )}
+                  {selectedLeads.length > 0 && <Badge variant="outline">{selectedLeads.length} selecionados</Badge>}
                 </div>
                 <div className="flex items-center gap-2">
                   <Button variant="outline" size="sm" onClick={handleExportExcel}>
-                    <Download className="w-4 h-4 mr-2" />
-                    Exportar CSV
+                    <Download className="w-4 h-4 mr-2" /> Exportar CSV
                   </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => setDispatchOpen(true)}
-                    disabled={selectedLeads.length === 0}
-                  >
-                    <Send className="w-4 h-4 mr-2" />
-                    Disparar ({selectedLeads.length})
+                  <Button size="sm" onClick={() => setDispatchOpen(true)} disabled={selectedLeads.length === 0}>
+                    <Send className="w-4 h-4 mr-2" /> Disparar ({selectedLeads.length})
                   </Button>
                 </div>
               </div>
-
               <ExtractionResultsTable
                 leads={leads}
                 selectedIds={selectedIds}
@@ -160,43 +141,24 @@ export default function AdminExtracaoPage() {
           )}
         </TabsContent>
 
-        {/* Tab: Disparos */}
         <TabsContent value="disparos" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Histórico de Disparos</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                <Zap className="w-12 h-12 mb-4 opacity-30" />
-                <p className="text-sm font-medium">Nenhum disparo realizado ainda</p>
-                <p className="text-xs mt-1">Extraia leads e envie mensagens pela aba Extração</p>
-              </div>
-            </CardContent>
-          </Card>
+          <DispatchMonitor accountId={account?.id || ''} activeBatchId={activeBatchId} />
         </TabsContent>
 
-        {/* Tab: Métricas */}
         <TabsContent value="metricas" className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Card>
-              <CardContent className="pt-6">
-                <div className="text-2xl font-bold text-foreground">{usage?.used ?? 0}</div>
-                <p className="text-xs text-muted-foreground mt-1">Requisições este mês</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-6">
-                <div className="text-2xl font-bold text-foreground">{usage?.limit ?? 500}</div>
-                <p className="text-xs text-muted-foreground mt-1">Limite mensal</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-6">
-                <div className="text-2xl font-bold text-foreground">{leads.length}</div>
-                <p className="text-xs text-muted-foreground mt-1">Leads extraídos (sessão)</p>
-              </CardContent>
-            </Card>
+            <Card><CardContent className="pt-6">
+              <div className="text-2xl font-bold text-foreground">{usage?.used ?? 0}</div>
+              <p className="text-xs text-muted-foreground mt-1">Requisições este mês</p>
+            </CardContent></Card>
+            <Card><CardContent className="pt-6">
+              <div className="text-2xl font-bold text-foreground">{usage?.limit ?? 500}</div>
+              <p className="text-xs text-muted-foreground mt-1">Limite mensal</p>
+            </CardContent></Card>
+            <Card><CardContent className="pt-6">
+              <div className="text-2xl font-bold text-foreground">{leads.length}</div>
+              <p className="text-xs text-muted-foreground mt-1">Leads extraídos (sessão)</p>
+            </CardContent></Card>
           </div>
         </TabsContent>
       </Tabs>
@@ -206,6 +168,7 @@ export default function AdminExtracaoPage() {
         onOpenChange={setDispatchOpen}
         leads={selectedLeads}
         accountId={account?.id || ''}
+        onDispatchStarted={handleDispatchStarted}
       />
     </div>
   );
