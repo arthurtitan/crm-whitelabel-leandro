@@ -61,8 +61,8 @@ export const PERMISSION_GROUPS = {
     label: 'Agenda',
     permissions: [PERMISSIONS.AGENDA],
   },
-  EXTRACAO: {
-    label: 'Extração',
+  PROSPECCAO: {
+    label: 'Prospecção',
     permissions: [PERMISSIONS.EXTRACAO],
   },
   ADMIN: {
