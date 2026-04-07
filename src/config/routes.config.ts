@@ -36,6 +36,7 @@ export const ROUTES = {
     INSIGHTS: '/admin/insights',
     EVENTS: '/admin/events',
     PROSPECCAO: '/admin/prospeccao',
+    EMAILS: '/admin/emails',
     SETTINGS: '/admin/settings',
     USERS: '/admin/users',
   },
@@ -61,6 +62,7 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   [ROUTES.ADMIN.INSIGHTS]: 'insights',
   [ROUTES.ADMIN.EVENTS]: 'events',
   [ROUTES.ADMIN.PROSPECCAO]: 'extracao',
+  [ROUTES.ADMIN.EMAILS]: 'emails',
 };
 
 // Default routes by role

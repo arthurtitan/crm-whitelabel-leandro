@@ -60,6 +60,12 @@ interface EditFormData {
   googleClientId: string;
   googleClientSecret: string;
   googleRedirectUri: string;
+  openaiEnabled: boolean;
+  openaiApiKey: string;
+  sendgridEnabled: boolean;
+  sendgridApiKey: string;
+  sendgridFromEmail: string;
+  sendgridFromName: string;
 }
 
 type ConnectionStatus = 'idle' | 'loading' | 'success' | 'error';
@@ -91,6 +97,12 @@ export default function SuperAdminAccountDetailPage() {
     googleClientId: '',
     googleClientSecret: '',
     googleRedirectUri: '',
+    openaiEnabled: false,
+    openaiApiKey: '',
+    sendgridEnabled: false,
+    sendgridApiKey: '',
+    sendgridFromEmail: '',
+    sendgridFromName: '',
   });
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('idle');
 
@@ -163,6 +175,12 @@ export default function SuperAdminAccountDetailPage() {
       googleClientId: account.google_client_id || '',
       googleClientSecret: account.google_client_secret || '',
       googleRedirectUri: account.google_redirect_uri || '',
+      openaiEnabled: !!(account as any).openai_api_key,
+      openaiApiKey: (account as any).openai_api_key || '',
+      sendgridEnabled: !!((account as any).sendgrid_api_key),
+      sendgridApiKey: (account as any).sendgrid_api_key || '',
+      sendgridFromEmail: (account as any).sendgrid_from_email || '',
+      sendgridFromName: (account as any).sendgrid_from_name || '',
     });
     setConnectionStatus('idle');
     setIsControlOpen(true);
@@ -230,7 +248,11 @@ export default function SuperAdminAccountDetailPage() {
         google_client_id: editFormData.googleEnabled ? editFormData.googleClientId : undefined,
         google_client_secret: editFormData.googleEnabled ? editFormData.googleClientSecret : undefined,
         google_redirect_uri: editFormData.googleEnabled ? editFormData.googleRedirectUri : undefined,
-      });
+        openai_api_key: editFormData.openaiEnabled ? editFormData.openaiApiKey : undefined,
+        sendgrid_api_key: editFormData.sendgridEnabled ? editFormData.sendgridApiKey : undefined,
+        sendgrid_from_email: editFormData.sendgridEnabled ? editFormData.sendgridFromEmail : undefined,
+        sendgrid_from_name: editFormData.sendgridEnabled ? editFormData.sendgridFromName : undefined,
+      } as any);
       setAccount({
         ...account,
         nome: editFormData.nome,
@@ -569,6 +591,80 @@ export default function SuperAdminAccountDetailPage() {
               </Select>
             </div>
             
+            {/* OpenAI Integration */}
+            <div className="space-y-4 pt-4 border-t border-border/50">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="edit-openai">Integração OpenAI</Label>
+                  <p className="text-xs text-muted-foreground">Assistente de IA para geração de e-mails</p>
+                </div>
+                <Switch
+                  id="edit-openai"
+                  checked={editFormData.openaiEnabled}
+                  onCheckedChange={(checked) => setEditFormData({ ...editFormData, openaiEnabled: checked })}
+                />
+              </div>
+              {editFormData.openaiEnabled && (
+                <div className="space-y-2">
+                  <Label htmlFor="edit-openai-key">API Key</Label>
+                  <Input
+                    id="edit-openai-key"
+                    type="password"
+                    value={editFormData.openaiApiKey}
+                    onChange={(e) => setEditFormData({ ...editFormData, openaiApiKey: e.target.value })}
+                    placeholder="sk-..."
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* SendGrid Integration */}
+            <div className="space-y-4 pt-4 border-t border-border/50">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="edit-sendgrid">Integração SendGrid</Label>
+                  <p className="text-xs text-muted-foreground">Disparo de e-mails com rastreamento</p>
+                </div>
+                <Switch
+                  id="edit-sendgrid"
+                  checked={editFormData.sendgridEnabled}
+                  onCheckedChange={(checked) => setEditFormData({ ...editFormData, sendgridEnabled: checked })}
+                />
+              </div>
+              {editFormData.sendgridEnabled && (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-sendgrid-key">API Key</Label>
+                    <Input
+                      id="edit-sendgrid-key"
+                      type="password"
+                      value={editFormData.sendgridApiKey}
+                      onChange={(e) => setEditFormData({ ...editFormData, sendgridApiKey: e.target.value })}
+                      placeholder="SG...."
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-sendgrid-email">E-mail Remetente</Label>
+                    <Input
+                      id="edit-sendgrid-email"
+                      value={editFormData.sendgridFromEmail}
+                      onChange={(e) => setEditFormData({ ...editFormData, sendgridFromEmail: e.target.value })}
+                      placeholder="contato@empresa.com"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-sendgrid-name">Nome Remetente</Label>
+                    <Input
+                      id="edit-sendgrid-name"
+                      value={editFormData.sendgridFromName}
+                      onChange={(e) => setEditFormData({ ...editFormData, sendgridFromName: e.target.value })}
+                      placeholder="Minha Empresa"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Chatwoot Integration */}
             <div className="space-y-4 pt-4 border-t border-border/50">
               <div className="flex items-center justify-between">

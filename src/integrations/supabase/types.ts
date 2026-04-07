@@ -27,7 +27,11 @@ export type Database = {
           limite_usuarios: number | null
           monthly_extraction_limit: number | null
           nome: string
+          openai_api_key: string | null
           plano: string | null
+          sendgrid_api_key: string | null
+          sendgrid_from_email: string | null
+          sendgrid_from_name: string | null
           status: Database["public"]["Enums"]["account_status"] | null
           timezone: string | null
           updated_at: string | null
@@ -44,7 +48,11 @@ export type Database = {
           limite_usuarios?: number | null
           monthly_extraction_limit?: number | null
           nome: string
+          openai_api_key?: string | null
           plano?: string | null
+          sendgrid_api_key?: string | null
+          sendgrid_from_email?: string | null
+          sendgrid_from_name?: string | null
           status?: Database["public"]["Enums"]["account_status"] | null
           timezone?: string | null
           updated_at?: string | null
@@ -61,7 +69,11 @@ export type Database = {
           limite_usuarios?: number | null
           monthly_extraction_limit?: number | null
           nome?: string
+          openai_api_key?: string | null
           plano?: string | null
+          sendgrid_api_key?: string | null
+          sendgrid_from_email?: string | null
+          sendgrid_from_name?: string | null
           status?: Database["public"]["Enums"]["account_status"] | null
           timezone?: string | null
           updated_at?: string | null
@@ -330,6 +342,288 @@ export type Database = {
             columns: ["batch_id"]
             isOneToOne: false
             referencedRelation: "dispatch_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_cadence_steps: {
+        Row: {
+          active: boolean
+          body_html: string
+          body_text: string | null
+          cadence_id: string
+          created_at: string
+          day_number: number
+          id: string
+          ordem: number
+          subject: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          body_html: string
+          body_text?: string | null
+          cadence_id: string
+          created_at?: string
+          day_number?: number
+          id?: string
+          ordem?: number
+          subject: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          body_html?: string
+          body_text?: string | null
+          cadence_id?: string
+          created_at?: string
+          day_number?: number
+          id?: string
+          ordem?: number
+          subject?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_cadence_steps_cadence_id_fkey"
+            columns: ["cadence_id"]
+            isOneToOne: false
+            referencedRelation: "email_cadences"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_cadences: {
+        Row: {
+          account_id: string
+          active: boolean
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          name: string
+          target_stage_ids: string[] | null
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          active?: boolean
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          target_stage_ids?: string[] | null
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          active?: boolean
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          target_stage_ids?: string[] | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_cadences_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_enrollments: {
+        Row: {
+          account_id: string
+          cadence_id: string
+          completed_at: string | null
+          contact_id: string
+          created_at: string
+          current_step: number
+          enrolled_at: string
+          id: string
+          next_send_at: string | null
+          status: Database["public"]["Enums"]["email_enrollment_status"]
+        }
+        Insert: {
+          account_id: string
+          cadence_id: string
+          completed_at?: string | null
+          contact_id: string
+          created_at?: string
+          current_step?: number
+          enrolled_at?: string
+          id?: string
+          next_send_at?: string | null
+          status?: Database["public"]["Enums"]["email_enrollment_status"]
+        }
+        Update: {
+          account_id?: string
+          cadence_id?: string
+          completed_at?: string | null
+          contact_id?: string
+          created_at?: string
+          current_step?: number
+          enrolled_at?: string
+          id?: string
+          next_send_at?: string | null
+          status?: Database["public"]["Enums"]["email_enrollment_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_enrollments_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_enrollments_cadence_id_fkey"
+            columns: ["cadence_id"]
+            isOneToOne: false
+            referencedRelation: "email_cadences"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_enrollments_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_sends: {
+        Row: {
+          account_id: string
+          bounced_at: string | null
+          clicked_at: string | null
+          contact_id: string
+          created_at: string
+          enrollment_id: string | null
+          error_message: string | null
+          id: string
+          opened_at: string | null
+          sendgrid_message_id: string | null
+          sent_at: string | null
+          status: Database["public"]["Enums"]["email_send_status"]
+          step_id: string | null
+          subject: string
+          to_email: string
+        }
+        Insert: {
+          account_id: string
+          bounced_at?: string | null
+          clicked_at?: string | null
+          contact_id: string
+          created_at?: string
+          enrollment_id?: string | null
+          error_message?: string | null
+          id?: string
+          opened_at?: string | null
+          sendgrid_message_id?: string | null
+          sent_at?: string | null
+          status?: Database["public"]["Enums"]["email_send_status"]
+          step_id?: string | null
+          subject: string
+          to_email: string
+        }
+        Update: {
+          account_id?: string
+          bounced_at?: string | null
+          clicked_at?: string | null
+          contact_id?: string
+          created_at?: string
+          enrollment_id?: string | null
+          error_message?: string | null
+          id?: string
+          opened_at?: string | null
+          sendgrid_message_id?: string | null
+          sent_at?: string | null
+          status?: Database["public"]["Enums"]["email_send_status"]
+          step_id?: string | null
+          subject?: string
+          to_email?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_sends_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_sends_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_sends_enrollment_id_fkey"
+            columns: ["enrollment_id"]
+            isOneToOne: false
+            referencedRelation: "email_enrollments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_sends_step_id_fkey"
+            columns: ["step_id"]
+            isOneToOne: false
+            referencedRelation: "email_cadence_steps"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_templates: {
+        Row: {
+          account_id: string
+          body_html: string
+          body_text: string | null
+          category: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+          subject: string
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          body_html: string
+          body_text?: string | null
+          category?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name: string
+          subject: string
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          body_html?: string
+          body_text?: string | null
+          category?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name?: string
+          subject?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_templates_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
             referencedColumns: ["id"]
           },
         ]
@@ -948,6 +1242,21 @@ export type Database = {
       account_status: "active" | "paused" | "cancelled"
       app_role: "super_admin" | "admin" | "agent"
       contact_origin: "whatsapp" | "instagram" | "site" | "indicacao" | "outro"
+      email_enrollment_status:
+        | "active"
+        | "paused"
+        | "completed"
+        | "unsubscribed"
+        | "bounced"
+      email_send_status:
+        | "queued"
+        | "sent"
+        | "delivered"
+        | "opened"
+        | "clicked"
+        | "bounced"
+        | "failed"
+        | "spam"
       payment_method:
         | "pix"
         | "boleto"
@@ -1088,6 +1397,23 @@ export const Constants = {
       account_status: ["active", "paused", "cancelled"],
       app_role: ["super_admin", "admin", "agent"],
       contact_origin: ["whatsapp", "instagram", "site", "indicacao", "outro"],
+      email_enrollment_status: [
+        "active",
+        "paused",
+        "completed",
+        "unsubscribed",
+        "bounced",
+      ],
+      email_send_status: [
+        "queued",
+        "sent",
+        "delivered",
+        "opened",
+        "clicked",
+        "bounced",
+        "failed",
+        "spam",
+      ],
       payment_method: [
         "pix",
         "boleto",

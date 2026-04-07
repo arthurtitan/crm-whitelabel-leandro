@@ -28,6 +28,9 @@ export const PERMISSIONS = {
   // Extraction
   EXTRACAO: 'extracao',
   
+  // Email
+  EMAILS: 'emails',
+  
   // Administration
   USERS: 'users',
   SETTINGS: 'settings',
@@ -64,6 +67,10 @@ export const PERMISSION_GROUPS = {
   PROSPECCAO: {
     label: 'Prospecção',
     permissions: [PERMISSIONS.EXTRACAO],
+  },
+  EMAILS: {
+    label: 'E-mails',
+    permissions: [PERMISSIONS.EMAILS],
   },
   ADMIN: {
     label: 'Administração',
