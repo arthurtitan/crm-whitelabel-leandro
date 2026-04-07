@@ -4,8 +4,9 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Zap, CheckCircle2, XCircle, Clock, Download, ArrowLeft, Phone } from 'lucide-react';
+import { Zap, CheckCircle2, XCircle, Clock, Download, ArrowLeft, Phone, StopCircle, Ban, Eye } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 interface DispatchBatch {
   id: string;
@@ -37,10 +38,12 @@ interface Props {
 }
 
 export function DispatchMonitor({ accountId, activeBatchId }: Props) {
+  const { toast } = useToast();
   const [batches, setBatches] = useState<DispatchBatch[]>([]);
   const [selectedBatch, setSelectedBatch] = useState<DispatchBatch | null>(null);
   const [logs, setLogs] = useState<DispatchLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cancelling, setCancelling] = useState(false);
 
   // Load batches
   useEffect(() => {
@@ -127,6 +130,22 @@ export function DispatchMonitor({ accountId, activeBatchId }: Props) {
     return () => { supabase.removeChannel(channel); };
   }, [selectedBatch?.id]);
 
+  const handleCancel = async (batchId: string) => {
+    setCancelling(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('dispatch-messages', {
+        body: { action: 'cancel', account_id: accountId, batch_id: batchId },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error('Falha ao cancelar');
+      toast({ title: 'Disparo cancelado', description: 'Os envios pendentes foram cancelados.' });
+    } catch (err: any) {
+      toast({ title: 'Erro ao cancelar', description: err.message, variant: 'destructive' });
+    } finally {
+      setCancelling(false);
+    }
+  };
+
   const exportReport = () => {
     if (!selectedBatch || logs.length === 0) return;
     const headers = ['Contato', 'Telefone', 'Inbox', 'Status', 'Erro', 'Horário'];
@@ -144,6 +163,26 @@ export function DispatchMonitor({ accountId, activeBatchId }: Props) {
     URL.revokeObjectURL(url);
   };
 
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'completed': return 'Concluído';
+      case 'running': return 'Em andamento';
+      case 'cancelled': return 'Cancelado';
+      default: return 'Falhou';
+    }
+  };
+
+  const getStatusVariant = (status: string): 'default' | 'secondary' | 'destructive' | 'outline' => {
+    switch (status) {
+      case 'completed': return 'default';
+      case 'running': return 'secondary';
+      case 'cancelled': return 'outline';
+      default: return 'destructive';
+    }
+  };
+
+  const runningBatches = batches.filter(b => b.status === 'running');
+
   // Detail view
   if (selectedBatch) {
     const processed = selectedBatch.sent_count + selectedBatch.failed_count;
@@ -151,16 +190,31 @@ export function DispatchMonitor({ accountId, activeBatchId }: Props) {
       ? Math.round((processed / selectedBatch.total_contacts) * 100)
       : 0;
 
-    const statusLabel = selectedBatch.status === 'completed' ? 'Concluído'
-      : selectedBatch.status === 'running' ? 'Em andamento'
-      : 'Falhou';
-
-    const statusColor = selectedBatch.status === 'completed' ? 'text-green-600'
-      : selectedBatch.status === 'running' ? 'text-blue-600'
-      : 'text-destructive';
-
     return (
       <div className="space-y-4">
+        {/* Running campaigns switcher */}
+        {runningBatches.length > 1 && (
+          <Card>
+            <CardContent className="py-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-medium text-muted-foreground mr-1">Campanhas ativas:</span>
+                {runningBatches.map(b => (
+                  <Button
+                    key={b.id}
+                    variant={b.id === selectedBatch.id ? 'default' : 'outline'}
+                    size="sm"
+                    className="text-xs h-7"
+                    onClick={() => setSelectedBatch(b)}
+                  >
+                    <Eye className="w-3 h-3 mr-1" />
+                    {b.keyword || 'Campanha'} ({b.sent_count}/{b.total_contacts})
+                  </Button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Header */}
         <div className="flex items-center justify-between">
           <Button variant="ghost" size="sm" onClick={() => setSelectedBatch(null)}>
@@ -168,12 +222,23 @@ export function DispatchMonitor({ accountId, activeBatchId }: Props) {
             Voltar
           </Button>
           <div className="flex items-center gap-2">
-            <Badge variant={selectedBatch.status === 'completed' ? 'default' : 'secondary'} className={statusColor}>
-              {statusLabel}
+            <Badge variant={getStatusVariant(selectedBatch.status)}>
+              {getStatusLabel(selectedBatch.status)}
             </Badge>
+            {selectedBatch.status === 'running' && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => handleCancel(selectedBatch.id)}
+                disabled={cancelling}
+              >
+                <StopCircle className="w-4 h-4 mr-1" />
+                {cancelling ? 'Cancelando...' : 'Parar disparo'}
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={exportReport}>
               <Download className="w-4 h-4 mr-1" />
-              Exportar relatório
+              Exportar
             </Button>
           </div>
         </div>
@@ -224,7 +289,7 @@ export function DispatchMonitor({ accountId, activeBatchId }: Props) {
             </div>
             <Progress
               value={progress}
-              className={`h-3 ${selectedBatch.failed_count > 0 ? '[&>div]:bg-gradient-to-r [&>div]:from-green-500 [&>div]:to-green-400' : ''}`}
+              className={`h-3 ${selectedBatch.status === 'cancelled' ? '[&>div]:bg-muted-foreground' : selectedBatch.failed_count > 0 ? '[&>div]:bg-gradient-to-r [&>div]:from-green-500 [&>div]:to-green-400' : ''}`}
             />
             <div className="flex justify-between mt-1">
               <span className="text-xs text-muted-foreground">{processed}/{selectedBatch.total_contacts} contatos</span>
@@ -259,20 +324,22 @@ export function DispatchMonitor({ accountId, activeBatchId }: Props) {
                       <TableCell>
                         {log.status === 'sent' && (
                           <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50">
-                            <CheckCircle2 className="w-3 h-3 mr-1" />
-                            Enviado
+                            <CheckCircle2 className="w-3 h-3 mr-1" /> Enviado
                           </Badge>
                         )}
                         {log.status === 'failed' && (
                           <Badge variant="outline" className="text-destructive border-red-200 bg-red-50">
-                            <XCircle className="w-3 h-3 mr-1" />
-                            Erro
+                            <XCircle className="w-3 h-3 mr-1" /> Erro
                           </Badge>
                         )}
                         {log.status === 'pending' && (
                           <Badge variant="outline" className="text-muted-foreground">
-                            <Clock className="w-3 h-3 mr-1" />
-                            Aguardando
+                            <Clock className="w-3 h-3 mr-1" /> Aguardando
+                          </Badge>
+                        )}
+                        {log.status === 'cancelled' && (
+                          <Badge variant="outline" className="text-muted-foreground border-muted">
+                            <Ban className="w-3 h-3 mr-1" /> Cancelado
                           </Badge>
                         )}
                       </TableCell>
@@ -328,43 +395,98 @@ export function DispatchMonitor({ accountId, activeBatchId }: Props) {
 
   return (
     <div className="space-y-3">
-      <h3 className="text-lg font-semibold">Histórico de Disparos</h3>
-      {batches.map(batch => {
-        const processed = batch.sent_count + batch.failed_count;
-        const progress = batch.total_contacts > 0 ? Math.round((processed / batch.total_contacts) * 100) : 0;
-        return (
-          <Card
-            key={batch.id}
-            className="cursor-pointer hover:shadow-md transition-shadow"
-            onClick={() => setSelectedBatch(batch)}
-          >
-            <CardContent className="pt-4 pb-3">
-              <div className="flex items-start justify-between mb-2">
-                <div>
-                  <p className="font-medium text-sm">
-                    {batch.keyword || 'Disparo manual'}
-                    {batch.location && <span className="text-muted-foreground"> · 📍 {batch.location}</span>}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {new Date(batch.started_at).toLocaleDateString('pt-BR')} {new Date(batch.started_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                  </p>
-                </div>
-                <Badge variant={batch.status === 'completed' ? 'default' : batch.status === 'running' ? 'secondary' : 'destructive'}>
-                  {batch.status === 'completed' ? 'Concluído' : batch.status === 'running' ? 'Em andamento' : 'Falhou'}
-                </Badge>
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold">Histórico de Disparos</h3>
+        {runningBatches.length > 0 && (
+          <Badge variant="secondary" className="animate-pulse">
+            {runningBatches.length} campanha(s) ativa(s)
+          </Badge>
+        )}
+      </div>
+
+      {/* Active campaigns first */}
+      {runningBatches.length > 0 && (
+        <div className="space-y-2">
+          {runningBatches.map(batch => {
+            const processed = batch.sent_count + batch.failed_count;
+            const progress = batch.total_contacts > 0 ? Math.round((processed / batch.total_contacts) * 100) : 0;
+            return (
+              <Card
+                key={batch.id}
+                className="border-primary/30 bg-primary/5 cursor-pointer hover:shadow-md transition-shadow"
+                onClick={() => setSelectedBatch(batch)}
+              >
+                <CardContent className="pt-4 pb-3">
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <p className="font-medium text-sm flex items-center gap-2">
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                        </span>
+                        {batch.keyword || 'Disparo manual'}
+                        {batch.location && <span className="text-muted-foreground"> · 📍 {batch.location}</span>}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Iniciado {new Date(batch.started_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary">Em andamento</Badge>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={(e) => { e.stopPropagation(); handleCancel(batch.id); }}
+                        disabled={cancelling}
+                      >
+                        <StopCircle className="w-3 h-3 mr-1" /> Parar
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4 text-xs mb-2">
+                    <span className="text-green-600 font-medium">{batch.sent_count} enviados</span>
+                    {batch.failed_count > 0 && <span className="text-destructive font-medium">{batch.failed_count} erros</span>}
+                    <span className="text-muted-foreground">{batch.total_contacts} total</span>
+                  </div>
+                  <Progress value={progress} className="h-1.5" />
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Completed / failed batches */}
+      {batches.filter(b => b.status !== 'running').map(batch => (
+        <Card
+          key={batch.id}
+          className="cursor-pointer hover:shadow-md transition-shadow"
+          onClick={() => setSelectedBatch(batch)}
+        >
+          <CardContent className="pt-4 pb-3">
+            <div className="flex items-start justify-between mb-2">
+              <div>
+                <p className="font-medium text-sm">
+                  {batch.keyword || 'Disparo manual'}
+                  {batch.location && <span className="text-muted-foreground"> · 📍 {batch.location}</span>}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {new Date(batch.started_at).toLocaleDateString('pt-BR')} {new Date(batch.started_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                </p>
               </div>
-              <div className="flex items-center gap-4 text-xs">
-                <span className="text-green-600 font-medium">{batch.sent_count} enviados</span>
-                {batch.failed_count > 0 && <span className="text-destructive font-medium">{batch.failed_count} erros</span>}
-                <span className="text-muted-foreground">{batch.total_contacts} total</span>
-              </div>
-              {batch.status === 'running' && (
-                <Progress value={progress} className="h-1.5 mt-2" />
-              )}
-            </CardContent>
-          </Card>
-        );
-      })}
+              <Badge variant={getStatusVariant(batch.status)}>
+                {getStatusLabel(batch.status)}
+              </Badge>
+            </div>
+            <div className="flex items-center gap-4 text-xs">
+              <span className="text-green-600 font-medium">{batch.sent_count} enviados</span>
+              {batch.failed_count > 0 && <span className="text-destructive font-medium">{batch.failed_count} erros</span>}
+              <span className="text-muted-foreground">{batch.total_contacts} total</span>
+            </div>
+          </CardContent>
+        </Card>
+      ))}
     </div>
   );
 }
