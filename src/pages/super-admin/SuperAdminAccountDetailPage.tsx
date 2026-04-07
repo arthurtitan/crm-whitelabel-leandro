@@ -60,6 +60,12 @@ interface EditFormData {
   googleClientId: string;
   googleClientSecret: string;
   googleRedirectUri: string;
+  openaiEnabled: boolean;
+  openaiApiKey: string;
+  sendgridEnabled: boolean;
+  sendgridApiKey: string;
+  sendgridFromEmail: string;
+  sendgridFromName: string;
 }
 
 type ConnectionStatus = 'idle' | 'loading' | 'success' | 'error';
@@ -91,6 +97,12 @@ export default function SuperAdminAccountDetailPage() {
     googleClientId: '',
     googleClientSecret: '',
     googleRedirectUri: '',
+    openaiEnabled: false,
+    openaiApiKey: '',
+    sendgridEnabled: false,
+    sendgridApiKey: '',
+    sendgridFromEmail: '',
+    sendgridFromName: '',
   });
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('idle');
 
@@ -163,6 +175,12 @@ export default function SuperAdminAccountDetailPage() {
       googleClientId: account.google_client_id || '',
       googleClientSecret: account.google_client_secret || '',
       googleRedirectUri: account.google_redirect_uri || '',
+      openaiEnabled: !!(account as any).openai_api_key,
+      openaiApiKey: (account as any).openai_api_key || '',
+      sendgridEnabled: !!((account as any).sendgrid_api_key),
+      sendgridApiKey: (account as any).sendgrid_api_key || '',
+      sendgridFromEmail: (account as any).sendgrid_from_email || '',
+      sendgridFromName: (account as any).sendgrid_from_name || '',
     });
     setConnectionStatus('idle');
     setIsControlOpen(true);
@@ -230,7 +248,11 @@ export default function SuperAdminAccountDetailPage() {
         google_client_id: editFormData.googleEnabled ? editFormData.googleClientId : undefined,
         google_client_secret: editFormData.googleEnabled ? editFormData.googleClientSecret : undefined,
         google_redirect_uri: editFormData.googleEnabled ? editFormData.googleRedirectUri : undefined,
-      });
+        openai_api_key: editFormData.openaiEnabled ? editFormData.openaiApiKey : undefined,
+        sendgrid_api_key: editFormData.sendgridEnabled ? editFormData.sendgridApiKey : undefined,
+        sendgrid_from_email: editFormData.sendgridEnabled ? editFormData.sendgridFromEmail : undefined,
+        sendgrid_from_name: editFormData.sendgridEnabled ? editFormData.sendgridFromName : undefined,
+      } as any);
       setAccount({
         ...account,
         nome: editFormData.nome,
