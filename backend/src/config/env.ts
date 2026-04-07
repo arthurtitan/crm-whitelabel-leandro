@@ -32,6 +32,9 @@ const envSchema = z.object({
   // Chatwoot (optional)
   CHATWOOT_WEBHOOK_SECRET: z.string().optional(),
 
+  // RapidAPI (for prospecting)
+  RAPIDAPI_KEY: z.string().optional(),
+
   // Logging
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 });

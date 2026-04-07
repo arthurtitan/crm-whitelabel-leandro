@@ -10,6 +10,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Trash2, Loader2, Send } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { useBackend } from '@/config/backend.config';
+import { apiClient } from '@/api/client';
+import { API_ENDPOINTS } from '@/api/endpoints';
 import { useToast } from '@/hooks/use-toast';
 import type { ExtractedLead, ChatwootInbox } from './types';
 
@@ -33,15 +36,29 @@ export function DispatchDialog({ open, onOpenChange, leads, accountId, onDispatc
   useEffect(() => {
     if (!open || !accountId) return;
     setLoadingInboxes(true);
-    supabase.functions
-      .invoke('dispatch-messages', {
-        body: { action: 'list-inboxes', account_id: accountId },
-      })
-      .then(({ data, error }) => {
-        if (error || !data?.inboxes) return;
-        setInboxes(data.inboxes);
-      })
-      .finally(() => setLoadingInboxes(false));
+
+    const fetchInboxes = async () => {
+      try {
+        let inboxData: ChatwootInbox[];
+        if (useBackend) {
+          const response = await apiClient.get<any>(API_ENDPOINTS.PROSPECTING.INBOXES);
+          const data = (response as any).data || response;
+          inboxData = data.inboxes || data;
+        } else {
+          const { data, error } = await supabase.functions.invoke('dispatch-messages', {
+            body: { action: 'list-inboxes', account_id: accountId },
+          });
+          if (error || !data?.inboxes) return;
+          inboxData = data.inboxes;
+        }
+        setInboxes(inboxData);
+      } catch (err) {
+        console.error('Error loading inboxes:', err);
+      } finally {
+        setLoadingInboxes(false);
+      }
+    };
+    fetchInboxes();
   }, [open, accountId]);
 
   const toggleInbox = useCallback((id: number) => {
@@ -81,7 +98,6 @@ export function DispatchDialog({ open, onOpenChange, leads, accountId, onDispatc
 
     setIsSending(true);
     try {
-      // Distribute leads across selected inboxes round-robin
       const assignments = selectedInboxes.map(inbox => ({
         inbox_id: inbox.id,
         inbox_name: `${inbox.name}${inbox.phone_number ? ` (${inbox.phone_number})` : ''}`,
@@ -93,17 +109,28 @@ export function DispatchDialog({ open, onOpenChange, leads, accountId, onDispatc
         assignments[assignIdx].contacts.push({ nome: lead.nome, telefone: lead.telefone });
       });
 
-      const { data, error } = await supabase.functions.invoke('dispatch-messages', {
-        body: {
-          action: 'dispatch',
-          account_id: accountId,
+      let data: any;
+      if (useBackend) {
+        const response = await apiClient.post(API_ENDPOINTS.PROSPECTING.DISPATCH, {
           inbox_assignments: assignments,
           delay_seconds: Number(delay) || 30,
           messages: validMessages,
-        },
-      });
+        });
+        data = (response as any).data || response;
+      } else {
+        const result = await supabase.functions.invoke('dispatch-messages', {
+          body: {
+            action: 'dispatch',
+            account_id: accountId,
+            inbox_assignments: assignments,
+            delay_seconds: Number(delay) || 30,
+            messages: validMessages,
+          },
+        });
+        if (result.error) throw result.error;
+        data = result.data;
+      }
 
-      if (error) throw error;
       if (!data?.success) throw new Error(data?.error || 'Falha no disparo');
 
       toast({
@@ -134,7 +161,6 @@ export function DispatchDialog({ open, onOpenChange, leads, accountId, onDispatc
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          {/* Inbox selection - multi */}
           <div className="space-y-2">
             <Label>Números (Inboxes do Chatwoot)</Label>
             <p className="text-xs text-muted-foreground">
@@ -177,7 +203,6 @@ export function DispatchDialog({ open, onOpenChange, leads, accountId, onDispatc
             )}
           </div>
 
-          {/* Delay */}
           <div className="space-y-2">
             <Label>Delay entre mensagens (segundos)</Label>
             <Input
@@ -192,7 +217,6 @@ export function DispatchDialog({ open, onOpenChange, leads, accountId, onDispatc
             </p>
           </div>
 
-          {/* Messages */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label>Variantes de Mensagem ({messages.length}/10)</Label>

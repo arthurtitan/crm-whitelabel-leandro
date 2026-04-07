@@ -4,6 +4,9 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Search, MapPin, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { useBackend } from '@/config/backend.config';
+import { apiClient } from '@/api/client';
+import { API_ENDPOINTS } from '@/api/endpoints';
 import { useToast } from '@/hooks/use-toast';
 import type { ExtractedLead, ApiUsage } from './types';
 
@@ -28,11 +31,21 @@ export function ExtractionSearchForm({ accountId, onResults, isLoading, setIsLoa
 
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('extract-leads', {
-        body: { account_id: accountId, nicho: nicho.trim(), localizacao: localizacao.trim() },
-      });
+      let data: any;
 
-      if (error) throw error;
+      if (useBackend) {
+        const response = await apiClient.post(API_ENDPOINTS.PROSPECTING.EXTRACT, {
+          nicho: nicho.trim(),
+          localizacao: localizacao.trim(),
+        });
+        data = (response as any).data || response;
+      } else {
+        const result = await supabase.functions.invoke('extract-leads', {
+          body: { account_id: accountId, nicho: nicho.trim(), localizacao: localizacao.trim() },
+        });
+        if (result.error) throw result.error;
+        data = result.data;
+      }
 
       if (!data?.success || !Array.isArray(data.leads)) {
         throw new Error(data?.error || 'Nenhum resultado encontrado');

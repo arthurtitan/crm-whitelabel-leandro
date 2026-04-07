@@ -20,6 +20,7 @@ model Account {
   plano           String?       @db.VarChar(50)
   status          AccountStatus @default(active)
   limiteUsuarios  Int           @default(10) @map("limite_usuarios")
+  monthlyExtractionLimit Int?  @default(500) @map("monthly_extraction_limit")
 
   // Chatwoot Integration
   chatwootBaseUrl   String? @map("chatwoot_base_url") @db.VarChar(500)
@@ -44,6 +45,8 @@ model Account {
   calendarEvents      CalendarEvent[]
   events              Event[]
   googleCalendarTokens GoogleCalendarToken[]
+  apiUsageLogs        ApiUsageLog[]
+  dispatchBatches     DispatchBatch[]
 
   @@index([status])
   @@map("accounts")
@@ -563,4 +566,66 @@ model GoogleCalendarToken {
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@map("google_calendar_tokens")
+}
+
+// ============================================
+// API USAGE LOGS (Prospecting quota tracking)
+// ============================================
+model ApiUsageLog {
+  id            String   @id @default(uuid()) @db.Uuid
+  accountId     String   @map("account_id") @db.Uuid
+  endpoint      String   @default("maps-data") @db.VarChar(100)
+  requestsCount Int      @default(1) @map("requests_count")
+  month         String   @db.VarChar(7)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, month])
+  @@map("api_usage_logs")
+}
+
+// ============================================
+// DISPATCH BATCHES (Prospecting mass dispatch)
+// ============================================
+model DispatchBatch {
+  id            String    @id @default(uuid()) @db.Uuid
+  accountId     String    @map("account_id") @db.Uuid
+  keyword       String?
+  location      String?
+  totalContacts Int       @default(0) @map("total_contacts")
+  sentCount     Int       @default(0) @map("sent_count")
+  failedCount   Int       @default(0) @map("failed_count")
+  status        String    @default("running")
+  delaySeconds  Int       @default(30) @map("delay_seconds")
+  startedAt     DateTime  @default(now()) @map("started_at") @db.Timestamptz
+  completedAt   DateTime? @map("completed_at") @db.Timestamptz
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  account Account       @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  logs    DispatchLog[]
+
+  @@index([accountId])
+  @@map("dispatch_batches")
+}
+
+// ============================================
+// DISPATCH LOGS (Individual message logs)
+// ============================================
+model DispatchLog {
+  id           String    @id @default(uuid()) @db.Uuid
+  batchId      String    @map("batch_id") @db.Uuid
+  contactName  String    @map("contact_name")
+  phone        String
+  inboxId      Int       @map("inbox_id")
+  inboxName    String?   @map("inbox_name")
+  status       String    @default("pending")
+  errorMessage String?   @map("error_message")
+  sentAt       DateTime? @map("sent_at") @db.Timestamptz
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  batch DispatchBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
+  @@map("dispatch_logs")
 }

@@ -57,6 +57,7 @@ class DashboardService {
    * Get Super Admin KPIs (global platform metrics)
    */
   async getSuperAdminKPIs() {
+    const currentMonth = new Date().toISOString().slice(0, 7);
     const [
       totalAccounts,
       activeAccounts,
@@ -66,6 +67,7 @@ class DashboardService {
       totalContacts,
       totalSales,
       totalRevenue,
+      apiUsageLogs,
     ] = await Promise.all([
       prisma.account.count(),
       prisma.account.count({ where: { status: 'active' } }),
@@ -78,7 +80,13 @@ class DashboardService {
         where: { status: 'paid' },
         _sum: { valor: true },
       }),
+      prisma.apiUsageLog.findMany({
+        where: { month: currentMonth },
+        select: { requestsCount: true },
+      }),
     ]);
+
+    const totalApiRequests = apiUsageLogs.reduce((sum, r) => sum + r.requestsCount, 0);
 
     return {
       totalAccounts,
@@ -89,6 +97,8 @@ class DashboardService {
       totalContacts,
       totalPaidSales: totalSales,
       totalRevenue: Number(totalRevenue._sum.valor || 0),
+      totalApiRequests,
+      apiMonth: currentMonth,
     };
   }
 
