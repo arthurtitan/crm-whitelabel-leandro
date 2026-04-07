@@ -88,7 +88,7 @@ Regras:
         throw new Error(`Erro da OpenAI: ${response.status}`);
       }
 
-      const data = await response.json();
+      const data: any = await response.json();
       const content = data.choices?.[0]?.message?.content;
 
       if (!content) {

@@ -18,7 +18,7 @@ export const emailController = {
   async getCadence(req: Request, res: Response, next: NextFunction) {
     try {
       const accountId = (req as any).accountId;
-      const cadence = await emailService.getCadence(req.params.id, accountId);
+      const cadence = await emailService.getCadence(req.params.id as string, accountId);
       if (!cadence) return res.status(404).json({ error: 'Cadência não encontrada' });
       res.json(cadence);
     } catch (error) { next(error); }
@@ -40,7 +40,7 @@ export const emailController = {
   async updateCadence(req: Request, res: Response, next: NextFunction) {
     try {
       const accountId = (req as any).accountId;
-      const cadence = await emailService.updateCadence(req.params.id, accountId, req.body);
+      const cadence = await emailService.updateCadence(req.params.id as string, accountId, req.body);
       res.json(cadence);
     } catch (error) { next(error); }
   },
@@ -48,7 +48,7 @@ export const emailController = {
   async deleteCadence(req: Request, res: Response, next: NextFunction) {
     try {
       const accountId = (req as any).accountId;
-      await emailService.deleteCadence(req.params.id, accountId);
+      await emailService.deleteCadence(req.params.id as string, accountId);
       res.json({ success: true });
     } catch (error) { next(error); }
   },
@@ -57,28 +57,28 @@ export const emailController = {
 
   async listSteps(req: Request, res: Response, next: NextFunction) {
     try {
-      const cadence = await emailService.getCadence(req.params.id, (req as any).accountId);
+      const cadence = await emailService.getCadence(req.params.id as string, (req as any).accountId);
       res.json(cadence?.steps || []);
     } catch (error) { next(error); }
   },
 
   async createStep(req: Request, res: Response, next: NextFunction) {
     try {
-      const step = await emailService.createStep(req.params.id, req.body);
+      const step = await emailService.createStep(req.params.id as string, req.body);
       res.status(201).json(step);
     } catch (error) { next(error); }
   },
 
   async updateStep(req: Request, res: Response, next: NextFunction) {
     try {
-      const step = await emailService.updateStep(req.params.id, req.body);
+      const step = await emailService.updateStep(req.params.id as string, req.body);
       res.json(step);
     } catch (error) { next(error); }
   },
 
   async deleteStep(req: Request, res: Response, next: NextFunction) {
     try {
-      await emailService.deleteStep(req.params.id);
+      await emailService.deleteStep(req.params.id as string);
       res.json({ success: true });
     } catch (error) { next(error); }
   },
@@ -108,14 +108,14 @@ export const emailController = {
 
   async updateTemplate(req: Request, res: Response, next: NextFunction) {
     try {
-      const template = await emailService.updateTemplate(req.params.id, req.body);
+      const template = await emailService.updateTemplate(req.params.id as string, req.body);
       res.json(template);
     } catch (error) { next(error); }
   },
 
   async deleteTemplate(req: Request, res: Response, next: NextFunction) {
     try {
-      await emailService.deleteTemplate(req.params.id);
+      await emailService.deleteTemplate(req.params.id as string);
       res.json({ success: true });
     } catch (error) { next(error); }
   },
