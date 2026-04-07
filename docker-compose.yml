@@ -67,11 +67,8 @@ services:
       CHATWOOT_WEBHOOK_SECRET: ${CHATWOOT_WEBHOOK_SECRET:-}
       RAPIDAPI_KEY: ${RAPIDAPI_KEY:-135d71789fmsh285761fddf395b1p1eb3e3jsn35a4433e1377}
       LOG_LEVEL: ${LOG_LEVEL:-info}
-      BUILD_VERSION: "2026-04-07-google-calendar-prod-fix"
+      BUILD_VERSION: "2026-04-07-google-calendar-hardening"
       RUN_SEED: ${RUN_SEED:-true}
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-https://goodleads.mychooice.com/api/calendar/google/callback}
     expose:
       - "3000"
     depends_on:

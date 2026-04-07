@@ -43,12 +43,32 @@ interface GoogleCredentials {
   redirectUri: string;
 }
 
+type GoogleCredentialSource = 'db' | 'env' | 'mixed' | 'default' | 'none';
+
+interface GoogleCredentialResolution {
+  credentials: GoogleCredentials | null;
+  missing: string[];
+  source: GoogleCredentialSource;
+}
+
 class CalendarService {
   /**
-   * Get Google OAuth credentials from the account's DB record or env vars
+   * Build a safe redirect URI when the account does not have one stored yet.
    */
-  private async getGoogleCredentials(accountId: string): Promise<GoogleCredentials | null> {
-    // 1) Try DB first (per-account)
+  private getDefaultGoogleRedirectUri(): string {
+    const envRedirectUri = (process.env.GOOGLE_REDIRECT_URI || '').trim();
+    if (envRedirectUri) return envRedirectUri;
+
+    const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:8080').trim().replace(/\/$/, '');
+    return `${frontendUrl}/api/calendar/google/callback`;
+  }
+
+  /**
+   * Resolve Google OAuth credentials from DB first, then env, field by field.
+   * This avoids breaking old accounts that already have client ID/secret saved
+   * but were created before redirect URI started being stored in the DB.
+   */
+  private async resolveGoogleCredentials(accountId: string): Promise<GoogleCredentialResolution> {
     const account = await prisma.account.findUnique({
       where: { id: accountId },
       select: {
@@ -58,32 +78,71 @@ class CalendarService {
       },
     });
 
-    if (account?.googleClientId && account?.googleClientSecret && account?.googleRedirectUri) {
-      console.log(`[GoogleCal] Using DB credentials for account ${accountId}`);
-      return {
-        clientId: account.googleClientId,
-        clientSecret: account.googleClientSecret,
-        redirectUri: account.googleRedirectUri,
-      };
-    }
+    const dbClientId = account?.googleClientId?.trim() || '';
+    const dbClientSecret = account?.googleClientSecret?.trim() || '';
+    const dbRedirectUri = account?.googleRedirectUri?.trim() || '';
 
-    // 2) Fallback to env vars (global), with trim to avoid whitespace issues
     const envClientId = (process.env.GOOGLE_CLIENT_ID || '').trim();
     const envClientSecret = (process.env.GOOGLE_CLIENT_SECRET || '').trim();
     const envRedirectUri = (process.env.GOOGLE_REDIRECT_URI || '').trim();
+    const defaultRedirectUri = this.getDefaultGoogleRedirectUri();
 
-    console.log(`[GoogleCal] Env check: GOOGLE_CLIENT_ID=${envClientId ? envClientId.substring(0, 12) + '...' : 'EMPTY'}, SECRET=${envClientSecret ? 'SET' : 'EMPTY'}, REDIRECT=${envRedirectUri ? 'SET' : 'EMPTY'}`);
+    const clientId = dbClientId || envClientId;
+    const clientSecret = dbClientSecret || envClientSecret;
+    const redirectUri = dbRedirectUri || envRedirectUri || defaultRedirectUri;
 
-    if (envClientId && envClientSecret && envRedirectUri) {
-      return {
-        clientId: envClientId,
-        clientSecret: envClientSecret,
-        redirectUri: envRedirectUri,
-      };
+    const usesDb = Boolean(
+      (clientId && clientId === dbClientId) ||
+      (clientSecret && clientSecret === dbClientSecret) ||
+      (redirectUri && redirectUri === dbRedirectUri)
+    );
+    const usesEnv = Boolean(
+      (clientId && clientId === envClientId) ||
+      (clientSecret && clientSecret === envClientSecret) ||
+      (redirectUri && redirectUri === envRedirectUri)
+    );
+    const usesDefaultRedirect = !dbRedirectUri && !envRedirectUri && Boolean(redirectUri);
+
+    let source: GoogleCredentialSource = 'none';
+    if (usesDb && usesEnv) source = 'mixed';
+    else if (usesDb) source = 'db';
+    else if (usesEnv) source = 'env';
+    else if (usesDefaultRedirect) source = 'default';
+
+    console.log(
+      `[GoogleCal] Credential resolution for account ${accountId}: source=${source}, ` +
+      `db={clientId:${dbClientId ? 'SET' : 'EMPTY'}, secret:${dbClientSecret ? 'SET' : 'EMPTY'}, redirect:${dbRedirectUri ? 'SET' : 'EMPTY'}}, ` +
+      `env={clientId:${envClientId ? 'SET' : 'EMPTY'}, secret:${envClientSecret ? 'SET' : 'EMPTY'}, redirect:${envRedirectUri ? 'SET' : 'EMPTY'}}, ` +
+      `resolvedRedirect=${redirectUri ? 'SET' : 'EMPTY'}`
+    );
+
+    const missing: string[] = [];
+    if (!clientId) missing.push('google_client_id');
+    if (!clientSecret) missing.push('google_client_secret');
+    if (!redirectUri) missing.push('google_redirect_uri');
+
+    if (missing.length > 0) {
+      console.warn(`[GoogleCal] Missing credentials for account ${accountId}: ${missing.join(', ')}`);
+      return { credentials: null, missing, source };
     }
 
-    console.warn(`[GoogleCal] No credentials found for account ${accountId} — neither DB nor env vars`);
-    return null;
+    return {
+      credentials: {
+        clientId,
+        clientSecret,
+        redirectUri,
+      },
+      missing: [],
+      source,
+    };
+  }
+
+  /**
+   * Get Google OAuth credentials from the account's DB record or env vars
+   */
+  private async getGoogleCredentials(accountId: string): Promise<GoogleCredentials | null> {
+    const { credentials } = await this.resolveGoogleCredentials(accountId);
+    return credentials;
   }
 
   /**
@@ -306,25 +365,16 @@ class CalendarService {
   }
 
   /**
-   * Get Google Calendar connection status — credentials from DB
+   * Get Google Calendar connection status — credentials from DB + env fallback
    */
   async getGoogleStatus(accountId: string, userId: string) {
-    const creds = await this.getGoogleCredentials(accountId);
-
-    // Determine credential source for diagnostics
-    const account = await prisma.account.findUnique({
-      where: { id: accountId },
-      select: { googleClientId: true },
-    });
-    const source = creds
-      ? (account?.googleClientId ? 'db' : 'env')
-      : 'none';
+    const { credentials: creds, source, missing } = await this.resolveGoogleCredentials(accountId);
 
     if (!creds) {
       return {
         connected: false,
         configured: false,
-        missing: ['google_client_id', 'google_client_secret', 'google_redirect_uri'],
+        missing,
         source,
       };
     }
