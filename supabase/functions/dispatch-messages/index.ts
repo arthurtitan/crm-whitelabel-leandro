@@ -11,11 +11,21 @@ interface Contact {
   telefone: string;
 }
 
-async function getAccountConfig(accountId: string) {
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-  const supabase = createClient(supabaseUrl, supabaseKey);
+interface InboxAssignment {
+  inbox_id: number;
+  inbox_name: string;
+  contacts: Contact[];
+}
 
+function getSupabase() {
+  return createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  );
+}
+
+async function getAccountConfig(accountId: string) {
+  const supabase = getSupabase();
   const { data, error } = await supabase
     .from('accounts')
     .select('chatwoot_base_url, chatwoot_account_id, chatwoot_api_key')
@@ -59,11 +69,9 @@ async function createContactAndConversation(
     'api_access_token': config.apiKey,
   };
 
-  // Normalize phone
   let phone = contact.telefone.replace(/[\s\-\(\)]/g, '');
   if (!phone.startsWith('+')) phone = '+' + phone;
 
-  // 1. Create contact
   const contactRes = await fetch(`${base}/contacts`, {
     method: 'POST',
     headers,
@@ -75,7 +83,6 @@ async function createContactAndConversation(
     const cData = await contactRes.json();
     contactId = cData.payload?.contact?.id || cData.payload?.id || cData.id;
   } else {
-    // Contact may already exist — try to search
     const searchRes = await fetch(`${base}/contacts/search?q=${encodeURIComponent(phone)}&include_contacts=true`, {
       headers: { 'api_access_token': config.apiKey },
     });
@@ -88,7 +95,6 @@ async function createContactAndConversation(
     contactId = found.id;
   }
 
-  // 2. Create conversation
   const convRes = await fetch(`${base}/conversations`, {
     method: 'POST',
     headers,
@@ -100,7 +106,6 @@ async function createContactAndConversation(
     const convData = await convRes.json();
     conversationId = convData.id;
   } else {
-    // If conversation already exists, search for it
     const convSearchRes = await fetch(
       `${base}/contacts/${contactId}/conversations`,
       { headers: { 'api_access_token': config.apiKey } }
@@ -175,56 +180,153 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Dispatch action
+    // Dispatch action with multi-inbox support
     if (action === 'dispatch') {
-      const { inbox_id, delay_seconds, messages, contacts } = body as {
-        inbox_id: number;
+      const { inbox_assignments, delay_seconds, messages, keyword, location } = body as {
+        inbox_assignments: InboxAssignment[];
         delay_seconds: number;
         messages: string[];
-        contacts: Contact[];
+        keyword?: string;
+        location?: string;
       };
 
-      if (!inbox_id || !messages?.length || !contacts?.length) {
+      if (!inbox_assignments?.length || !messages?.length) {
         return new Response(
-          JSON.stringify({ success: false, error: 'inbox_id, messages and contacts required' }),
+          JSON.stringify({ success: false, error: 'inbox_assignments and messages required' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
+      const totalContacts = inbox_assignments.reduce((sum, a) => sum + a.contacts.length, 0);
       const delayMs = Math.max((delay_seconds || 30) * 1000, 5000);
-      const results: Array<{ nome: string; status: string; error?: string }> = [];
+      const supabase = getSupabase();
 
-      for (let i = 0; i < contacts.length; i++) {
-        const contact = contacts[i];
-        try {
-          // Pick random message variant
-          const msgTemplate = messages[Math.floor(Math.random() * messages.length)];
-          const message = msgTemplate.replace(/\{nome\}/gi, contact.nome);
+      // Create batch record
+      const { data: batch, error: batchErr } = await supabase
+        .from('dispatch_batches')
+        .insert({
+          account_id,
+          keyword: keyword || null,
+          location: location || null,
+          total_contacts: totalContacts,
+          status: 'running',
+          delay_seconds: delay_seconds || 30,
+        })
+        .select('id')
+        .single();
 
-          // Create contact + conversation
-          const { conversationId } = await createContactAndConversation(config, contact, inbox_id);
-
-          // Send message
-          await sendMessage(config, conversationId, message);
-
-          results.push({ nome: contact.nome, status: 'sent' });
-          console.log(`[dispatch] Sent to ${contact.nome} (${i + 1}/${contacts.length})`);
-        } catch (err: any) {
-          console.error(`[dispatch] Failed for ${contact.nome}:`, err.message);
-          results.push({ nome: contact.nome, status: 'failed', error: err.message });
-        }
-
-        // Delay between sends (skip after last)
-        if (i < contacts.length - 1) {
-          await sleep(delayMs);
-        }
+      if (batchErr || !batch) {
+        throw new Error('Failed to create dispatch batch');
       }
 
-      const sent = results.filter(r => r.status === 'sent').length;
-      const failed = results.filter(r => r.status === 'failed').length;
+      const batchId = batch.id;
+
+      // Create all log entries as pending
+      const logEntries = inbox_assignments.flatMap(assignment =>
+        assignment.contacts.map(c => ({
+          batch_id: batchId,
+          contact_name: c.nome,
+          phone: c.telefone,
+          inbox_id: assignment.inbox_id,
+          inbox_name: assignment.inbox_name,
+          status: 'pending',
+        }))
+      );
+
+      await supabase.from('dispatch_logs').insert(logEntries);
+
+      // Process in background — return immediately with batch ID
+      const processInBackground = async () => {
+        let sentCount = 0;
+        let failedCount = 0;
+
+        // Flatten all assignments into ordered list
+        const allTasks: Array<{ contact: Contact; inboxId: number; inboxName: string }> = [];
+        // Round-robin across inboxes for better distribution
+        const maxLen = Math.max(...inbox_assignments.map(a => a.contacts.length));
+        for (let i = 0; i < maxLen; i++) {
+          for (const assignment of inbox_assignments) {
+            if (i < assignment.contacts.length) {
+              allTasks.push({
+                contact: assignment.contacts[i],
+                inboxId: assignment.inbox_id,
+                inboxName: assignment.inbox_name,
+              });
+            }
+          }
+        }
+
+        for (let i = 0; i < allTasks.length; i++) {
+          const task = allTasks[i];
+          const phone = task.contact.telefone;
+
+          try {
+            const msgTemplate = messages[Math.floor(Math.random() * messages.length)];
+            const message = msgTemplate.replace(/\{nome\}/gi, task.contact.nome);
+            const { conversationId } = await createContactAndConversation(config, task.contact, task.inboxId);
+            await sendMessage(config, conversationId, message);
+
+            sentCount++;
+            // Update individual log
+            await supabase
+              .from('dispatch_logs')
+              .update({ status: 'sent', sent_at: new Date().toISOString() })
+              .eq('batch_id', batchId)
+              .eq('phone', phone)
+              .eq('inbox_id', task.inboxId);
+
+            // Update batch counts
+            await supabase
+              .from('dispatch_batches')
+              .update({ sent_count: sentCount, failed_count: failedCount })
+              .eq('id', batchId);
+
+            console.log(`[dispatch] Sent to ${task.contact.nome} via inbox ${task.inboxName} (${i + 1}/${allTasks.length})`);
+          } catch (err: any) {
+            failedCount++;
+            console.error(`[dispatch] Failed for ${task.contact.nome}:`, err.message);
+
+            await supabase
+              .from('dispatch_logs')
+              .update({ status: 'failed', error_message: err.message, sent_at: new Date().toISOString() })
+              .eq('batch_id', batchId)
+              .eq('phone', phone)
+              .eq('inbox_id', task.inboxId);
+
+            await supabase
+              .from('dispatch_batches')
+              .update({ sent_count: sentCount, failed_count: failedCount })
+              .eq('id', batchId);
+          }
+
+          if (i < allTasks.length - 1) {
+            await sleep(delayMs);
+          }
+        }
+
+        // Mark batch as completed
+        await supabase
+          .from('dispatch_batches')
+          .update({
+            status: failedCount === totalContacts ? 'failed' : 'completed',
+            sent_count: sentCount,
+            failed_count: failedCount,
+            completed_at: new Date().toISOString(),
+          })
+          .eq('id', batchId);
+      };
+
+      // Fire and forget — Edge Functions stay alive for the background work
+      processInBackground().catch(err => {
+        console.error('[dispatch] Background processing error:', err);
+        getSupabase()
+          .from('dispatch_batches')
+          .update({ status: 'failed', completed_at: new Date().toISOString() })
+          .eq('id', batchId);
+      });
 
       return new Response(
-        JSON.stringify({ success: true, sent, failed, total: contacts.length, results }),
+        JSON.stringify({ success: true, batch_id: batchId, total: totalContacts }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
