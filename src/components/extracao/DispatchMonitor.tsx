@@ -259,6 +259,17 @@ export function DispatchMonitor({ accountId, activeBatchId }: Props) {
                 {cancelling ? 'Cancelando...' : 'Parar disparo'}
               </Button>
             )}
+            {selectedBatch.status === 'cancelled' && (
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => handleResume(selectedBatch.id)}
+                disabled={resuming}
+              >
+                <PlayCircle className="w-4 h-4 mr-1" />
+                {resuming ? 'Retomando...' : 'Retomar disparo'}
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={exportReport}>
               <Download className="w-4 h-4 mr-1" />
               Exportar
