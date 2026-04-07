@@ -44,7 +44,10 @@ export function DispatchMonitor({ accountId, activeBatchId }: Props) {
 
   // Load batches
   useEffect(() => {
-    if (!accountId) return;
+    if (!accountId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     supabase
       .from('dispatch_batches')
@@ -52,7 +55,8 @@ export function DispatchMonitor({ accountId, activeBatchId }: Props) {
       .eq('account_id', accountId)
       .order('created_at', { ascending: false })
       .limit(20)
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        console.log('[DispatchMonitor] batches loaded:', data?.length, 'error:', error?.message);
         if (data) setBatches(data as DispatchBatch[]);
         setLoading(false);
       });
