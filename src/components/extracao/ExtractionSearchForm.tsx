@@ -4,14 +4,11 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Search, MapPin, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
-import type { ExtractedLead } from './types';
+import type { ExtractedLead, ApiUsage } from './types';
 
 interface Props {
   accountId: string;
-  onResults: (leads: ExtractedLead[]) => void;
-  isLoading: boolean;
-  setIsLoading: (v: boolean) => void;
+  onResults: (leads: ExtractedLead[], usage?: ApiUsage) => void;
 }
 
 export function ExtractionSearchForm({ accountId, onResults, isLoading, setIsLoading }: Props) {
@@ -45,9 +42,15 @@ export function ExtractionSearchForm({ accountId, onResults, isLoading, setIsLoa
         endereco: l.endereco || '',
         telefone: l.telefone || '',
         site: l.site || '',
+        avaliacao: l.avaliacao ?? null,
+        total_avaliacoes: l.total_avaliacoes ?? null,
+        foto: l.foto || '',
+        status_negocio: l.status_negocio || '',
+        place_id: l.place_id || '',
+        google_maps_url: l.google_maps_url || '',
       }));
 
-      onResults(leads);
+      onResults(leads, data.usage);
       toast({ title: `${leads.length} leads encontrados!` });
     } catch (err: any) {
       console.error('Extraction error:', err);
