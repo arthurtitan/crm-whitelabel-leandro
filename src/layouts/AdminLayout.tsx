@@ -48,7 +48,7 @@ const adminNavItems = [
   { title: 'Produtos', href: '/admin/products', icon: Package },
   { title: 'Eventos', href: '/admin/events', icon: Activity },
   { title: 'Insights', href: '/admin/insights', icon: Lightbulb },
-  { title: 'Extração', href: '/admin/extracao', icon: Crosshair },
+  { title: 'Prospecção', href: '/admin/prospeccao', icon: Crosshair },
 ];
 
 export default function AdminLayout({ children }: AdminLayoutProps) {

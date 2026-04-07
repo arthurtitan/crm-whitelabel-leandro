@@ -6,6 +6,32 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
+const RAPIDAPI_HOST = 'maps-data.p.rapidapi.com';
+
+interface GeocodingResponse {
+  status: string;
+  data?: { lat: number; lng: number };
+}
+
+interface NearbyPlace {
+  name?: string;
+  full_address?: string;
+  city?: string;
+  phone_number?: string;
+  website?: string;
+  rating?: number;
+  reviews?: number;
+  photo?: string;
+  business_status?: string;
+  place_id?: string;
+  google_maps_url?: string;
+}
+
+interface NearbyResponse {
+  status: string;
+  data?: NearbyPlace[];
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -16,43 +42,138 @@ Deno.serve(async (req) => {
 
     if (!account_id || !nicho || !localizacao) {
       return new Response(
-        JSON.stringify({ success: false, error: 'account_id, nicho and localizacao are required' }),
+        JSON.stringify({ success: false, error: 'account_id, nicho e localizacao são obrigatórios' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Get the n8n webhook URL from secrets
-    const n8nWebhookUrl = Deno.env.get('N8N_EXTRACT_LEADS_WEBHOOK_URL');
-    if (!n8nWebhookUrl) {
+    const rapidApiKey = Deno.env.get('RAPIDAPI_KEY');
+    if (!rapidApiKey) {
       return new Response(
-        JSON.stringify({ success: false, error: 'N8N webhook URL not configured' }),
+        JSON.stringify({ success: false, error: 'RAPIDAPI_KEY not configured' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('[extract-leads] Calling n8n webhook:', { nicho, localizacao });
+    // Create admin client for usage tracking
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Call n8n webhook synchronously
-    const n8nResponse = await fetch(n8nWebhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nicho, localizacao }),
+    // Check monthly quota
+    const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
+    const { data: usageData } = await supabase
+      .from('api_usage_logs')
+      .select('requests_count')
+      .eq('account_id', account_id)
+      .eq('month', currentMonth);
+
+    const totalUsed = (usageData || []).reduce((sum: number, r: any) => sum + (r.requests_count || 0), 0);
+
+    // Get account limit
+    const { data: accountData } = await supabase
+      .from('accounts')
+      .select('monthly_extraction_limit')
+      .eq('id', account_id)
+      .single();
+
+    const limit = accountData?.monthly_extraction_limit ?? 500;
+
+    if (totalUsed >= limit) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: `Limite mensal atingido (${totalUsed}/${limit} requisições). Contate o administrador.`,
+        }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('[extract-leads] Step 1: Geocoding location:', localizacao);
+
+    // Step 1: Geocoding
+    const geocodeUrl = `https://${RAPIDAPI_HOST}/geocoding.php?query=${encodeURIComponent(localizacao)}&country=br&lang=pt`;
+    const geocodeRes = await fetch(geocodeUrl, {
+      method: 'GET',
+      headers: {
+        'x-rapidapi-host': RAPIDAPI_HOST,
+        'x-rapidapi-key': rapidApiKey,
+      },
     });
 
-    if (!n8nResponse.ok) {
-      const errorText = await n8nResponse.text();
-      console.error('[extract-leads] n8n error:', errorText);
+    if (!geocodeRes.ok) {
+      const errText = await geocodeRes.text();
+      console.error('[extract-leads] Geocoding error:', errText);
       return new Response(
-        JSON.stringify({ success: false, error: 'Failed to extract leads from n8n' }),
+        JSON.stringify({ success: false, error: 'Erro no geocoding. Verifique a localização.' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const leads = await n8nResponse.json();
-    console.log('[extract-leads] Got', Array.isArray(leads) ? leads.length : 0, 'leads');
+    const geocodeData: GeocodingResponse = await geocodeRes.json();
+    if (!geocodeData.data?.lat || !geocodeData.data?.lng) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Localização não encontrada. Tente outro endereço.' }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const { lat, lng } = geocodeData.data;
+    console.log('[extract-leads] Step 2: Nearby search for:', nicho, 'at', lat, lng);
+
+    // Step 2: Nearby search
+    const nearbyUrl = `https://${RAPIDAPI_HOST}/nearby.php?query=${encodeURIComponent(nicho)}&lat=${lat}&lng=${lng}&lang=pt&country=br`;
+    const nearbyRes = await fetch(nearbyUrl, {
+      method: 'GET',
+      headers: {
+        'x-rapidapi-host': RAPIDAPI_HOST,
+        'x-rapidapi-key': rapidApiKey,
+      },
+    });
+
+    if (!nearbyRes.ok) {
+      const errText = await nearbyRes.text();
+      console.error('[extract-leads] Nearby error:', errText);
+      return new Response(
+        JSON.stringify({ success: false, error: 'Erro na busca por estabelecimentos.' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const nearbyData: NearbyResponse = await nearbyRes.json();
+    const places = nearbyData.data || [];
+
+    // Log usage (2 API calls: geocoding + nearby)
+    await supabase.from('api_usage_logs').insert({
+      account_id,
+      endpoint: 'maps-data',
+      requests_count: 2,
+      month: currentMonth,
+    });
+
+    // Map to leads format
+    const leads = places.map((p: NearbyPlace) => ({
+      nome: p.name || '',
+      cidade: p.city || '',
+      endereco: p.full_address || '',
+      telefone: p.phone_number || '',
+      site: p.website || '',
+      avaliacao: p.rating || null,
+      total_avaliacoes: p.reviews || null,
+      foto: p.photo || '',
+      status_negocio: p.business_status || '',
+      place_id: p.place_id || '',
+      google_maps_url: p.google_maps_url || '',
+    }));
+
+    console.log('[extract-leads] Found', leads.length, 'leads. Usage:', totalUsed + 2, '/', limit);
 
     return new Response(
-      JSON.stringify({ success: true, leads: Array.isArray(leads) ? leads : [] }),
+      JSON.stringify({
+        success: true,
+        leads,
+        usage: { used: totalUsed + 2, limit },
+      }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error: unknown) {
