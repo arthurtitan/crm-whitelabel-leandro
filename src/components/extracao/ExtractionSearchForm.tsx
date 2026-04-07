@@ -4,11 +4,14 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Search, MapPin, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 import type { ExtractedLead, ApiUsage } from './types';
 
 interface Props {
   accountId: string;
   onResults: (leads: ExtractedLead[], usage?: ApiUsage) => void;
+  isLoading: boolean;
+  setIsLoading: (v: boolean) => void;
 }
 
 export function ExtractionSearchForm({ accountId, onResults, isLoading, setIsLoading }: Props) {
