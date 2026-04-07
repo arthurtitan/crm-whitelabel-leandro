@@ -67,7 +67,7 @@ services:
       CHATWOOT_WEBHOOK_SECRET: ${CHATWOOT_WEBHOOK_SECRET:-}
       RAPIDAPI_KEY: ${RAPIDAPI_KEY:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
-      BUILD_VERSION: "2026-04-02-google-fix-2"
+      BUILD_VERSION: "2026-04-07-rapidapi-fix"
       RUN_SEED: ${RUN_SEED:-true}
       # Google Calendar credentials are resolved at runtime by the backend:
       # 1) account-specific credentials stored in the database
