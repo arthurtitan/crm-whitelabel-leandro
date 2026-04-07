@@ -25,6 +25,7 @@ export type Database = {
           google_redirect_uri: string | null
           id: string
           limite_usuarios: number | null
+          monthly_extraction_limit: number | null
           nome: string
           plano: string | null
           status: Database["public"]["Enums"]["account_status"] | null
@@ -41,6 +42,7 @@ export type Database = {
           google_redirect_uri?: string | null
           id?: string
           limite_usuarios?: number | null
+          monthly_extraction_limit?: number | null
           nome: string
           plano?: string | null
           status?: Database["public"]["Enums"]["account_status"] | null
@@ -57,6 +59,7 @@ export type Database = {
           google_redirect_uri?: string | null
           id?: string
           limite_usuarios?: number | null
+          monthly_extraction_limit?: number | null
           nome?: string
           plano?: string | null
           status?: Database["public"]["Enums"]["account_status"] | null
@@ -64,6 +67,41 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      api_usage_logs: {
+        Row: {
+          account_id: string
+          created_at: string
+          endpoint: string
+          id: string
+          month: string
+          requests_count: number
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          month: string
+          requests_count?: number
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          month?: string
+          requests_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "api_usage_logs_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       calendar_events: {
         Row: {
