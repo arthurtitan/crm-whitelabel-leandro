@@ -66,6 +66,7 @@ export function usePermissions() {
       '/admin/products',
       '/admin/events',
       '/admin/insights',
+      '/admin/extracao',
     ];
 
     for (const route of routeOrder) {
