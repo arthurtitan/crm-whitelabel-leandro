@@ -175,6 +175,25 @@ export const API_ENDPOINTS = {
     MARKETING: '/api/insights/marketing',
     AUTOMATIC: '/api/insights/automatic',
   },
+
+  // ============= EMAIL MODULE =============
+  EMAIL: {
+    CADENCES: '/api/email/cadences',
+    CADENCE: (id: string) => `/api/email/cadences/${id}`,
+    CADENCE_STEPS: (cadenceId: string) => `/api/email/cadences/${cadenceId}/steps`,
+    STEP: (id: string) => `/api/email/steps/${id}`,
+    TEMPLATES: '/api/email/templates',
+    TEMPLATE: (id: string) => `/api/email/templates/${id}`,
+    ENROLL: '/api/email/enroll',
+    UNENROLL: '/api/email/unenroll',
+    ENROLLMENTS: '/api/email/enrollments',
+    SENDS: '/api/email/sends',
+    SEND_STATS: '/api/email/sends/stats',
+    AI_GENERATE: '/api/email/ai/generate',
+    TEST_SENDGRID: '/api/email/test-connection',
+    TEST_SEND: '/api/email/test-send',
+    TEST_OPENAI: '/api/email/test-openai',
+  },
 } as const;
 
 export default API_ENDPOINTS;
