@@ -153,6 +153,17 @@ function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+/** Check if batch was cancelled by user */
+async function isBatchCancelled(batchId: string): Promise<boolean> {
+  const supabase = getSupabase();
+  const { data } = await supabase
+    .from('dispatch_batches')
+    .select('status')
+    .eq('id', batchId)
+    .single();
+  return data?.status === 'cancelled';
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -176,6 +187,40 @@ Deno.serve(async (req) => {
       const inboxes = await listInboxes(config);
       return new Response(
         JSON.stringify({ success: true, inboxes }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Cancel batch action
+    if (action === 'cancel') {
+      const { batch_id } = body;
+      if (!batch_id) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'batch_id required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const supabase = getSupabase();
+
+      // Update batch status to cancelled
+      const { error: updateErr } = await supabase
+        .from('dispatch_batches')
+        .update({ status: 'cancelled', completed_at: new Date().toISOString() })
+        .eq('id', batch_id)
+        .eq('status', 'running');
+
+      if (updateErr) throw updateErr;
+
+      // Mark remaining pending logs as cancelled
+      await supabase
+        .from('dispatch_logs')
+        .update({ status: 'cancelled', error_message: 'Cancelado pelo usuário' })
+        .eq('batch_id', batch_id)
+        .eq('status', 'pending');
+
+      return new Response(
+        JSON.stringify({ success: true }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -235,14 +280,12 @@ Deno.serve(async (req) => {
 
       await supabase.from('dispatch_logs').insert(logEntries);
 
-      // Process in background — return immediately with batch ID
+      // Process in background
       const processInBackground = async () => {
         let sentCount = 0;
         let failedCount = 0;
 
-        // Flatten all assignments into ordered list
         const allTasks: Array<{ contact: Contact; inboxId: number; inboxName: string }> = [];
-        // Round-robin across inboxes for better distribution
         const maxLen = Math.max(...inbox_assignments.map(a => a.contacts.length));
         for (let i = 0; i < maxLen; i++) {
           for (const assignment of inbox_assignments) {
@@ -257,6 +300,12 @@ Deno.serve(async (req) => {
         }
 
         for (let i = 0; i < allTasks.length; i++) {
+          // Check if cancelled before each send
+          if (await isBatchCancelled(batchId)) {
+            console.log(`[dispatch] Batch ${batchId} cancelled by user at ${i}/${allTasks.length}`);
+            return;
+          }
+
           const task = allTasks[i];
           const phone = task.contact.telefone;
 
@@ -267,7 +316,6 @@ Deno.serve(async (req) => {
             await sendMessage(config, conversationId, message);
 
             sentCount++;
-            // Update individual log
             await supabase
               .from('dispatch_logs')
               .update({ status: 'sent', sent_at: new Date().toISOString() })
@@ -275,7 +323,6 @@ Deno.serve(async (req) => {
               .eq('phone', phone)
               .eq('inbox_id', task.inboxId);
 
-            // Update batch counts
             await supabase
               .from('dispatch_batches')
               .update({ sent_count: sentCount, failed_count: failedCount })
@@ -304,19 +351,21 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Mark batch as completed
-        await supabase
-          .from('dispatch_batches')
-          .update({
-            status: failedCount === totalContacts ? 'failed' : 'completed',
-            sent_count: sentCount,
-            failed_count: failedCount,
-            completed_at: new Date().toISOString(),
-          })
-          .eq('id', batchId);
+        // Mark batch as completed (only if not cancelled)
+        const cancelled = await isBatchCancelled(batchId);
+        if (!cancelled) {
+          await supabase
+            .from('dispatch_batches')
+            .update({
+              status: failedCount === totalContacts ? 'failed' : 'completed',
+              sent_count: sentCount,
+              failed_count: failedCount,
+              completed_at: new Date().toISOString(),
+            })
+            .eq('id', batchId);
+        }
       };
 
-      // Fire and forget — Edge Functions stay alive for the background work
       processInBackground().catch(err => {
         console.error('[dispatch] Background processing error:', err);
         getSupabase()
