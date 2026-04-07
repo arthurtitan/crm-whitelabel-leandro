@@ -1,0 +1,234 @@
+import { Request, Response, NextFunction } from 'express';
+import { emailService } from '../services/email.service';
+import { emailAiService } from '../services/email-ai.service';
+import { sendgridService } from '../services/sendgrid.service';
+import { logger } from '../utils/logger';
+
+export const emailController = {
+  // ==================== CADENCES ====================
+
+  async listCadences(req: Request, res: Response, next: NextFunction) {
+    try {
+      const accountId = (req as any).accountId;
+      const cadences = await emailService.listCadences(accountId);
+      res.json(cadences);
+    } catch (error) { next(error); }
+  },
+
+  async getCadence(req: Request, res: Response, next: NextFunction) {
+    try {
+      const accountId = (req as any).accountId;
+      const cadence = await emailService.getCadence(req.params.id, accountId);
+      if (!cadence) return res.status(404).json({ error: 'Cadência não encontrada' });
+      res.json(cadence);
+    } catch (error) { next(error); }
+  },
+
+  async createCadence(req: Request, res: Response, next: NextFunction) {
+    try {
+      const accountId = (req as any).accountId;
+      const userId = (req as any).userId;
+      const cadence = await emailService.createCadence({
+        accountId,
+        ...req.body,
+        createdBy: userId,
+      });
+      res.status(201).json(cadence);
+    } catch (error) { next(error); }
+  },
+
+  async updateCadence(req: Request, res: Response, next: NextFunction) {
+    try {
+      const accountId = (req as any).accountId;
+      const cadence = await emailService.updateCadence(req.params.id, accountId, req.body);
+      res.json(cadence);
+    } catch (error) { next(error); }
+  },
+
+  async deleteCadence(req: Request, res: Response, next: NextFunction) {
+    try {
+      const accountId = (req as any).accountId;
+      await emailService.deleteCadence(req.params.id, accountId);
+      res.json({ success: true });
+    } catch (error) { next(error); }
+  },
+
+  // ==================== STEPS ====================
+
+  async listSteps(req: Request, res: Response, next: NextFunction) {
+    try {
+      const cadence = await emailService.getCadence(req.params.id, (req as any).accountId);
+      res.json(cadence?.steps || []);
+    } catch (error) { next(error); }
+  },
+
+  async createStep(req: Request, res: Response, next: NextFunction) {
+    try {
+      const step = await emailService.createStep(req.params.id, req.body);
+      res.status(201).json(step);
+    } catch (error) { next(error); }
+  },
+
+  async updateStep(req: Request, res: Response, next: NextFunction) {
+    try {
+      const step = await emailService.updateStep(req.params.id, req.body);
+      res.json(step);
+    } catch (error) { next(error); }
+  },
+
+  async deleteStep(req: Request, res: Response, next: NextFunction) {
+    try {
+      await emailService.deleteStep(req.params.id);
+      res.json({ success: true });
+    } catch (error) { next(error); }
+  },
+
+  // ==================== TEMPLATES ====================
+
+  async listTemplates(req: Request, res: Response, next: NextFunction) {
+    try {
+      const accountId = (req as any).accountId;
+      const templates = await emailService.listTemplates(accountId);
+      res.json(templates);
+    } catch (error) { next(error); }
+  },
+
+  async createTemplate(req: Request, res: Response, next: NextFunction) {
+    try {
+      const accountId = (req as any).accountId;
+      const userId = (req as any).userId;
+      const template = await emailService.createTemplate({
+        accountId,
+        ...req.body,
+        createdBy: userId,
+      });
+      res.status(201).json(template);
+    } catch (error) { next(error); }
+  },
+
+  async updateTemplate(req: Request, res: Response, next: NextFunction) {
+    try {
+      const template = await emailService.updateTemplate(req.params.id, req.body);
+      res.json(template);
+    } catch (error) { next(error); }
+  },
+
+  async deleteTemplate(req: Request, res: Response, next: NextFunction) {
+    try {
+      await emailService.deleteTemplate(req.params.id);
+      res.json({ success: true });
+    } catch (error) { next(error); }
+  },
+
+  // ==================== ENROLLMENTS ====================
+
+  async enroll(req: Request, res: Response, next: NextFunction) {
+    try {
+      const accountId = (req as any).accountId;
+      const enrollments = await emailService.enrollContacts({
+        accountId,
+        cadenceId: req.body.cadenceId,
+        contactIds: req.body.contactIds,
+      });
+      res.status(201).json(enrollments);
+    } catch (error) { next(error); }
+  },
+
+  async unenroll(req: Request, res: Response, next: NextFunction) {
+    try {
+      await emailService.unenrollContacts(req.body.cadenceId, req.body.contactIds);
+      res.json({ success: true });
+    } catch (error) { next(error); }
+  },
+
+  async listEnrollments(req: Request, res: Response, next: NextFunction) {
+    try {
+      const accountId = (req as any).accountId;
+      const enrollments = await emailService.listEnrollments(accountId, req.query.cadenceId as string);
+      res.json(enrollments);
+    } catch (error) { next(error); }
+  },
+
+  // ==================== SENDS ====================
+
+  async listSends(req: Request, res: Response, next: NextFunction) {
+    try {
+      const accountId = (req as any).accountId;
+      const sends = await emailService.listSends(accountId, {
+        cadenceId: req.query.cadenceId as string,
+        contactId: req.query.contactId as string,
+        status: req.query.status as string,
+        limit: parseInt(req.query.limit as string) || 50,
+        offset: parseInt(req.query.offset as string) || 0,
+      });
+      res.json(sends);
+    } catch (error) { next(error); }
+  },
+
+  async getSendStats(req: Request, res: Response, next: NextFunction) {
+    try {
+      const accountId = (req as any).accountId;
+      const stats = await emailService.getSendStats(accountId);
+      res.json(stats);
+    } catch (error) { next(error); }
+  },
+
+  // ==================== AI ====================
+
+  async generateEmail(req: Request, res: Response, next: NextFunction) {
+    try {
+      const accountId = (req as any).accountId;
+      const result = await emailAiService.generateEmail({
+        accountId,
+        prompt: req.body.prompt,
+        context: req.body.context,
+      });
+      res.json(result);
+    } catch (error) { next(error); }
+  },
+
+  // ==================== CONNECTIONS ====================
+
+  async testSendgrid(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await sendgridService.testConnection(req.body.apiKey);
+      res.json(result);
+    } catch (error) { next(error); }
+  },
+
+  async testSendEmail(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await sendgridService.sendTestEmail(
+        req.body.apiKey,
+        req.body.fromEmail,
+        req.body.fromName || 'GoodLeads CRM',
+        req.body.toEmail,
+      );
+      res.json(result);
+    } catch (error) { next(error); }
+  },
+
+  async testOpenai(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await emailAiService.testConnection(req.body.apiKey);
+      res.json(result);
+    } catch (error) { next(error); }
+  },
+};
+
+// ==================== WEBHOOK (public, no auth) ====================
+export const emailWebhookController = {
+  async handleSendgridWebhook(req: Request, res: Response, next: NextFunction) {
+    try {
+      const events = req.body;
+      if (!Array.isArray(events)) {
+        return res.status(400).json({ error: 'Invalid payload' });
+      }
+      await sendgridService.processWebhookEvent(events);
+      res.status(200).json({ received: true });
+    } catch (error) {
+      logger.error('[SendGrid Webhook] Error:', error);
+      next(error);
+    }
+  },
+};
