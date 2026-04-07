@@ -101,7 +101,17 @@ export default function SuperAdminDashboard() {
             API_ENDPOINTS.DASHBOARD.SUPER_ADMIN_KPIS
           );
           const data = (response as any).data || response;
-          setKpis(data);
+          
+          // Fetch API usage from Supabase (data lives there even in production)
+          const currentMonth = new Date().toISOString().slice(0, 7);
+          const { data: usageData } = await supabase
+            .from('api_usage_logs')
+            .select('requests_count')
+            .eq('month', currentMonth);
+          
+          const totalApiRequests = (usageData || []).reduce((sum: number, r: any) => sum + (r.requests_count || 0), 0);
+          
+          setKpis({ ...data, totalApiRequests, apiMonth: currentMonth });
         } else {
           const { data, error } = await supabase.functions.invoke('super-admin-kpis');
           if (error) throw error;
