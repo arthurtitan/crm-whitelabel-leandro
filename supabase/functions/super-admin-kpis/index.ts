@@ -51,6 +51,7 @@ Deno.serve(async (req) => {
     }
 
     // Fetch all KPIs in parallel
+    const currentMonth = new Date().toISOString().slice(0, 7)
     const [
       accountsRes,
       activeAccountsRes,
@@ -59,6 +60,7 @@ Deno.serve(async (req) => {
       activeUsersRes,
       contactsRes,
       paidSalesRes,
+      apiUsageRes,
     ] = await Promise.all([
       adminClient.from('accounts').select('id', { count: 'exact', head: true }),
       adminClient.from('accounts').select('id', { count: 'exact', head: true }).eq('status', 'active'),
@@ -67,9 +69,11 @@ Deno.serve(async (req) => {
       adminClient.from('profiles').select('id', { count: 'exact', head: true }).eq('status', 'active'),
       adminClient.from('contacts').select('id', { count: 'exact', head: true }),
       adminClient.from('sales').select('valor', { count: 'exact' }).eq('status', 'paid'),
+      adminClient.from('api_usage_logs').select('requests_count').eq('month', currentMonth),
     ])
 
     const totalRevenue = (paidSalesRes.data || []).reduce((sum: number, s: any) => sum + (s.valor || 0), 0)
+    const totalApiRequests = (apiUsageRes.data || []).reduce((sum: number, r: any) => sum + (r.requests_count || 0), 0)
 
     const kpis = {
       totalAccounts: accountsRes.count ?? 0,
@@ -80,6 +84,8 @@ Deno.serve(async (req) => {
       totalContacts: contactsRes.count ?? 0,
       totalPaidSales: paidSalesRes.count ?? 0,
       totalRevenue,
+      totalApiRequests,
+      apiMonth: currentMonth,
     }
 
     return new Response(JSON.stringify(kpis), {

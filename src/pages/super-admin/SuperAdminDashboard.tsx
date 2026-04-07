@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Building2, Users, CheckCircle, PauseCircle, Contact, DollarSign, TrendingUp, Cpu, HardDrive, Wifi, Clock, Server, MemoryStick } from 'lucide-react';
+import { Building2, Users, CheckCircle, PauseCircle, Contact, DollarSign, TrendingUp, Cpu, HardDrive, Wifi, Clock, Server, MemoryStick, Globe } from 'lucide-react';
 import { KPICard } from '@/components/dashboard/KPICard';
 import { ServerResourceCard } from '@/components/dashboard/ServerResourceCard';
 import { ServerConsumptionChart } from '@/components/dashboard/ServerConsumptionChart';
@@ -19,6 +19,8 @@ interface SuperAdminKPIs {
   totalContacts: number;
   totalPaidSales: number;
   totalRevenue: number;
+  totalApiRequests: number;
+  apiMonth: string;
 }
 
 interface ServerResources {
@@ -205,6 +207,14 @@ export default function SuperAdminDashboard() {
       icon: TrendingUp,
       iconColor: 'text-primary',
       iconBgColor: 'bg-primary/10',
+    },
+    {
+      title: 'API Maps Data',
+      value: kpis?.totalApiRequests ?? 0,
+      subtitle: `RapidAPI • ${kpis?.apiMonth ?? new Date().toISOString().slice(0, 7)}`,
+      icon: Globe,
+      iconColor: 'text-chart-4',
+      iconBgColor: 'bg-chart-4/10',
     },
   ];
 
